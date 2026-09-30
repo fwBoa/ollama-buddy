@@ -402,6 +402,11 @@
     border: 1px solid var(--border); border-radius: 8px;
   }
   .settings-row input[type="number"] { width: 84px; }
+  .settings-row input[type="password"] { width: 230px; }
+  .quota-settings .hint {
+    display: block; margin: 0; padding: 0 0 10px 16px;
+    font-size: 12px; color: var(--text-muted); line-height: 1.6;
+  }
 
   /* --- Repartition par modele --- */
   .section-title {
@@ -626,9 +631,13 @@ function renderQuota(q) {
       </p>
     </div>`;
 
+  /* Les parametres vivent dans un depliant commun aux deux etats. La ligne de
+     la cle n'apparait qu'en direct : sans cle, c'est la carte de connexion qui
+     porte le champ — deux elements de meme identifiant se voleraient la mise
+     au point. */
   const settings = `
     <details class="quota-settings">
-      <summary>Réglages du quota</summary>
+      <summary>Paramètres</summary>
       <div class="settings-row">
         <label>Plafond mensuel
           <input id="monthly" type="number" min="1" step="1" value="${monthly}" inputmode="decimal">
@@ -639,10 +648,19 @@ function renderQuota(q) {
         </label>
         <button class="btn" id="save-monthly" type="button">Enregistrer</button>
       </div>
-      ${keySet ? `<div class="settings-row">
-        <button class="btn" id="remove-key" type="button">Retirer la clé API</button>
-        <span class="hint">Le quota ne sera plus affiché.</span>
-      </div>` : ''}
+      ${live ? `<div class="settings-row">
+        <label>Clé API ollama.com
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false"
+                 placeholder="coller une autre clé" aria-describedby="key-hint-2">
+        </label>
+        <button class="btn" id="save-key" type="button">Changer</button>
+        <button class="btn" id="remove-key" type="button">Retirer</button>
+      </div>
+      <p class="hint" id="key-hint-2">
+        Remplacer la clé révoque l'ancienne à la prochaine lecture. La retirer
+        masque le quota sans rien effacer d'autre : la répartition Claude Code
+        reste.
+      </p>` : ''}
     </details>`;
 
   /* Sans cle, la section se reduit a la carte de connexion. Rien de ce qui

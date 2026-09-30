@@ -112,6 +112,9 @@ La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigate
 champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
 **lire** ton usage.
 
+Pour la **remplacer ou la retirer** : *Paramètres*, sous le quota. La retirer masque le
+quota sans rien effacer d'autre ; la répartition Claude Code reste.
+
 ### Sans clé
 
 Le quota **n'est pas affiché du tout** — ni pourcentage, ni jauge, ni montant, ni
