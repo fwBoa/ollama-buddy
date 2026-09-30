@@ -11,6 +11,8 @@
   [Fonctionnalités](#fonctionnalités) • [Installation](#installation) • [Utilisation](#utilisation) • [Le quota](#le-quota-mensuel) • [Conception](#conception)
 </div>
 
+<img src="docs/tableau-de-bord.png" alt="Le tableau de bord d'Ollama Buddy : quota mensuel avec sa jauge, requêtes du mois, répartition par modèle" width="100%">
+
 ---
 
 Une app macOS qui répond à une seule question : **où en est mon quota Ollama Cloud ?**
