@@ -57,7 +57,6 @@ python3 ollama_buddy.py --once     # indexe et affiche un résumé, sans serveur
 |---|---|
 | `⌘1` | Afficher la fenêtre |
 | `⌘R` | Recharger le tableau de bord |
-| `⌘⇧R` | Relire les transcripts |
 | `⌘O` | Ouvrir dans le navigateur |
 | `⌘Q` | Quitter (arrête le serveur) |
 
@@ -112,43 +111,25 @@ La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigate
 champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
 **lire** ton usage.
 
-Pour la **remplacer ou la retirer** : *Paramètres*, sous le quota. La retirer masque le
-quota sans rien effacer d'autre ; la répartition Claude Code reste.
+Pour la **remplacer ou la retirer** : *Paramètres*, sous le quota.
 
 ### Sans clé
 
-Le quota **n'est pas affiché du tout** — ni pourcentage, ni jauge, ni montant, ni
-compte à rebours. La section se réduit à la carte de connexion. La date de
-réinitialisation reste modifiable dans les réglages, mais elle ne s'affiche pas : elle
-n'est pas une mesure, juste un paramètre.
+L'app **ne montre rien du tout** — ni pourcentage, ni jauge, ni montant, ni compte à
+rebours, ni répartition. La page se réduit à la carte de connexion.
 
-Le reste du tableau de bord continue de fonctionner : les modèles viennent alors des
-transcripts Claude Code, en **tokens**. Un seul client — la seule chose que l'app
-puisse voir localement — mais une mesure réelle, mise à jour en direct.
+C'est délibéré. Le quota est une donnée d'ollama.com : sans clé, l'app n'en a aucune,
+et elle préfère le dire plutôt que d'afficher un à-peu-près. La date de réinitialisation
+reste modifiable dans les réglages — elle y sert de repli à l'API — mais elle ne
+s'affiche pas : ce n'est pas une mesure, juste un paramètre.
 
 ## D'où viennent les chiffres
 
-| Source | Ce qu'elle apporte | Disponible |
-|---|---|---|
-| `ollama.com/api/usage` | Quota, requêtes par modèle, tous clients | Avec une clé — sinon le quota n'est pas affiché |
-| `~/.claude/projects/**/*.jsonl` | Historique en tokens, remonte à avant l'app | Toujours |
+Une seule source : `ollama.com/api/usage`, avec ta clé. Elle couvre **tous** tes
+clients, y compris ceux dont l'app ne voit jamais passer la requête.
 
-Deux précautions sur les transcripts :
-
-- **Déduplication par identifiant de message.** Un même message recopié dans plusieurs
-  sessions était compté plusieurs fois — **1,72×** de surestimation sur ce corpus. Corrigé.
-- **Filtre cloud.** Seuls les modèles qu'Ollama annonce hébergés sur `ollama.com`
-  (`/api/tags` → `remote_host`) sont comptés. Si le serveur Ollama local ne répond pas,
-  le filtre se désactive et un avertissement s'affiche.
-
-### Lire les chiffres correctement
-
-Une colonne **cache lecture** qui domine le total n'est pas une anomalie : chaque requête
-renvoie le contexte complet, et Claude Code le renvoie à chaque tour. C'est la mécanique
-du cache de prompt.
-
-Côté API, `web search` et `web fetch` apparaissent comme des modèles — Ollama les compte
-ainsi. Au-delà de huit modèles, le reste est regroupé sous « Autres ».
+`web search` et `web fetch` apparaissent comme des modèles — Ollama les compte ainsi.
+Au-delà de huit modèles, le reste est regroupé sous « Autres ».
 
 ## Conception
 

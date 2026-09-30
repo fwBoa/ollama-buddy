@@ -396,18 +396,22 @@ def assign_colors(conn: sqlite3.Connection) -> None:
 
 
 def fold_extra(rows: list[dict]) -> list[dict]:
-    """Regroupe au-dela du dernier slot : jamais de 9e teinte inventee."""
+    """Regroupe au-dela du dernier slot : jamais de 9e teinte inventee.
+
+    Seuls le total et le nombre de requetes sont sommes : l'API ne publie rien
+    d'autre par modele.
+    """
     over = [r for r in rows if r["slot"] >= MAX_SLOTS]
     rows = [r for r in rows if r["slot"] < MAX_SLOTS]
     if not over:
         return rows
-    merged = {"model": f"Autres ({len(over)})", "slot": MAX_SLOTS, "total": 0,
-              "input": 0, "cache_creation": 0, "cache_read": 0, "output": 0,
-              "messages": 0, "other": True}
-    for row in over:
-        for field in ("total", "input", "cache_creation", "cache_read", "output", "messages"):
-            merged[field] += row[field]
-    rows.append(merged)
+    rows.append({
+        "model": f"Autres ({len(over)})",
+        "slot": MAX_SLOTS,
+        "total": sum(r["total"] for r in over),
+        "messages": sum(r["messages"] for r in over),
+        "other": True,
+    })
     return rows
 
 
@@ -803,20 +807,30 @@ def build_usage(conn: sqlite3.Connection, key: str, cfg: dict,
     }
 
 
-def build_cloud_usage(conn: sqlite3.Connection, key: str, cloud: dict) -> dict:
-    """Vue par requetes, alimentee par ollama.com.
+def empty_usage() -> dict:
+    """Aucune source : pas de cle, donc pas de chiffres.
 
-    Le classement par modele est le cumul du mois en cours : il est donc
-    complet des le premier appel, sans attendre d'historique. Le graphique,
-    lui, se construit a partir des echantillons et se remplit au fil du temps
-    — l'API ne publie aucun passe.
+    L'usage de Claude Code n'est plus lu du tout. Il ne couvrait qu'un client
+    sur onze, et le montrer laissait croire a une mesure globale.
     """
-    start, end, days = range_bounds(key)
-    if days is None:
-        days = 30
-        midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        start = int((midnight - timedelta(days=days - 1)).timestamp() * 1000)
+    return {
+        "unit": "requetes",
+        "models_total": 0,
+        "cycle_days": 1,
+        "cycle_start": None,
+        "models": [],
+        "grand_total": 0,
+        "messages": 0,
+        "generated_at": int(time.time() * 1000),
+    }
 
+
+def build_cloud_usage(conn: sqlite3.Connection, cloud: dict) -> dict:
+    """Repartition par modele, telle que la publie ollama.com.
+
+    Le classement est le cumul du mois en cours : il est donc complet des le
+    premier appel, sans attendre d'historique. L'API ne publie aucun passe.
+    """
     month = cloud_month_models(cloud)
     assign_model_colors(conn, [r["model"] for r in month])
     slots = {m: s for m, s in conn.execute("SELECT model, slot FROM model_color")}
@@ -827,7 +841,6 @@ def build_cloud_usage(conn: sqlite3.Connection, key: str, cloud: dict) -> dict:
             "slot": slots.get(r["model"], MAX_SLOTS),
             "total": r["requests"],
             "messages": r["requests"],
-            "input": 0, "cache_creation": 0, "cache_read": 0, "output": 0,
         }
         for r in month
     ]
@@ -836,17 +849,8 @@ def build_cloud_usage(conn: sqlite3.Connection, key: str, cloud: dict) -> dict:
     for r in rows:
         r["share"] = (r["total"] / grand_total) if grand_total else 0.0
 
-    # Aucune serie temporelle : l'API ne publie aucun passe, et le graphique a
-    # ete retire. Les echantillons restent, pour mesurer le rythme $/jour.
-
-    # Pas de comparaison avec la periode precedente : l'API ne publie aucun
-    # passe, et les echantillons ne remontent pas assez loin pour la premiere
-    # semaine. Mieux vaut rien qu'un chiffre invente.
-    previous_total = None
-
-    # Le classement porte sur le mois en cours, pas sur la periode du
-    # graphique : l'interface doit le dire, sinon « sur 1 jour » coifferait un
-    # cumul de plusieurs semaines.
+    # Le cycle d'abonnement, pas le mois civil : c'est lui qui donne la
+    # moyenne par jour. Sans lui, un cumul mensuel divise par un jour.
     cycle_start = (((cloud or {}).get("activity") or {}).get("period") or {}).get("starting_at")
     cycle_days = 1
     if cycle_start:
@@ -860,21 +864,12 @@ def build_cloud_usage(conn: sqlite3.Connection, key: str, cloud: dict) -> dict:
 
     return {
         "unit": "requetes",
-        "range": key,
-        "days": days,
         "models_total": len(month),
         "cycle_days": cycle_days,
         "cycle_start": cycle_start,
         "models": rows,
         "grand_total": grand_total,
         "messages": grand_total,
-        "budget": 0,
-        "capacity": 0,
-        "used_ratio": None,
-        "previous_total": previous_total,
-        "client": None,
-        "clients": [],
-        "cloud_filter_active": True,
         "generated_at": int(time.time() * 1000),
     }
 
@@ -985,14 +980,16 @@ class State:
                     print(f"[cloud] echantillon non enregistre ({exc})", file=sys.stderr)
         return data
 
-    def payload(self, key: str, client: str | None = None) -> dict:
+    def payload(self) -> dict:
+        """Une seule source : ollama.com, avec une cle.
+
+        Sans cle il n'y a rien a montrer. L'usage de Claude Code n'est plus
+        remonte : il ne couvrait qu'un client sur onze.
+        """
         cloud = self.cloud()
         live = bool(cloud) and "error" not in (cloud or {})
         with self.lock:
-            if live:
-                data = build_cloud_usage(self.conn, key, cloud)
-            else:
-                data = dict(self.usage(key, client))
+            data = build_cloud_usage(self.conn, cloud) if live else empty_usage()
             data["quota"] = build_quota(self.conn, self.cfg, cloud)
         data["cloud"] = cloud
         data["account"] = ollama_account()
@@ -1050,23 +1047,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if url.path == "/api/stream":
-            key = (query.get("range") or ["today"])[0]
-            client = (query.get("client") or [None])[0] or None
-            if key not in RANGES:
-                self._json({"error": "periode inconnue"}, 400)
-                return
-            self.stream(key, client)
+            self.stream()
             return
 
         if url.path == "/api/usage":
-            key = (query.get("range") or ["today"])[0]
-            client = (query.get("client") or [None])[0] or None
-            if key not in RANGES:
-                self._json({"error": "periode inconnue"}, 400)
-                return
-            if query.get("refresh", ["0"])[0] == "1":
-                self.state.refresh(force=True)
-            self._json(self.state.payload(key, client))
+            self._json(self.state.payload())
             return
 
         if url.path == "/api/refresh":
@@ -1086,7 +1071,7 @@ class Handler(BaseHTTPRequestHandler):
         self.state.broadcast()
         self._json({"ok": True, "error": self.state.last_error})
 
-    def stream(self, key: str, client: str | None = None) -> None:
+    def stream(self) -> None:
         """Flux SSE : le serveur pousse l'usage des qu'un transcript change."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -1097,11 +1082,11 @@ class Handler(BaseHTTPRequestHandler):
 
         inbox = self.state.subscribe()
         try:
-            self._push(self.state.payload(key, client))
+            self._push(self.state.payload())
             while True:
                 try:
                     inbox.get(timeout=15)
-                    self._push(self.state.payload(key, client))
+                    self._push(self.state.payload())
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")  # commentaire : garde la connexion ouverte
                     self.wfile.flush()
@@ -1449,15 +1434,25 @@ def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
     def watcher() -> None:
-        """Surveille les transcripts en continu et pousse chaque changement.
+        """Redemande l'usage a ollama.com et pousse chaque changement.
 
-        Le scan est incremental (seuls les octets ajoutes sont relus), donc
-        passer toutes les 2 s coute quelques millisecondes.
+        Le cache interne limite a une requete par minute, quelle que soit la
+        frequence de passage : les tours suivants ne coutent rien. Une empreinte
+        evite de reveiller l'interface quand rien n'a bouge.
         """
         interval = max(1.0, float(cfg.get("watch_seconds") or 2))
+        fingerprint = None
         while True:
             time.sleep(interval)
-            state.refresh()
+            try:
+                cloud = state.cloud()
+            except Exception as exc:  # noqa: BLE001 - ne jamais tuer la boucle
+                print(f"[veille] {exc}", file=sys.stderr)
+                continue
+            stamp = json.dumps(cloud, sort_keys=True) if cloud else None
+            if stamp != fingerprint:
+                fingerprint = stamp
+                state.broadcast()
 
     threading.Thread(target=watcher, daemon=True).start()
 

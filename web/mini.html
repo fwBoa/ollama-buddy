@@ -187,16 +187,21 @@ function render(d) {
           ? ` — plafond atteint dans ${Math.floor(q.exhausted_in_days)} j` : ''}</p>`
     : '';
 
+  /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
+     alors l'invitation a en saisir une. */
+  const live = q.source === 'api';
+
   body.innerHTML = `
     ${quotaBlock}
     ${rate}
-    <hr>
-    <p class="label">Ce mois</p>
-    <div class="row">
-      <span class="big">${compact(d.grand_total || 0)}</span>
-      <span class="sub">${nf.format(d.messages || 0)} req.</span>
-    </div>
-    <div class="models">${models || '<p class="empty">Aucune consommation sur la période.</p>'}</div>
+    ${live ? `
+      <hr>
+      <p class="label">Ce mois</p>
+      <div class="row">
+        <span class="big">${compact(d.grand_total || 0)}</span>
+        <span class="sub">${nf.format(d.messages || 0)} req.</span>
+      </div>
+      <div class="models">${models || '<p class="empty">Aucune consommation sur ce cycle.</p>'}</div>` : ''}
     <div class="actions">
       <button type="button" id="open">Ouvrir le tableau de bord</button>
     </div>`;

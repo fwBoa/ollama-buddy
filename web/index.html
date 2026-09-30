@@ -179,16 +179,6 @@
   }
   .sub { color: var(--text-secondary); font-size: 13.5px; margin: 0 0 24px; max-width: 92ch; }
 
-  /* --- Controles : une rangee, au-dessus des chiffres --- */
-  .controls {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding-bottom: 20px; border-bottom: 1px solid var(--gridline); margin-bottom: 30px;
-  }
-  /* Sans filtre de client, la barre n'a plus rien a porter : un trait de
-     separation au-dessus du vide ne fait que du bruit. On teste le select,
-     pas le label qui l'enveloppe — ce dernier n'est jamais `hidden`. */
-  .controls:not(:has(select:not([hidden]))) { display: none; }
-
   .icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 36px; height: 36px; flex: 0 0 36px;
@@ -253,57 +243,6 @@
     .model { grid-template-columns: 15px 1fr auto; }
     .model .bar { display: none; }
   }
-  .delta {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
-  }
-  .delta.up   { color: var(--serious); }
-  .delta.down { color: var(--good); }
-  .delta.flat { color: var(--text-muted); }
-  /* Quand le delta tient lieu de valeur, il prend la taille d'une valeur. */
-  .stat .delta.lg { font-size: clamp(1.05rem, 1.5vw, 1.25rem); font-weight: 600; }
-
-
-  /* --- Selecteur de client --- */
-  .client-picker select {
-    font: inherit; font-size: 13px; font-weight: 500;
-    color: var(--text-secondary); background-color: var(--ghost);
-    border: 0; border-radius: 11px; padding: 8px 32px 8px 14px; min-height: 34px;
-    cursor: pointer; appearance: none; -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23898781' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 12px center;
-    transition: color 160ms var(--ease-out), background-color 160ms var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .client-picker select:hover { color: var(--text-primary); }
-  }
-  .client-picker select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  /* --- Repartition par client --- */
-  .clients { display: flex; flex-direction: column; gap: 2px; }
-  .client-row {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(40px, 1.2fr) auto auto;
-    align-items: center; gap: 12px; padding: 9px 0;
-    font-variant-numeric: tabular-nums;
-  }
-  .client-row + .client-row { border-top: 1px solid var(--gridline); }
-  .client-row .name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .client-row .bar { height: 8px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
-  .client-row .bar > span {
-    display: block; height: 100%; width: 100%; background: var(--accent);
-    border-radius: 0 4px 4px 0;
-    transform-origin: left center; transform: scaleX(0);
-    transition: transform 300ms var(--ease-out);
-  }
-  .client-row .val { font-size: 12.5px; font-weight: 600; }
-  .client-row .pct { font-size: 11.5px; color: var(--text-secondary); min-width: 42px; text-align: right; }
-  .client-row.off { opacity: .45; }
-  .client-row .req { font-size: 11px; color: var(--text-muted); font-weight: 400; display: block; }
-  @container (max-width: 400px) {
-    .client-row { grid-template-columns: 1fr auto; }
-    .client-row .bar { display: none; }
-  }
-
   /* --- Quota mensuel : la seule mesure qui couvre tous les clients --- */
   .quota { margin-top: 40px; }
   .quota-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
@@ -506,13 +445,6 @@
   <main id="main">
     <p class="sub" id="sub">Consommation Ollama Cloud</p>
 
-    <div class="controls">
-      <label class="client-picker">
-        <span class="visually-hidden">Filtrer par client</span>
-        <select id="client-filter" hidden></select>
-      </label>
-    </div>
-
     <div id="app"><p class="state">Lecture…</p></div>
   </main>
 </div>
@@ -521,14 +453,9 @@
 "use strict";
 
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--s9'];
-const RANGES = ['today', '7d', '30d', 'all'];
 const nf = new Intl.NumberFormat('fr-FR');
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-const params = new URLSearchParams(location.search);
-const wanted = params.get('range');
-let range = RANGES.includes(wanted) ? wanted : 'today';
-let client = params.get('client') || '';
 let lastData = null;
 let tipShownOnce = false;
 let staggerNext = true;   // l'entree en cascade joue au prochain rendu
@@ -718,77 +645,46 @@ function render(data) {
   const total = data.grand_total;
   const isReq = data.unit === 'requetes';
 
+  const sub = document.getElementById('sub');
+
   app.classList.remove('switching');
 
+  /* Sans cle, il n'y a aucune source : la section quota porte alors la carte
+     de connexion, et rien d'autre ne s'affiche. C'est le seul etat ou l'app
+     n'a rien a dire. On teste la source, pas l'unite : un payload vide publie
+     deja son unite. */
+  if (data.quota?.source !== 'api') {
+    sub.textContent = '';
+    sub.hidden = true;
+    app.innerHTML = renderQuota(data.quota);
+    return;
+  }
+  sub.hidden = false;
+
+  const quota = renderQuota(data.quota);
+
   if (!models.length) {
-    /* La section quota survit a une periode vide : c'est elle qui porte la
-       carte de connexion. Sans elle, un utilisateur sans cle n'aurait plus
-       aucun point d'entree pour la coller. */
+    sub.textContent = 'Consommation Ollama Cloud';
     app.innerHTML = `
-      <p class="state">Aucune consommation sur cette période.</p>
-      ${renderQuota(data.quota)}`;
-    document.getElementById('sub').textContent = 'Consommation Ollama Cloud';
+      <p class="state">Aucune consommation sur ce cycle.</p>
+      ${quota}`;
     return;
   }
 
   /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
   const top = models[0];
-  /* En mode API le classement est le cumul du mois : annoncer « sur 1 jour »
-     coifferait un total de plusieurs semaines. */
-  const scope = isReq ? 'sur le mois en cours'
-    : `sur ${data.days} jour${data.days > 1 ? 's' : ''}`;
-  let reading = `<b>${fmt(total)}</b> ${unitOf(data)} ${scope}`;
+  let reading = `<b>${fmt(total)}</b> ${unitOf(data)} sur le mois en cours`;
   if (models.length > 1) reading += `, portés à ${pct(top.share)} % par <b>${top.model}</b>`;
   else reading += `, tous sur <b>${top.model}</b>`;
   reading += '.';
-  document.getElementById('sub').innerHTML = reading;
+  sub.innerHTML = reading;
 
-  /* Delta vs periode precedente, avec fleche ET libelle (jamais la couleur seule). */
-  let deltaHtml = '';
-  let deltaLarge = '';
-  if (data.previous_total !== null && data.previous_total > 0) {
-    const ratio = (total - data.previous_total) / data.previous_total;
-    const dir = ratio > 0.005 ? 'up' : ratio < -0.005 ? 'down' : 'flat';
-    const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '=';
-    const word = dir === 'up' ? 'hausse' : dir === 'down' ? 'baisse' : 'stable';
-    const inner = `<span aria-hidden="true">${arrow}</span> ${pct(Math.abs(ratio))} %
-      <span class="visually-hidden">en ${word}</span>`;
-    deltaHtml = `<span class="delta ${dir}">${inner}</span>`;
-    deltaLarge = `<span class="delta ${dir} lg">${inner}</span>`;
-  }
+  /* La fenetre utile est le cycle d'abonnement, pas le mois civil : sinon
+     « moyenne / jour » diviserait un cumul de plusieurs semaines par un jour.
+     Arrondi, parce que sous 1000 compact() afficherait la valeur brute,
+     decimales comprises. */
+  const avg = Math.round(total / Math.max(1, data.cycle_days || 1));
 
-  /* En mode API la fenêtre utile est le cycle d'abonnement, pas le filtre du
-     graphique : « moyenne / jour » doit se lire sur le mois, sinon elle
-     diviserait un cumul mensuel par un jour. */
-  const tileDays = Math.max(1, isReq ? (data.cycle_days || data.days) : data.days);
-  // Arrondi : sous 1000, compact() afficherait la valeur brute, décimales
-  // comprises — « 592,2083333333334 requêtes » n'a aucun sens.
-  const avg = Math.round(total / tileDays);
-
-  /* --- Quota mensuel : la seule mesure qui couvre tous les clients --- */
-  const quota = renderQuota(data.quota);
-
-  /* --- Repartition par client : qui consomme, et sur quoi filtrer --- */
-  const clients = data.clients || [];
-  const clientTotal = clients.reduce((sum, c) => sum + c.total, 0) || 1;
-  const clientsSection = clients.length > 1 ? `
-    <section aria-labelledby="byclient-h">
-      <h2 id="byclient-h" class="section-title">Par client</h2>
-      <div class="clients">
-        ${clients.map(c => {
-          const share = c.total / clientTotal;
-          return `
-            <div class="client-row${client && c.client !== client ? ' off' : ''}">
-              <span class="name">${c.client}</span>
-              <div class="bar" role="img" aria-label="${c.client} : ${pct(share)} % du total">
-                <span style="transform:scaleX(${share.toFixed(4)})"></span>
-              </div>
-              <span class="val">${fmt(c.total)}<span class="req">${nf.format(c.messages)} req.</span></span>
-              <span class="pct">${pct(share)} %</span>
-            </div>`;
-        }).join('')}
-      </div>
-    </section>` : '';
   /* Repartition par modele */
   const rows = models.map(m => {
     const v = SLOTS[m.slot] || SLOTS[8];
@@ -815,7 +711,7 @@ function render(data) {
 
     <div class="hero-row">
       <div class="hero-figure">
-        <div class="hero-label">${isReq ? 'Requêtes ce mois' : 'Tokens consommés'}</div>
+        <div class="hero-label">Requêtes ce mois</div>
         <div class="hero-value" id="hero">${compact(total).v}${compact(total).u ? `<span class="hero-unit">${compact(total).u}</span>` : ''}</div>
       </div>
       <div class="stat">
@@ -823,17 +719,14 @@ function render(data) {
         <span class="v">${data.models_total ?? models.length}</span>
       </div>
       <div class="stat">
-        <span class="k">${tileDays > 1 ? 'Moyenne / jour' : 'Écart vs hier'}</span>
-        ${tileDays > 1
-          ? `<span class="v">${fmt(avg)}</span>${deltaHtml}`
-          : (deltaLarge || '<span class="v">—</span>')}
+        <span class="k">Moyenne / jour</span>
+        <span class="v">${fmt(avg)}</span>
       </div>
     </div>
 
     <div class="split">
       <div class="stack">
         ${quota}
-        ${clientsSection}
       </div>
       <section aria-labelledby="split-h">
         <h2 id="split-h" class="section-title">Répartition par modèle</h2>
@@ -902,9 +795,9 @@ function applyData(data) {
   /* Rien de neuf ? On ne redessine pas : sinon les animations d'entree
      rejoueraient a chaque battement du flux. */
   const signature = [
-    data.range, data.client, data.grand_total, data.messages, data.previous_total, data.error,
-    data.series?.buckets?.length, data.models?.length, data.clients?.length,
-    data.clients?.map(c => `${c.client}:${c.total}`).join(','),
+    data.grand_total, data.messages, data.error, data.cycle_days,
+    data.models?.length, data.models_total,
+    data.models?.map(m => `${m.model}:${m.total}`).join(','),
     data.quota?.current, data.quota?.monthly, data.quota?.rate_per_day,
     data.quota?.resets_at, data.theme,
     /* source / key_set / key_error sont indispensables a la signature :
@@ -916,7 +809,6 @@ function applyData(data) {
   lastSignature = signature;
 
   lastData = data;
-  fillClientFilter(data.clients || []);
   if (data.theme) applyTheme(data.theme);
 
   const planEl = document.getElementById('plan');
@@ -948,7 +840,6 @@ function beat() {
   el.classList.add('pulse');
 }
 
-const query = () => `range=${range}${client ? `&client=${encodeURIComponent(client)}` : ''}`;
 
 function connect() {
   if (stream) { stream.close(); stream = null; }
@@ -961,7 +852,7 @@ function connect() {
   }
 
   setLive('connecting');
-  stream = new EventSource(`/api/stream?${query()}`);
+  stream = new EventSource('/api/stream');
   stream.onopen = () => setLive('on');
   stream.onmessage = event => {
     let data;
@@ -976,7 +867,7 @@ function connect() {
 /* Repli sans flux : un simple aller-retour HTTP. */
 async function load() {
   try {
-    const res = await fetch(`/api/usage?${query()}`);
+    const res = await fetch('/api/usage');
     applyData(await res.json());
   } catch (err) {
     document.getElementById('app').innerHTML =
@@ -1063,30 +954,6 @@ document.addEventListener('change', e => {
   postQuota({ quota_reset_at: when.getTime() });
 });
 
-document.getElementById('client-filter').addEventListener('change', e => {
-  client = e.target.value;
-  const next = new URLSearchParams({ range });
-  if (client) next.set('client', client);
-  history.replaceState(null, '', `?${next}`);
-  document.getElementById('app').innerHTML = `<p class="state">Chargement…</p>`;
-  lastSignature = '';
-  connect();
-});
-
-/* Le selecteur n'apparait qu'a partir de deux clients distincts. */
-function fillClientFilter(list) {
-  const select = document.getElementById('client-filter');
-  const names = list.map(c => c.client);
-  if (names.length < 2) { select.hidden = true; return; }
-  const options = ['<option value="">Tous les clients</option>']
-    .concat(names.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`));
-  if (select.dataset.signature !== names.join('|')) {
-    select.innerHTML = options.join('');
-    select.dataset.signature = names.join('|');
-  }
-  select.hidden = false;
-  select.value = names.includes(client) ? client : '';
-}
 
 /* Revenir sur l'onglet ne doit pas laisser une vue figee. */
 document.addEventListener('visibilitychange', () => {
