@@ -492,6 +492,11 @@
     <span class="live" id="live" role="status" aria-live="polite" hidden>
       <i aria-hidden="true"></i><span>Connexion…</span>
     </span>
+    <button type="button" class="icon-btn" id="refresh"
+            aria-label="Rafraîchir la consommation"
+            title="Relire les transcripts et redemander le quota à ollama.com">
+      <span aria-hidden="true">↻</span>
+    </button>
     <button type="button" class="icon-btn" id="theme" aria-label="Changer de thème"
             title="Thème : automatique">
       <span aria-hidden="true" id="theme-icon">◐</span>
@@ -1007,6 +1012,18 @@ document.addEventListener('click', e => {
     const value = parseFloat(document.getElementById('monthly').value);
     if (!Number.isFinite(value) || value <= 0) return;
     postQuota({ monthly_quota: value }, btn);
+  }
+
+  if (btn.id === 'refresh') {
+    /* Le serveur relit les transcripts et purge son cache d'usage : sans ca, la
+       part du quota resterait figee une minute de plus. */
+    btn.setAttribute('aria-busy', 'true');
+    fetch('/api/refresh', { method: 'POST' })
+      .catch(() => { /* le flux reprendra de toute facon */ })
+      .finally(() => {
+        btn.removeAttribute('aria-busy');
+        reload();
+      });
   }
 
   if (btn.id === 'save-key') {

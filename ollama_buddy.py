@@ -961,6 +961,11 @@ class State:
             self.revision += 1
         self.broadcast()
 
+    def invalidate_cloud(self) -> None:
+        """Force la prochaine lecture a repasser par ollama.com."""
+        with self.lock:
+            self.cloud_data, self.cloud_ts = None, 0.0
+
     def cloud(self) -> dict | None:
         """Usage ollama.com, mis en cache une minute. None si aucune cle."""
         api_key = str(self.cfg.get("ollama_api_key") or "")
@@ -1065,11 +1070,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if url.path == "/api/refresh":
-            self.state.refresh(force=True)
-            self._json({"ok": True, "error": self.state.last_error})
+            self.refresh_all()
             return
 
         self._json({"error": "not found"}, 404)
+
+    def refresh_all(self) -> None:
+        """Relit les transcripts ET redemande l'usage a ollama.com.
+
+        Le cache de la cle dure une minute : sans cette purge, un rafraichissement
+        manuel afficherait la meme valeur qu'avant.
+        """
+        self.state.refresh(force=True)
+        self.state.invalidate_cloud()
+        self.state.broadcast()
+        self._json({"ok": True, "error": self.state.last_error})
 
     def stream(self, key: str, client: str | None = None) -> None:
         """Flux SSE : le serveur pousse l'usage des qu'un transcript change."""
@@ -1102,6 +1117,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         url = urlparse(self.path)
+        if url.path == "/api/refresh":
+            # Le GET existait seul : le bouton de l'interface faisait un POST et
+            # tombait donc sur un 404, sans que rien ne le signale.
+            self.refresh_all()
+            return
         if url.path == "/api/quota":
             self.update_quota()
             return
@@ -1170,8 +1190,7 @@ class Handler(BaseHTTPRequestHandler):
             # Une cle changee doit etre testee tout de suite : sans purge, le
             # cache d'une minute continuerait de servir l'ancien resultat.
             cfg["ollama_api_key"] = str(body["ollama_api_key"] or "").strip()
-            with self.state.lock:
-                self.state.cloud_data, self.state.cloud_ts = None, 0.0
+            self.state.invalidate_cloud()
         save_config(cfg)
 
         with self.state.lock:
