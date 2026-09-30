@@ -7,6 +7,7 @@
   ![Aucune dépendance](https://img.shields.io/badge/d%C3%A9pendances-aucune-199e70)
   ![Serveurs](https://img.shields.io/badge/serveurs-ollama.com%20uniquement-199e70)
   ![macOS](https://img.shields.io/badge/macOS-app%20native-000000?logo=apple&logoColor=white)
+  ![Licence MIT](https://img.shields.io/badge/licence-MIT-199e70)
 
   [Fonctionnalités](#fonctionnalités) • [Installation](#installation) • [Utilisation](#utilisation) • [Le quota](#le-quota-mensuel) • [Conception](#conception)
 </div>
@@ -35,13 +36,25 @@ de bord l'affiche, et un aperçu discret reste en permanence dans la barre de me
 
 ## Installation
 
+**Prérequis** — macOS, et les outils en ligne de commande Xcode, d'où vient `swiftc` :
+
 ```bash
+xcode-select --install
+pip3 install pillow          # pour générer l'icône
+```
+
+```bash
+git clone https://github.com/<ton-compte>/ollama-buddy.git
+cd ollama-buddy
 ./build_app.sh --install     # construit et copie dans /Applications
 ```
 
 Puis glisse `Ollama Buddy.app` dans le Dock. L'app démarre son serveur, ouvre le
 tableau de bord dans une fenêtre native, expose l'aperçu de la barre de menus, et
-arrête son serveur quand tu quittes.
+arrête son serveur quand tu quittes. Sans `--install`, le bundle reste dans le
+dossier du projet.
+
+Le binaire est **universel** : Apple Silicon et Intel.
 
 **En ligne de commande** — le même programme, sans l'enveloppe macOS :
 
@@ -52,6 +65,39 @@ python3 ollama_buddy.py            # serveur + tableau de bord
 > [!NOTE]
 > Fermer la fenêtre **ne quitte pas** l'app : elle continue de vivre dans la barre de
 > menus. `⌘Q` arrête le serveur.
+
+### Chez quelqu'un d'autre
+
+Le chemin propre est **la même commande** : clone et build sur place. Un binaire
+compilé localement ne porte pas le marqueur de quarantaine, donc macOS ne demande
+rien.
+
+Si tu joins plutôt un `.app` déjà construit — une Release GitHub, par exemple —
+l'archive arrive marquée `com.apple.quarantine` et Gatekeeper la refuse : la
+signature est **ad-hoc**, sans développeur identifié. La personne qui la reçoit
+lève ça en une commande :
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Ollama Buddy.app"
+```
+
+Deux réserves, dites franchement :
+
+- Sur macOS 26, un `.app` signé ad-hoc **et** en quarantaine peut afficher « est
+  endommagé et ne peut pas être ouvert », parfois sans bouton pour passer outre.
+  La commande ci-dessus reste la sortie.
+- Un `.app` téléchargé a besoin de `/usr/bin/python3`, qui réclame lui aussi les
+  outils Xcode. Sans eux, l'app s'ouvre puis échoue. Le build depuis les sources
+  n'a pas ce problème, puisque `swiftc` les exige déjà.
+
+Éviter tout ça demanderait une signature *Developer ID* et une notarisation Apple,
+donc l'Apple Developer Program à 99 $/an. Sans lui, **le build depuis les sources
+est le seul chemin sans friction** — et c'est celui à recommander.
+
+> [!NOTE]
+> Homebrew n'est plus une porte de sortie : depuis le 1er septembre 2026, les casks
+> qui échouent au contrôle Gatekeeper ne sont plus acceptés dans les dépôts
+> officiels.
 
 ## Utilisation
 
