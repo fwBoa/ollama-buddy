@@ -645,6 +645,8 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) 
         return {
             "source": "api",
             "error": None,
+            "key_set": True,
+            "key_error": None,
             "monthly": monthly,
             "ratio": ratio,
             "current": current,
@@ -704,6 +706,10 @@ def _build_quota_manual(conn: sqlite3.Connection, cfg: dict,
     return {
         "source": "manuelle",
         "error": None,
+        # L'interface doit distinguer « pas de cle » de « cle refusee » : dans
+        # les deux cas le calcul est manuel, mais le message n'est pas le meme.
+        "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
+        "key_error": (cloud or {}).get("error"),
         "monthly": monthly,
         "resets_at": resets_at,
         "days_left": days_left,

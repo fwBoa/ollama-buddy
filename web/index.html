@@ -355,6 +355,36 @@
   }
   .quota-source b { color: var(--text-secondary); font-weight: 600; }
 
+  /* --- Connexion du compte (BYOK) : la seule porte d'entree vers la cle --- */
+  .connect {
+    margin-bottom: 22px; padding: 16px 18px;
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .connect-lead { margin: 0 0 13px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  .connect-lead b { color: var(--text-primary); font-weight: 600; }
+  .connect-lead .bad { color: var(--critical); }
+  .connect-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .connect input {
+    font: inherit; font-size: 13px; flex: 1 1 190px; min-width: 0;
+    padding: 8px 11px; min-height: 34px;
+    color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px;
+    transition: border-color 160ms var(--ease-out);
+  }
+  .connect input:hover { border-color: var(--baseline); }
+  .connect .hint { margin: 11px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  /* La cle ne doit jamais repartir vers le navigateur : le champ est toujours vide. */
+  .connect input::placeholder { color: var(--text-muted); }
+  a { color: var(--accent); }
+
+  /* Un chiffre issu d'un relevé et non d'une lecture directe doit le dire. */
+  .stale { color: var(--text-muted); font-size: 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 11.5px; background: var(--ghost); padding: 1px 5px; border-radius: 4px;
+  }
+
   .btn {
     font: inherit; font-size: 13px; font-weight: 500; color: var(--text-primary);
     background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
@@ -363,17 +393,12 @@
   }
   .btn:active { transform: scale(0.97); }
   @media (hover: hover) and (pointer: fine) { .btn:hover { background: var(--ghost); } }
-  .quota-empty {
-    margin-top: 40px; padding: 18px; background: var(--ghost);
-    border: 1px solid var(--border); border-radius: 12px;
-    font-size: 13px; color: var(--text-secondary); line-height: 1.7;
+  /* L'action attendue du bloc : une seule par ecran, jamais deux. */
+  .btn.primary {
+    color: #fff; background: var(--accent); border-color: transparent;
   }
-  .quota-empty b { color: var(--text-primary); font-weight: 600; }
-  .quota-empty .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-  .quota-empty input { font: inherit; font-size: 13px; width: 88px; padding: 8px 10px; min-height: 34px;
-    color: var(--text-primary); background: var(--surface-1);
-    border: 1px solid var(--border); border-radius: 8px; }
-
+  @media (hover: hover) and (pointer: fine) { .btn.primary:hover { background: var(--accent); filter: brightness(1.08); } }
+  .btn[disabled] { opacity: .55; cursor: default; }
   details.quota-settings { margin-top: 16px; }
   details.quota-settings summary {
     cursor: pointer; font-size: 12.5px; color: var(--text-muted); padding: 8px 0;
@@ -564,29 +589,16 @@ function whenText(days) {
    retombe sur des releves saisis a la main.
    ===================================================================== */
 function renderQuota(q) {
-  if (!q || !q.monthly) {
-    return `
-      <section class="quota-empty">
-        <h2 class="visually-hidden">Quota mensuel</h2>
-        <b>Suis ton quota mensuel Ollama.</b><br>
-        Indique ton plafond mensuel, puis colle de temps en temps le montant
-        affiché sur <b>ollama.com/settings</b>. Dès le second relevé, l'app
-        mesure ton rythme de dépense et projette le dépassement.
-        <div class="row">
-          <label for="monthly">Plafond mensuel</label>
-          <input id="monthly" type="number" min="1" step="1" placeholder="60" inputmode="decimal">
-          <button class="btn" id="save-monthly" type="button">Enregistrer</button>
-        </div>
-      </section>`;
-  }
-
+  q = q || {};
   const live = q.source === 'api';
+  const keySet = !!q.key_set;
+  const monthly = q.monthly || 0;
   const has = q.current !== null && q.current !== undefined;
   const ratio = live && q.ratio !== null && q.ratio !== undefined
     ? q.ratio
-    : (has ? q.current / q.monthly : 0);
+    : (has && monthly ? q.current / monthly : 0);
   const fill = has ? severity(ratio) : 'var(--baseline)';
-  const resetText = q.days_left === null ? ''
+  const resetText = q.days_left === null || q.days_left === undefined ? ''
     : q.days_left < 1 ? "réinitialisation aujourd'hui"
     : q.days_left < 2 ? 'réinitialisation demain'
     : `réinitialisation dans ${Math.floor(q.days_left)} jours`;
@@ -604,21 +616,52 @@ function renderQuota(q) {
     rateLine = `<p class="quota-rate">${bits.join(' · ')}</p>`;
   }
 
+  /* --- Carte de connexion : le seul endroit où l'app demande une clé.
+         Elle reste vide même quand une clé est enregistrée : le secret ne
+         repart jamais vers le navigateur. --- */
+  const connect = live ? '' : `
+    <div class="connect">
+      <p class="connect-lead">${keySet
+        ? `<b class="bad">Clé refusée</b> — Ollama l'a rejetée. Vérifie-la sur
+           <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>,
+           ou saisis le montant à la main ci-dessous.`
+        : `Relie ton compte pour lire le quota en direct : le pourcentage exact, et la
+           répartition par modèle pour <b>tous</b> tes outils — pas seulement Claude Code.`}</p>
+      <div class="connect-row">
+        <label class="visually-hidden" for="api-key">Clé API ollama.com</label>
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false"
+               placeholder="${keySet ? 'coller une autre clé' : 'coller ta clé API'}"
+               aria-describedby="key-hint">
+        <button class="btn primary" id="save-key" type="button">Enregistrer</button>
+      </div>
+      <p class="hint" id="key-hint">
+        Crée-la sur <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>.
+        Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.
+      </p>
+    </div>`;
+
   return `
     <section class="quota" aria-labelledby="quota-h">
       <h2 id="quota-h" class="visually-hidden">Quota mensuel</h2>
+      ${connect}
       <div class="quota-head">
         <span class="t">Quota mensuel</span>
         <span class="pct">${has ? pct(ratio) + ' %' : '—'}</span>
       </div>
       <div class="meter" role="img" style="--fill:${fill}"
            aria-label="${has
-             ? `${pct(ratio)} pour cent du quota mensuel consommé : ${usd(q.current)} sur ${usd(q.monthly)}`
-             : `plafond de ${usd(q.monthly)}, aucun relevé enregistré`}">
+             ? `${pct(ratio)} pour cent du quota mensuel consommé : ${usd(q.current)} sur ${usd(monthly)}`
+             : `plafond de ${usd(monthly)}, aucun relevé enregistré`}">
         <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
       </div>
       <div class="quota-foot">
-        <span>${has ? `${usd(q.current)} sur ${usd(q.monthly)}` : `${usd(q.monthly)} de plafond`}</span>
+        <span>${has ? `${usd(q.current)} sur ${usd(monthly)}` : `${usd(monthly)} de plafond`}${
+          /* Sans cle, ce montant est un releve : son age doit se lire a cote du
+             chiffre, pas seulement sous le champ de saisie. Un relevé de ce
+             matin n'est deja plus le quota d'aujourd'hui. */
+          !live && q.last_reading
+            ? ` <span class="stale">relevé ${ageText(q.last_reading.age_days)}</span>`
+            : ''}</span>
         <span>${has && q.projected_at_reset ? `projeté au reset : ${usd(q.projected_at_reset)}` : resetText}</span>
       </div>
       ${rateLine}
@@ -631,9 +674,9 @@ function renderQuota(q) {
              sur la somme affichée sur le site.
            </p>`
         : `<div class="quota-update">
-             <label for="reading">Montant relevé sur ollama.com</label>
-             <input id="reading" type="number" min="0" step="0.01" inputmode="decimal"
-                    placeholder="50,74" aria-describedby="reading-hint">
+             <label for="reading">Montant affiché sur ollama.com</label>
+             <input id="reading" type="text" inputmode="decimal" autocomplete="off"
+                    placeholder="0,00" aria-describedby="reading-hint">
              <button class="btn" id="save-reading" type="button">Enregistrer</button>
              <span class="hint" id="reading-hint">${
                q.last_reading ? `dernier relevé ${ageText(q.last_reading.age_days)}` : 'aucun relevé'}</span>
@@ -642,13 +685,17 @@ function renderQuota(q) {
         <summary>Réglages du quota</summary>
         <div class="settings-row">
           <label>Plafond mensuel
-            <input id="monthly" type="number" min="1" step="1" value="${q.monthly}" inputmode="decimal">
+            <input id="monthly" type="number" min="1" step="1" value="${monthly}" inputmode="decimal">
           </label>
           <label>Prochaine réinitialisation
             <input id="reset-at" type="date"
                    value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
           </label>
         </div>
+        ${keySet ? `<div class="settings-row">
+          <button class="btn" id="remove-key" type="button">Retirer la clé API</button>
+          <span class="hint">L'app repassera aux relevés manuels.</span>
+        </div>` : ''}
       </details>
     </section>`;
 }
@@ -957,7 +1004,28 @@ document.addEventListener('click', e => {
     if (!Number.isFinite(value) || value <= 0) return;
     postQuota({ monthly_quota: value }, btn);
   }
+
+  if (btn.id === 'save-key') {
+    const field = document.getElementById('api-key');
+    const key = field.value.trim();
+    if (!key) { field.focus(); return; }
+    // Le champ est vide des l'envoi : le secret ne reste pas dans le DOM.
+    field.value = '';
+    postQuota({ ollama_api_key: key }).then(reload);
+  }
+
+  if (btn.id === 'remove-key') {
+    postQuota({ ollama_api_key: '' }).then(reload);
+  }
 });
+
+/* Changer de cle change la source des donnees (tokens ou requetes) : le flux
+   doit repartir de zero, sinon la vue reste sur l'ancienne source jusqu'au
+   prochain push — qui peut tarder. */
+function reload() {
+  lastSignature = '';
+  connect();
+}
 
 /* Entree dans un champ de quota : on valide sans quitter le champ. */
 document.addEventListener('keydown', e => {
@@ -965,6 +1033,7 @@ document.addEventListener('keydown', e => {
   const id = e.target.id;
   if (id === 'reading') document.getElementById('save-reading')?.click();
   if (id === 'monthly') document.getElementById('save-monthly')?.click();
+  if (id === 'api-key') document.getElementById('save-key')?.click();
 });
 
 document.addEventListener('change', e => {
