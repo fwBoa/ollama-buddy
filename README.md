@@ -1,11 +1,11 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Ta consommation Ollama Cloud, en local — quota, modèles, en temps réel</em></p>
+  <p><em>Ta consommation Ollama Cloud sur ton Mac — quota, modèles, en temps réel</em></p>
 
   ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)
   ![Aucune dépendance](https://img.shields.io/badge/d%C3%A9pendances-aucune-199e70)
-  ![Données locales](https://img.shields.io/badge/donn%C3%A9es-100%25%20locales-199e70)
+  ![Serveurs](https://img.shields.io/badge/serveurs-ollama.com%20uniquement-199e70)
   ![macOS](https://img.shields.io/badge/macOS-app%20native-000000?logo=apple&logoColor=white)
 
   [Fonctionnalités](#fonctionnalités) • [Installation](#installation) • [Utilisation](#utilisation) • [Le quota](#le-quota-mensuel) • [Conception](#conception)
@@ -14,8 +14,8 @@
 ---
 
 Une app macOS qui répond à une seule question : **où en est mon quota Ollama Cloud ?**
-Un serveur Python sans dépendance lit ton usage, un tableau de bord l'affiche, et un
-aperçu discret reste en permanence dans la barre de menus.
+Un serveur Python sans dépendance lit l'usage sur `ollama.com` avec ta clé, un tableau
+de bord l'affiche, et un aperçu discret reste en permanence dans la barre de menus.
 
 ## Fonctionnalités
 
@@ -23,10 +23,11 @@ aperçu discret reste en permanence dans la barre de menus.
   montant en dollars, le rythme de dépense et la date de réinitialisation.
 - **Répartition par modèle, tous clients confondus** — Claude Code, l'app Ollama, la
   recherche web et le reste, avec les mêmes chiffres qu'ollama.com.
-- **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage,
-  qui ouvre un résumé compact.
+- **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage
+  (avec une clé), qui ouvre un résumé compact.
 - **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
-  rien périodiquement.
+  rien périodiquement. Côté serveur, ollama.com est sollicité au plus une fois par
+  minute, quel que soit le nombre d'onglets ouverts.
 - **Aucune dépendance** — bibliothèque standard de Python 3.9+. Pour construire
   l'app : `swiftc` et Pillow.
 
@@ -56,11 +57,14 @@ python3 ollama_buddy.py            # serveur + tableau de bord
 |---|---|
 | `⌘1` | Afficher la fenêtre |
 | `⌘R` | Recharger le tableau de bord |
+| `⌘⇧R` | Redemander l'usage à ollama.com |
 | `⌘O` | Ouvrir dans le navigateur |
 | `⌘Q` | Quitter (arrête le serveur) |
 
 Dans le tableau de bord, le bouton en haut à droite fait défiler les trois thèmes :
-**automatique** (suit macOS), **clair**, **sombre**. Le réglage est conservé.
+**automatique** (suit macOS), **clair**, **sombre**. Le réglage est conservé. Celui
+d'à côté redemande l'usage à ollama.com — sans lui, le cache d'une minute servirait la
+même valeur.
 
 ### La barre de menus
 
@@ -68,8 +72,9 @@ Un point de couleur, puis le pourcentage consommé **quand une clé API est
 enregistrée** — bleu, orange à 70 %, rouge à 90 %. Sans clé, l'icône n'affiche
 qu'un lama suivi d'un tiret : aucun chiffre n'est publié.
 
-Un clic ouvre un résumé : quota, date de réinitialisation, consommation du mois,
-trois principaux modèles, et un bouton vers le tableau de bord complet.
+Un clic ouvre un résumé : quota, date de réinitialisation, consommation du mois et
+trois principaux modèles — avec une clé. Sans clé, il se contente de l'invitation à en
+saisir une, et d'un bouton vers le tableau de bord.
 
 L'aperçu est lui aussi en direct : il se met à jour tant qu'il reste ouvert.
 
@@ -90,13 +95,13 @@ Ce que la clé débloque :
 |---|---|
 | Le pourcentage du mois | `limits.monthly.usage`, exact et rafraîchi tout seul |
 | Les requêtes par modèle | `limits.monthly.models`, **tous clients confondus** |
-| Le rythme en $/jour | mesuré sur des échantillons pris toutes les cinq minutes |
+| Le rythme en $/jour | mesuré sur des échantillons pris toutes les cinq minutes, une fois une journée pleine accumulée |
 
 Ce qu'elle ne donne pas, et comment l'app s'en sort :
 
 | | |
 |---|---|
-| Le montant en dollars | L'API ne renvoie qu'une **part** (`0,874`), pas une somme. L'app la multiplie par le plafond du plan — d'où `52,44 $`, qui tombe sur le chiffre du site. |
+| Le montant en dollars | L'API ne renvoie qu'une **part** (`0,874`), pas une somme. L'app la multiplie par le plafond du plan, ce qui retombe sur la somme affichée par le site. |
 | La date de réinitialisation | Déduite du cycle en cours : `activity.period.starting_at` donne le début de l'abonnement, le mois se rejoue au même quantième. Cycle ouvert le 07/09 → remise à zéro le 07/10. |
 
 > [!WARNING]
@@ -153,16 +158,16 @@ gabarit** dans la barre de menus, où macOS l'inverse selon le fond.
 au clic, apparition en cascade. Les survols sont conditionnés à `@media (hover: hover)`.
 `prefers-reduced-motion` est respecté : les fondus restent, les déplacements disparaissent.
 
-**Accessibilité.** Lien d'évitement, focus visible au clavier uniquement, `aria-pressed`
-sur les filtres, libellés programmatiques, région `aria-live`, cibles ≥ 24 px, et
-**aucune information portée par la seule couleur** — les variations portent une flèche
-et un mot.
+**Accessibilité.** Lien d'évitement, focus visible au clavier uniquement, libellés
+programmatiques, région `aria-live`, cibles ≥ 24 px, et **aucune information portée par
+la seule couleur** : la jauge du quota change de teinte, mais le pourcentage est écrit
+à côté.
 
 ## Fichiers
 
 | Fichier | Rôle |
 |---|---|
-| `ollama_buddy.py` | Serveur HTTP, indexation, agrégation, flux SSE |
+| `ollama_buddy.py` | Serveur HTTP, lecture de l'usage ollama.com, flux SSE |
 | `web/index.html` | Le tableau de bord |
 | `web/mini.html` | L'aperçu de la barre de menus |
 | `app/main.swift` | L'enveloppe macOS : fenêtre, barre de menus, cycle de vie |
@@ -177,6 +182,7 @@ L'app macOS stocke ses données dans `~/Library/Application Support/OllamaBuddy/
 ## Notes
 
 - Le serveur écoute uniquement sur `127.0.0.1`.
-- Seuls `127.0.0.1:11434` (Ollama) et `ollama.com` (avec une clé) sont interrogés.
-  Aucune donnée ne quitte la machine.
+- Seuls `127.0.0.1:11434` (Ollama, pour le nom du plan) et `ollama.com` (avec une clé)
+  sont interrogés. Rien de ce que l'app mesure ne quitte la machine : seuls la clé et
+  la requête d'usage partent vers ollama.com.
 - **`11435` est déjà pris par l'app Ollama** — d'où le port `11499` par défaut.
