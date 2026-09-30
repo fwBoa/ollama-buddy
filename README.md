@@ -104,9 +104,9 @@ Ce qu'elle ne donne pas, et comment l'app s'en sort :
 > [!WARNING]
 > `ollama.com/api/usage` n'est **pas documenté**. Si la route disparaît ou si la clé
 > est refusée, l'app n'affiche **plus aucun chiffre de quota** : elle invite à en
-> saisir une. C'est délibéré — un montant saisi à la main vieillit sans prévenir, et
-> finit par être lu comme une mesure. Seule la date de réinitialisation survit, parce
-> qu'elle vient des réglages et non d'une observation.
+> saisir une. C'est délibéré : le quota est une donnée d'ollama.com, et sans clé il n'y
+> en a aucune. La date de réinitialisation reste modifiable dans les réglages, où elle
+> sert de repli à l'API.
 
 La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigateur — le
 champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
@@ -114,9 +114,10 @@ champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert q
 
 ### Sans clé
 
-Le quota **n'est pas affiché du tout** — ni pourcentage, ni jauge, ni montant. La
-section se réduit à la carte de connexion et à la date de réinitialisation, qui reste
-réglable.
+Le quota **n'est pas affiché du tout** — ni pourcentage, ni jauge, ni montant, ni
+compte à rebours. La section se réduit à la carte de connexion. La date de
+réinitialisation reste modifiable dans les réglages, mais elle ne s'affiche pas : elle
+n'est pas une mesure, juste un paramètre.
 
 Le reste du tableau de bord continue de fonctionner : les modèles viennent alors des
 transcripts Claude Code, en **tokens**. Un seul client — la seule chose que l'app

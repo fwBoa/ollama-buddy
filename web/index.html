@@ -645,14 +645,15 @@ function renderQuota(q) {
       </div>` : ''}
     </details>`;
 
-  /* Sans cle, la date de reinitialisation reste affichee : elle vient des
-     reglages, pas d'une mesure. C'est un fait connu, il ne se perime pas. */
+  /* Sans cle, la section se reduit a la carte de connexion. Rien de ce qui
+     s'affiche ici ne peut venir de Claude Code : le quota est une donnee
+     d'ollama.com, et sans cle il n'y en a aucune. La date reste reglable
+     dans les reglages, ou elle sert aussi de repli a l'API. */
   if (!live) {
     return `
       <section class="quota" aria-labelledby="quota-h">
         <h2 id="quota-h" class="visually-hidden">Quota mensuel</h2>
         ${connect}
-        ${resetText ? `<p class="quota-rate">${resetText}</p>` : ''}
         ${settings}
       </section>`;
   }

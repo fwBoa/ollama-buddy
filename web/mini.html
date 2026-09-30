@@ -168,11 +168,12 @@ function render(d) {
         <span class="sub">${resetLine}</span>
       </div>`;
   } else {
+    /* Rien d'autre ici : sans cle, l'app n'a aucune donnee de quota a montrer.
+       Ce qui reste dans l'apercu vient de Claude Code, pas d'ollama.com. */
     quotaBlock = `<p class="label">Quota mensuel</p>
       <p class="sub">${q.key_set
         ? 'Lecture impossible — vérifie ta clé API dans le tableau de bord.'
-        : 'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.'}</p>
-      ${resetLine ? `<p class="sub" style="margin-top:6px">${resetLine}</p>` : ''}`;
+        : 'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.'}</p>`;
   }
 
   const models = (d.models || []).slice(0, 3).map(m =>
