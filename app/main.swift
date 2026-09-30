@@ -172,6 +172,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         config.userContentController.add(self, name: "popoverSize")
         miniWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: 260),
                                 configuration: config)
+        // Sans ce masque, la vue web garde la hauteur de construction quand le
+        // panneau s'ajuste au contenu : le bas du panneau reste vide.
+        miniWebView.autoresizingMask = [.width, .height]
         miniWebView.setValue(false, forKey: "drawsBackground")
         miniWebView.navigationDelegate = self
         if #available(macOS 12.0, *) {
@@ -184,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         container.wantsLayer = true
         container.layer?.cornerRadius = 12
         container.layer?.masksToBounds = true
+        container.autoresizingMask = [.width, .height]
         container.addSubview(miniWebView)
 
         panel = PopoverPanel(contentRect: container.frame,
