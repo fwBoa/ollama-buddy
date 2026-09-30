@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>                  <string>Ollama Buddy</string>
+    <key>CFBundleDisplayName</key>           <string>Ollama Buddy</string>
+    <key>CFBundleExecutable</key>            <string>OllamaBuddy</string>
+    <key>CFBundleIdentifier</key>            <string>local.ollamabuddy</string>
+    <key>CFBundleIconFile</key>              <string>AppIcon</string>
+    <key>CFBundlePackageType</key>           <string>APPL</string>
+    <key>CFBundleShortVersionString</key>    <string>1.0</string>
+    <key>CFBundleVersion</key>               <string>1</string>
+    <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>        <string>12.0</string>
+    <key>NSHighResolutionCapable</key>       <true/>
+    <key>LSApplicationCategoryType</key>     <string>public.app-category.developer-tools</string>
+    <key>NSHumanReadableCopyright</key>      <string>Suivi local de la consommation Ollama Cloud</string>
+</dict>
+</plist>

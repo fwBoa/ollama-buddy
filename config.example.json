@@ -1,0 +1,11 @@
+{
+  "daily_token_budget": 0,
+  "monthly_quota": 60.0,
+  "quota_reset_at": 0,
+  "ollama_api_key": "",
+  "port": 11499,
+  "proxy_port": 0,
+  "read_transcripts": true,
+  "theme": "auto",
+  "watch_seconds": 2
+}

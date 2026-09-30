@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Ollama Buddy — aperçu</title>
+<style>
+  /* Meme palette que le tableau de bord, en plus compact. */
+  :root {
+    color-scheme: light;
+    --surface:   #fcfcfb;
+    --text-1:    #0b0b0b;
+    --text-2:    #52514e;
+    --text-3:    #898781;
+    --grid:      #e1e0d9;
+    --border:    rgba(11,11,11,0.10);
+    --ghost:     rgba(11,11,11,0.05);
+    --good:      #0ca30c;
+    --warning:   #fab219;
+    --serious:   #ec835a;
+    --critical:  #d03b3b;
+    --accent:    #2a78d6;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
+    --ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --surface:  #1c1c1a;
+      --text-1:   #ffffff;
+      --text-2:   #c3c2b7;
+      --text-3:   #898781;
+      --grid:     #2c2c2a;
+      --border:   rgba(255,255,255,0.10);
+      --ghost:    rgba(255,255,255,0.06);
+      --good:     #0ca30c;
+      --accent:   #3987e5;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface:  #1c1c1a;
+    --text-1:   #ffffff;
+    --text-2:   #c3c2b7;
+    --text-3:   #898781;
+    --grid:     #2c2c2a;
+    --border:   rgba(255,255,255,0.10);
+    --ghost:    rgba(255,255,255,0.06);
+    --good:     #0ca30c;
+    --accent:   #3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 18px 14px;
+    background: var(--surface); color: var(--text-1);
+    font: 13px/1.45 system-ui, -apple-system, "SF Pro Text", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    width: 300px; overflow: hidden;
+  }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 5px; }
+
+  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .head h1 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .live { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600;
+          text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
+  .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+  .live.stale i { background: var(--warning); }
+
+  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+           color: var(--text-3); margin: 0 0 7px; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .big { font-size: 27px; font-weight: 600; line-height: 1; letter-spacing: -0.02em;
+         font-variant-numeric: tabular-nums; }
+  .sub { font-size: 11.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+  .meter { height: 8px; border-radius: 999px; overflow: hidden; margin: 9px 0 7px;
+           background: color-mix(in oklab, var(--fill) 20%, var(--surface)); }
+  .meter > span { display: block; height: 100%; width: 100%; border-radius: 999px;
+                  background: var(--fill); transform-origin: left center; transform: scaleX(0);
+                  transition: transform 280ms var(--ease-out); }
+
+  hr { border: 0; border-top: 1px solid var(--grid); margin: 14px 0; }
+
+  .models { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .m { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .m i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+  .m .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+  .m .v { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  .actions { display: flex; gap: 8px; margin-top: 15px; }
+  button {
+    font: inherit; font-size: 12px; font-weight: 500; flex: 1;
+    color: var(--text-1); background: var(--ghost);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 7px 10px; min-height: 30px; cursor: pointer;
+    transition: transform 120ms var(--ease-out), background 160ms var(--ease-out);
+  }
+  button:active { transform: scale(0.97); }
+  @media (hover: hover) and (pointer: fine) { button:hover { background: var(--grid); } }
+
+  .empty { color: var(--text-3); font-size: 12px; padding: 6px 0; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>Ollama Buddy</h1>
+  <span class="live" id="live"><i aria-hidden="true"></i><span>…</span></span>
+</div>
+
+<div id="body"><p class="empty">Lecture…</p></div>
+
+<script>
+"use strict";
+const nf = new Intl.NumberFormat('fr-FR');
+let lastSig = '';
+let hasRendered = false;
+
+const compact = n => n >= 1e9 ? (n / 1e9).toFixed(2).replace('.', ',') + ' Md'
+  : n >= 1e6 ? (n / 1e6).toFixed(2).replace('.', ',') + ' M'
+  : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + ' k'
+  : String(n);
+const usd = n => n.toFixed(2).replace('.', ',') + ' $';
+const pct = x => (x * 100).toFixed(1).replace('.', ',');
+const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
+
+function render(d) {
+  const q = d.quota || {};
+  const body = document.getElementById('body');
+
+  if (d.theme) applyTheme(d.theme);
+
+  let quotaBlock = '';
+  if (q.monthly && q.current !== null && q.current !== undefined) {
+    const ratio = q.current / q.monthly;
+    quotaBlock = `
+      <div class="row">
+        <span class="label" style="margin:0">Quota mensuel</span>
+        <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)} %</span>
+      </div>
+      <div class="meter" style="--fill:${severity(ratio)}" role="img"
+           aria-label="${pct(ratio)} pour cent du quota mensuel : ${usd(q.current)} sur ${usd(q.monthly)}">
+        <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
+      </div>
+      <div class="row">
+        <span class="sub">${usd(q.current)} sur ${usd(q.monthly)}</span>
+        <span class="sub">${q.days_left === null ? '' :
+          q.days_left < 1 ? "reset aujourd'hui" :
+          q.days_left < 2 ? 'reset demain' : `reset dans ${Math.floor(q.days_left)} j`}</span>
+      </div>`;
+  } else if (q.monthly) {
+    quotaBlock = `<p class="label">Quota mensuel</p>
+      <p class="sub">Plafond ${usd(q.monthly)} — aucun relevé. Ouvre le tableau de bord pour saisir le montant affiché sur ollama.com.</p>`;
+  } else {
+    quotaBlock = `<p class="sub">Aucun quota configuré. Ouvre le tableau de bord pour le définir.</p>`;
+  }
+
+  const models = (d.models || []).slice(0, 3).map(m =>
+    `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
+       <span class="n">${m.model}</span><span class="v">${compact(m.total)}</span></div>`
+  ).join('');
+
+  const rate = q.rate_per_day && q.exhausted_in_days !== null && q.exhausted_in_days !== undefined
+    ? `<p class="sub" style="margin:10px 0 0">${usd(q.rate_per_day)} / jour${
+        q.days_left !== null && q.exhausted_in_days < q.days_left
+          ? ` — plafond atteint dans ${Math.floor(q.exhausted_in_days)} j` : ''}</p>`
+    : '';
+
+  body.innerHTML = `
+    ${quotaBlock}
+    ${rate}
+    <hr>
+    <p class="label">Ce mois</p>
+    <div class="row">
+      <span class="big">${compact(d.grand_total || 0)}</span>
+      <span class="sub">${nf.format(d.messages || 0)} req.</span>
+    </div>
+    <div class="models">${models || '<p class="empty">Aucune consommation sur la période.</p>'}</div>
+    <div class="actions">
+      <button type="button" id="open">Ouvrir le tableau de bord</button>
+    </div>`;
+
+  document.getElementById('open').addEventListener('click', () => {
+    location.href = 'ollama-buddy://open';
+  });
+
+  // Apres innerHTML, pas avant : mesurer plus tot renvoyait la hauteur de
+  // l'ancien contenu (une bande de 103 px).
+  hasRendered = true;
+  reportSize();
+}
+
+function setLive(on) {
+  const el = document.getElementById('live');
+  el.classList.toggle('stale', !on);
+  el.lastElementChild.textContent = on ? 'En direct' : 'Reconnexion';
+}
+
+/* Le popover s'ajuste a la hauteur reelle du contenu : sans cela il garde la
+   taille demandee a la construction et laisse un vide en bas.
+   Pas de requestAnimationFrame ici : la page est chargee avant que le popover
+   soit visible, et rAF ne se declenche pas tant que la vue n'est pas affichee.
+   getBoundingClientRect force le reflow, la mesure est donc deja juste. */
+function reportSize() {
+  // Tant que le contenu n'est pas rendu, la page ne fait que la hauteur du
+  // titre : annoncer 103 px reduirait le popover a une bande minuscule.
+  if (!hasRendered) return;
+  const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.popoverSize;
+  if (!bridge) return;
+  bridge.postMessage(Math.ceil(document.body.getBoundingClientRect().height));
+}
+
+function applyTheme(value) {
+  const root = document.documentElement;
+  if (value === 'light' || value === 'dark') root.setAttribute('data-theme', value);
+  else root.removeAttribute('data-theme');
+}
+
+new ResizeObserver(reportSize).observe(document.body);
+window.addEventListener('load', reportSize);
+
+function connect() {
+  const stream = new EventSource('/api/stream?range=today');
+  stream.onopen = () => setLive(true);
+  stream.onerror = () => setLive(false);
+  stream.onmessage = e => {
+    let d; try { d = JSON.parse(e.data); } catch { return; }
+    const sig = `${d.grand_total}|${d.messages}|${d.models?.length}|${d.quota?.current}|${d.quota?.monthly}`;
+    if (sig === lastSig) return;
+    lastSig = sig;
+    setLive(true);
+    render(d);
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

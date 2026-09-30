@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama Buddy — consommation des modèles Ollama Cloud</title>
+<script>
+  /* Pose avant le premier rendu, sinon le contenu saute quand la classe
+     arrive. La fenetre native reserve la place des feux tricolores. */
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.app) {
+    document.documentElement.classList.add('in-app');
+  }
+</script>
+<style>
+  /* =====================================================================
+     Tokens. Palette catégorielle validée en clair et en sombre par le
+     validateur dataviz (bande de clarté, chroma, séparation daltonienne,
+     contraste sur la surface). Ne pas modifier une teinte isolément.
+     ===================================================================== */
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --surface-raised: #ffffff;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --ghost:          rgba(11,11,11,0.04);
+    --shadow:         0 1px 2px rgba(11,11,11,.05), 0 6px 20px rgba(11,11,11,.05);
+    --good:      #0ca30c;
+    --warning:   #fab219;
+    --serious:   #ec835a;
+    --critical:  #d03b3b;
+    --accent:    #2a78d6;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
+
+    /* Courbes d'easing fortes : les valeurs CSS natives manquent de mordant. */
+    --ease-out:   cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-inout: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #141413;
+      --surface-raised: #1b1b19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --ghost:          rgba(255,255,255,0.05);
+      --shadow:         0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.3);
+      --good:      #0ca30c;
+      --warning:   #fab219;
+      --serious:   #ec835a;
+      --critical:  #d03b3b;
+      --accent:    #3987e5;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+    }
+  }
+  /* Memes valeurs, pour forcer le sombre quand le systeme est en clair.
+     Le theme sombre est choisi, pas deduit : ses pas sont validés pour la
+     surface sombre. */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #141413;
+    --surface-raised: #1b1b19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --ghost:          rgba(255,255,255,0.05);
+    --shadow:         0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.3);
+    --good:      #0ca30c;
+    --warning:   #fab219;
+    --serious:   #ec835a;
+    --critical:  #d03b3b;
+    --accent:    #3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.5 system-ui, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* --- Focus : jamais supprime, toujours visible au clavier (WCAG 2.4.7) --- */
+  :focus { outline: none; }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+
+  /* --- Lien d'evitement (WCAG 2.4.1) --- */
+  .skip {
+    position: absolute; left: 50%; top: 8px; transform: translate(-50%, -200%);
+    z-index: 100; padding: 10px 18px; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+    text-decoration: none; transition: transform 160ms var(--ease-out);
+  }
+  .skip:focus-visible { transform: translate(-50%, 0); }
+
+  .wrap {
+    max-width: 1560px; margin: 0 auto;
+    padding: 0 clamp(16px, 2.5vw, 44px) 72px;
+  }
+
+  /* --- Barre superieure translucide, facon materiau Apple --- */
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 18px clamp(16px, 2.5vw, 44px) 16px;
+    margin: 0 calc(-1 * clamp(16px, 2.5vw, 44px)) 22px;
+    background: color-mix(in oklab, var(--page) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: -0.015em; }
+
+  /* Le lama, en masque : il prend la couleur du texte et suit donc les deux
+     themes sans qu'il faille deux fichiers. */
+  .logo {
+    width: 16px; height: 22px; flex: 0 0 auto; margin-right: 2px;
+    background-color: var(--text-primary);
+    -webkit-mask: url("ollama.png") center / contain no-repeat;
+    mask: url("ollama.png") center / contain no-repeat;
+  }
+
+  /* Dans la fenetre native le contenu passe sous la barre de titre : on
+     reserve la place des feux, sinon le titre du document chevauche le leur. */
+  html.in-app .topbar { padding-top: 34px; }
+  html.in-app .logo { width: 18px; height: 25px; }
+  .plan {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--good); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+  }
+  /* Indicateur de flux : le serveur pousse, on le montre. */
+  .live {
+    display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .live i {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: 0 0 auto;
+    transition: background-color 200ms var(--ease-out);
+  }
+  .live.stale i { background: var(--warning); }
+  .live.pulse i { animation: beat 420ms var(--ease-out); }
+  @keyframes beat {
+    0%   { transform: scale(1);   opacity: 1; }
+    45%  { transform: scale(2.4); opacity: .3; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+  .sub { color: var(--text-secondary); font-size: 13.5px; margin: 0 0 24px; max-width: 92ch; }
+
+  /* --- Controles : une rangee, au-dessus des chiffres --- */
+  .controls {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding-bottom: 20px; border-bottom: 1px solid var(--gridline); margin-bottom: 30px;
+  }
+  /* Sans filtre de client, la barre n'a plus rien a porter : un trait de
+     separation au-dessus du vide ne fait que du bruit. On teste le select,
+     pas le label qui l'enveloppe — ce dernier n'est jamais `hidden`. */
+  .controls:not(:has(select:not([hidden]))) { display: none; }
+
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; flex: 0 0 36px;
+    font: inherit; font-size: 15px; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 9px;
+    cursor: pointer;
+    transition: transform 120ms var(--ease-out), color 160ms var(--ease-out),
+                background 160ms var(--ease-out);
+  }
+  .icon-btn:active { transform: scale(0.94); }
+  @media (hover: hover) and (pointer: fine) {
+    .icon-btn:hover { color: var(--text-primary); background: var(--ghost); }
+  }
+  .icon-btn[aria-busy="true"] span { display: inline-block; animation: spin 600ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Le contenu s'estompe pendant un changement de periode au lieu d'etre
+     remplace par un ecran "Chargement" qui clignote. */
+  #app { transition: opacity 180ms var(--ease-out); }
+  #app.switching { opacity: 0.45; }
+
+  /* --- Titre auto-informatif : le graphique porte sa propre lecture --- */
+  .headline {
+    font-size: 15px; color: var(--text-secondary); margin: 0 0 20px; line-height: 1.6;
+  }
+  .headline b { color: var(--text-primary); font-weight: 600; }
+
+  /* --- Chiffre hero : un seul par vue. Flex plutot que grid fixe, pour que
+     les tuiles se replacent d'elles-memes selon la largeur. --- */
+  .hero-row {
+    display: flex; flex-wrap: wrap; align-items: flex-end;
+    gap: clamp(20px, 3vw, 52px);
+    margin-bottom: clamp(30px, 3vw, 42px);
+  }
+  .hero-figure { flex: 1 1 240px; min-width: 0; }
+  .hero-value {
+    font-size: clamp(2.5rem, 4.6vw, 3.7rem);
+    font-weight: 600; line-height: 0.98; letter-spacing: -0.03em;
+  }
+  .hero-unit { font-size: clamp(1.1rem, 1.9vw, 1.6rem); font-weight: 500; color: var(--text-secondary); margin-left: 5px; }
+  .hero-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+
+  .stat { display: flex; flex-direction: column; gap: 6px; padding-bottom: 6px; flex: 0 1 auto; min-width: 104px; }
+  .stat .k { font-size: 12px; color: var(--text-muted); }
+  .stat .v { font-size: clamp(1.05rem, 1.5vw, 1.25rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* --- Bloc du bas : le quota et la repartition se partagent la largeur.
+     Le graphe, lui, reste pleine largeur - c'est lui qui tire parti des
+     pixels supplementaires. --- */
+  .split { display: grid; gap: clamp(28px, 3vw, 48px); align-items: start; }
+  @media (min-width: 940px) {
+    .split { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.45fr); }
+  }
+  .split .quota { margin-top: 0; }
+  .split .section-title { margin-top: 0; }
+  .stack { display: flex; flex-direction: column; gap: clamp(28px, 3vw, 40px); min-width: 0; }
+
+  /* --- Container queries : les composants repondent a LEUR largeur, pas a
+     celle de la fenetre. --- */
+  .models { container-type: inline-size; }
+  @container (max-width: 430px) {
+    .model { grid-template-columns: 15px 1fr auto; }
+    .model .bar { display: none; }
+  }
+  .quota { container-type: inline-size; }
+  @container (max-width: 340px) {
+    .quota-update { flex-direction: column; align-items: flex-start; }
+  }
+  .delta {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .delta.up   { color: var(--serious); }
+  .delta.down { color: var(--good); }
+  .delta.flat { color: var(--text-muted); }
+  /* Quand le delta tient lieu de valeur, il prend la taille d'une valeur. */
+  .stat .delta.lg { font-size: clamp(1.05rem, 1.5vw, 1.25rem); font-weight: 600; }
+
+
+  /* --- Selecteur de client --- */
+  .client-picker select {
+    font: inherit; font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); background-color: var(--ghost);
+    border: 0; border-radius: 11px; padding: 8px 32px 8px 14px; min-height: 34px;
+    cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23898781' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    transition: color 160ms var(--ease-out), background-color 160ms var(--ease-out);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .client-picker select:hover { color: var(--text-primary); }
+  }
+  .client-picker select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* --- Repartition par client --- */
+  .clients { display: flex; flex-direction: column; gap: 2px; }
+  .client-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(40px, 1.2fr) auto auto;
+    align-items: center; gap: 12px; padding: 9px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .client-row + .client-row { border-top: 1px solid var(--gridline); }
+  .client-row .name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .client-row .bar { height: 8px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
+  .client-row .bar > span {
+    display: block; height: 100%; width: 100%; background: var(--accent);
+    border-radius: 0 4px 4px 0;
+    transform-origin: left center; transform: scaleX(0);
+    transition: transform 300ms var(--ease-out);
+  }
+  .client-row .val { font-size: 12.5px; font-weight: 600; }
+  .client-row .pct { font-size: 11.5px; color: var(--text-secondary); min-width: 42px; text-align: right; }
+  .client-row.off { opacity: .45; }
+  .client-row .req { font-size: 11px; color: var(--text-muted); font-weight: 400; display: block; }
+  @container (max-width: 400px) {
+    .client-row { grid-template-columns: 1fr auto; }
+    .client-row .bar { display: none; }
+  }
+
+  /* --- Quota mensuel : la seule mesure qui couvre tous les clients --- */
+  .quota { margin-top: 40px; }
+  .quota-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .quota-head .t { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+  .quota-head .pct { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .meter {
+    height: 12px; border-radius: 999px; overflow: hidden;
+    background: color-mix(in oklab, var(--fill) 20%, var(--surface-1));
+  }
+  /* On anime transform, pas width : scaleX reste sur le GPU et ne declenche
+     ni layout ni paint. Le rayon du parent borne le rendu. */
+  .meter > span {
+    display: block; height: 100%; width: 100%; border-radius: 999px;
+    background: var(--fill);
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 280ms var(--ease-out);
+  }
+  .quota-foot {
+    display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-top: 9px; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
+  }
+  .quota-rate { margin-top: 14px; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .quota-rate b { color: var(--text-primary); font-weight: 600; }
+  .quota-rate .alert { color: var(--critical); font-weight: 600; }
+
+  .quota-update {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--gridline);
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .quota-update input {
+    font: inherit; font-size: 13px; width: 108px; padding: 8px 10px; min-height: 34px;
+    color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px;
+    transition: border-color 160ms var(--ease-out);
+  }
+  .quota-update input:hover { border-color: var(--baseline); }
+  .quota-update .hint { color: var(--text-muted); font-size: 12px; }
+
+  /* Source lue en direct : plus de saisie, juste d'ou vient le chiffre. */
+  .quota-source {
+    margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--gridline);
+    font-size: 12.5px; color: var(--text-muted); line-height: 1.65;
+  }
+  .quota-source b { color: var(--text-secondary); font-weight: 600; }
+
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 500; color: var(--text-primary);
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; min-height: 34px; cursor: pointer;
+    transition: transform 120ms var(--ease-out), background-color 160ms var(--ease-out);
+  }
+  .btn:active { transform: scale(0.97); }
+  @media (hover: hover) and (pointer: fine) { .btn:hover { background: var(--ghost); } }
+  .quota-empty {
+    margin-top: 40px; padding: 18px; background: var(--ghost);
+    border: 1px solid var(--border); border-radius: 12px;
+    font-size: 13px; color: var(--text-secondary); line-height: 1.7;
+  }
+  .quota-empty b { color: var(--text-primary); font-weight: 600; }
+  .quota-empty .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .quota-empty input { font: inherit; font-size: 13px; width: 88px; padding: 8px 10px; min-height: 34px;
+    color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; }
+
+  details.quota-settings { margin-top: 16px; }
+  details.quota-settings summary {
+    cursor: pointer; font-size: 12.5px; color: var(--text-muted); padding: 8px 0;
+    list-style: none; min-height: 24px;
+  }
+  details.quota-settings summary::-webkit-details-marker { display: none; }
+  details.quota-settings summary::before {
+    content: "▸"; display: inline-block; width: 16px;
+    transition: transform 180ms var(--ease-out);
+  }
+  details.quota-settings[open] summary::before { transform: rotate(90deg); }
+  .settings-row {
+    display: flex; gap: 20px; flex-wrap: wrap; padding: 6px 0 10px 16px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .settings-row label { display: flex; align-items: center; gap: 8px; }
+  .settings-row input {
+    font: inherit; font-size: 13px; padding: 7px 10px; min-height: 34px;
+    color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .settings-row input[type="number"] { width: 84px; }
+
+  /* --- Repartition par modele --- */
+  .section-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-muted); margin: 46px 0 16px;
+  }
+  .models { display: flex; flex-direction: column; }
+  .model {
+    display: grid; grid-template-columns: 15px minmax(0, auto) minmax(46px, 1fr) auto;
+    align-items: center; gap: 14px; padding: 13px 12px; margin: 0 -12px;
+    border-radius: 11px;
+    /* Le delai vit ici, pas dans .stagger : declare dans la regle qui porte la
+       classe, il disparaitrait au moment meme ou l'on retire la classe, et les
+       lignes partiraient toutes ensemble. Le survol, lui, reste sans delai. */
+    --d: 0ms;
+    transition:
+      opacity 260ms var(--ease-out) var(--d),
+      transform 260ms var(--ease-out) var(--d),
+      background-color 150ms var(--ease-out);
+  }
+  .model:nth-child(2) { --d: 45ms; }
+  .model:nth-child(3) { --d: 90ms; }
+  .model:nth-child(4) { --d: 135ms; }
+  .model:nth-child(5) { --d: 180ms; }
+  .model:nth-child(n+6) { --d: 215ms; }
+
+  /* La classe .stagger n'existe qu'au premier rendu d'une periode : les
+     mises a jour temps reel ne doivent pas faire rejouer l'entree. */
+  .models.stagger .model { opacity: 0; transform: translateY(6px); }
+  .model + .model { border-top: 1px solid var(--gridline); }
+  @media (hover: hover) and (pointer: fine) {
+    .model:hover { background: var(--ghost); }
+  }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+  .model-name { font-size: 13.5px; font-weight: 500; min-width: 0; }
+  .model-name .id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-name .n { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+  .bar { height: 10px; background: var(--gridline); border-radius: 3px; overflow: hidden; }
+  .bar > span {
+    display: block; height: 100%; width: 100%; background: var(--c);
+    border-radius: 0 4px 4px 0;
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 300ms var(--ease-out);
+  }
+  .model-stats { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .model-stats .tok { font-size: 13.5px; font-weight: 600; }
+  .model-stats .pct { font-size: 12px; color: var(--text-secondary); margin-left: 9px; }
+
+  /* --- Vue tableau : repli accessible, jamais la couleur seule --- */
+
+  .warn-line { margin-top: 14px; color: var(--serious); font-size: 12.5px; }
+
+  .state { color: var(--text-muted); font-size: 14px; padding: 56px 0; text-align: center; }
+
+  @media (max-width: 560px) {
+    .hero-row { gap: 18px 20px; }
+    .stat { flex: 1 1 45%; min-width: 0; }
+  }
+
+  /* --- Mouvement reduit : on garde les fondus, on retire les deplacements --- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+    .model { opacity: 1; animation: none !important; }
+    .models.stagger .model { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Aller au contenu</a>
+
+<div class="wrap">
+  <header class="topbar">
+    <i class="logo" aria-hidden="true"></i>
+    <h1>Ollama Buddy</h1>
+    <span class="plan" id="plan" hidden></span>
+    <span class="live" id="live" role="status" aria-live="polite" hidden>
+      <i aria-hidden="true"></i><span>Connexion…</span>
+    </span>
+    <button type="button" class="icon-btn" id="theme" aria-label="Changer de thème"
+            title="Thème : automatique">
+      <span aria-hidden="true" id="theme-icon">◐</span>
+    </button>
+  </header>
+
+  <main id="main">
+    <p class="sub" id="sub">Consommation Ollama Cloud</p>
+
+    <div class="controls">
+      <label class="client-picker">
+        <span class="visually-hidden">Filtrer par client</span>
+        <select id="client-filter" hidden></select>
+      </label>
+    </div>
+
+    <div id="app"><p class="state">Lecture…</p></div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--s9'];
+const RANGES = ['today', '7d', '30d', 'all'];
+const nf = new Intl.NumberFormat('fr-FR');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+const params = new URLSearchParams(location.search);
+const wanted = params.get('range');
+let range = RANGES.includes(wanted) ? wanted : 'today';
+let client = params.get('client') || '';
+let lastData = null;
+let tipShownOnce = false;
+let staggerNext = true;   // l'entree en cascade joue au prochain rendu
+
+/* --- Formatage compact francais (Md / M / k), pas le B/M/K anglais --- */
+function compact(n) {
+  if (n >= 1e9) return { v: (n / 1e9).toFixed(2).replace('.', ','), u: 'Md' };
+  if (n >= 1e6) return { v: (n / 1e6).toFixed(2).replace('.', ','), u: 'M'  };
+  if (n >= 1e3) return { v: (n / 1e3).toFixed(1).replace('.', ','), u: 'k'  };
+  return { v: String(n), u: '' };
+}
+const fmt = n => { const c = compact(n); return c.v + (c.u ? ' ' + c.u : ''); };
+
+/* L'API ollama.com compte des requêtes, les transcripts des tokens. Une seule
+   fonction décide du mot affiché : aucun libellé ne peut se tromper d'unité. */
+const unitOf = d => (d && d.unit === 'requetes' ? 'requêtes' : 'tokens');
+
+/* Seuils de gravité du quota : la barre change de couleur avant le plafond,
+   jamais l'inverse — un rouge atteint trop tôt ne veut plus rien dire. */
+function severity(ratio) {
+  if (ratio >= 0.9) return 'var(--critical)';
+  if (ratio >= 0.7) return 'var(--serious)';
+  return 'var(--accent)';
+}
+const exact = n => nf.format(n);
+const pct = x => (x * 100).toFixed(1).replace('.', ',');
+const usd = n => n.toFixed(2).replace('.', ',') + ' $';
+
+function ageText(days) {
+  if (days === null || days === undefined) return '—';
+  if (days < 1 / 24) return "à l'instant";
+  if (days < 1) return `il y a ${Math.round(days * 24)} h`;
+  if (days < 2) return 'hier';
+  return `il y a ${Math.floor(days)} jours`;
+}
+
+function whenText(days) {
+  if (days === null || days === undefined) return '';
+  if (days < 1) return "aujourd'hui";
+  if (days < 2) return 'demain';
+  return `dans ${Math.floor(days)} jours`;
+}
+
+
+/* =====================================================================
+   Quota mensuel. Lu sur ollama.com/api/usage — une route non documentee,
+   qui renvoie une *part* du plafond et non une somme : le montant affiche
+   ici est ce pourcentage applique au plafond du plan. Sans cle API, on
+   retombe sur des releves saisis a la main.
+   ===================================================================== */
+function renderQuota(q) {
+  if (!q || !q.monthly) {
+    return `
+      <section class="quota-empty">
+        <h2 class="visually-hidden">Quota mensuel</h2>
+        <b>Suis ton quota mensuel Ollama.</b><br>
+        Indique ton plafond mensuel, puis colle de temps en temps le montant
+        affiché sur <b>ollama.com/settings</b>. Dès le second relevé, l'app
+        mesure ton rythme de dépense et projette le dépassement.
+        <div class="row">
+          <label for="monthly">Plafond mensuel</label>
+          <input id="monthly" type="number" min="1" step="1" placeholder="60" inputmode="decimal">
+          <button class="btn" id="save-monthly" type="button">Enregistrer</button>
+        </div>
+      </section>`;
+  }
+
+  const live = q.source === 'api';
+  const has = q.current !== null && q.current !== undefined;
+  const ratio = live && q.ratio !== null && q.ratio !== undefined
+    ? q.ratio
+    : (has ? q.current / q.monthly : 0);
+  const fill = has ? severity(ratio) : 'var(--baseline)';
+  const resetText = q.days_left === null ? ''
+    : q.days_left < 1 ? "réinitialisation aujourd'hui"
+    : q.days_left < 2 ? 'réinitialisation demain'
+    : `réinitialisation dans ${Math.floor(q.days_left)} jours`;
+
+  let rateLine = '';
+  if (has && q.rate_per_day) {
+    const bits = [`À ce rythme : <b>+${usd(q.rate_per_day)} / jour</b>`];
+    if (q.exhausted_in_days !== null && q.exhausted_in_days !== undefined) {
+      const beforeReset = q.days_left !== null && q.exhausted_in_days < q.days_left;
+      const when = whenText(q.exhausted_in_days);
+      bits.push(beforeReset
+        ? `<span class="alert">plafond atteint ${when}, avant la réinitialisation</span>`
+        : `plafond atteint ${when}`);
+    }
+    rateLine = `<p class="quota-rate">${bits.join(' · ')}</p>`;
+  }
+
+  return `
+    <section class="quota" aria-labelledby="quota-h">
+      <h2 id="quota-h" class="visually-hidden">Quota mensuel</h2>
+      <div class="quota-head">
+        <span class="t">Quota mensuel</span>
+        <span class="pct">${has ? pct(ratio) + ' %' : '—'}</span>
+      </div>
+      <div class="meter" role="img" style="--fill:${fill}"
+           aria-label="${has
+             ? `${pct(ratio)} pour cent du quota mensuel consommé : ${usd(q.current)} sur ${usd(q.monthly)}`
+             : `plafond de ${usd(q.monthly)}, aucun relevé enregistré`}">
+        <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
+      </div>
+      <div class="quota-foot">
+        <span>${has ? `${usd(q.current)} sur ${usd(q.monthly)}` : `${usd(q.monthly)} de plafond`}</span>
+        <span>${has && q.projected_at_reset ? `projeté au reset : ${usd(q.projected_at_reset)}` : resetText}</span>
+      </div>
+      ${rateLine}
+      ${live
+        ? `<p class="quota-source">
+             ${q.cycle_start
+               ? `Cycle ouvert le <b>${new Date(q.cycle_start).toLocaleDateString('fr-FR')}</b>. `
+               : ''}<b>ollama.com</b> publie le pourcentage consommé ; le montant en
+             dollars est ce pourcentage appliqué au plafond du plan. Il tombe donc
+             sur la somme affichée sur le site.
+           </p>`
+        : `<div class="quota-update">
+             <label for="reading">Montant relevé sur ollama.com</label>
+             <input id="reading" type="number" min="0" step="0.01" inputmode="decimal"
+                    placeholder="50,74" aria-describedby="reading-hint">
+             <button class="btn" id="save-reading" type="button">Enregistrer</button>
+             <span class="hint" id="reading-hint">${
+               q.last_reading ? `dernier relevé ${ageText(q.last_reading.age_days)}` : 'aucun relevé'}</span>
+           </div>`}
+      <details class="quota-settings">
+        <summary>Réglages du quota</summary>
+        <div class="settings-row">
+          <label>Plafond mensuel
+            <input id="monthly" type="number" min="1" step="1" value="${q.monthly}" inputmode="decimal">
+          </label>
+          <label>Prochaine réinitialisation
+            <input id="reset-at" type="date"
+                   value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
+          </label>
+        </div>
+      </details>
+    </section>`;
+}
+
+/* =====================================================================
+   Rendu principal
+   ===================================================================== */
+function render(data) {
+  const app = document.getElementById('app');
+  const models = data.models;
+  const total = data.grand_total;
+  const isReq = data.unit === 'requetes';
+
+  app.classList.remove('switching');
+
+  if (!models.length) {
+    app.innerHTML = `<p class="state">Aucune consommation sur cette période.</p>`;
+    document.getElementById('sub').textContent = 'Consommation Ollama Cloud';
+    return;
+  }
+
+  /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
+  const top = models[0];
+  /* En mode API le classement est le cumul du mois : annoncer « sur 1 jour »
+     coifferait un total de plusieurs semaines. */
+  const scope = isReq ? 'sur le mois en cours'
+    : `sur ${data.days} jour${data.days > 1 ? 's' : ''}`;
+  let reading = `<b>${fmt(total)}</b> ${unitOf(data)} ${scope}`;
+  if (models.length > 1) reading += `, portés à ${pct(top.share)} % par <b>${top.model}</b>`;
+  else reading += `, tous sur <b>${top.model}</b>`;
+  reading += '.';
+  document.getElementById('sub').innerHTML = reading;
+
+  /* Delta vs periode precedente, avec fleche ET libelle (jamais la couleur seule). */
+  let deltaHtml = '';
+  let deltaLarge = '';
+  if (data.previous_total !== null && data.previous_total > 0) {
+    const ratio = (total - data.previous_total) / data.previous_total;
+    const dir = ratio > 0.005 ? 'up' : ratio < -0.005 ? 'down' : 'flat';
+    const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '=';
+    const word = dir === 'up' ? 'hausse' : dir === 'down' ? 'baisse' : 'stable';
+    const inner = `<span aria-hidden="true">${arrow}</span> ${pct(Math.abs(ratio))} %
+      <span class="visually-hidden">en ${word}</span>`;
+    deltaHtml = `<span class="delta ${dir}">${inner}</span>`;
+    deltaLarge = `<span class="delta ${dir} lg">${inner}</span>`;
+  }
+
+  /* En mode API la fenêtre utile est le cycle d'abonnement, pas le filtre du
+     graphique : « moyenne / jour » doit se lire sur le mois, sinon elle
+     diviserait un cumul mensuel par un jour. */
+  const tileDays = Math.max(1, isReq ? (data.cycle_days || data.days) : data.days);
+  // Arrondi : sous 1000, compact() afficherait la valeur brute, décimales
+  // comprises — « 592,2083333333334 requêtes » n'a aucun sens.
+  const avg = Math.round(total / tileDays);
+
+  /* --- Quota mensuel : la seule mesure qui couvre tous les clients --- */
+  const quota = renderQuota(data.quota);
+
+  /* --- Repartition par client : qui consomme, et sur quoi filtrer --- */
+  const clients = data.clients || [];
+  const clientTotal = clients.reduce((sum, c) => sum + c.total, 0) || 1;
+  const clientsSection = clients.length > 1 ? `
+    <section aria-labelledby="byclient-h">
+      <h2 id="byclient-h" class="section-title">Par client</h2>
+      <div class="clients">
+        ${clients.map(c => {
+          const share = c.total / clientTotal;
+          return `
+            <div class="client-row${client && c.client !== client ? ' off' : ''}">
+              <span class="name">${c.client}</span>
+              <div class="bar" role="img" aria-label="${c.client} : ${pct(share)} % du total">
+                <span style="transform:scaleX(${share.toFixed(4)})"></span>
+              </div>
+              <span class="val">${fmt(c.total)}<span class="req">${nf.format(c.messages)} req.</span></span>
+              <span class="pct">${pct(share)} %</span>
+            </div>`;
+        }).join('')}
+      </div>
+    </section>` : '';
+  /* Repartition par modele */
+  const rows = models.map(m => {
+    const v = SLOTS[m.slot] || SLOTS[8];
+    return `
+      <div class="model" data-model="${m.model}">
+        <i class="swatch" style="background:var(${v})"></i>
+        <div class="model-name">
+          <span class="id">${m.model}</span>
+          <span class="n">${nf.format(m.messages)} ${isReq
+            ? (m.messages > 1 ? 'requêtes' : 'requête')
+            : (m.messages > 1 ? 'messages' : 'message')}</span>
+        </div>
+        <div class="bar" role="img" aria-label="${m.model} : ${pct(m.share)} % du total">
+          <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
+        </div>
+        <div class="model-stats">
+          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)} %</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  app.innerHTML = `
+    <h2 class="visually-hidden">Vue d'ensemble</h2>
+
+    <div class="hero-row">
+      <div class="hero-figure">
+        <div class="hero-label">${isReq ? 'Requêtes ce mois' : 'Tokens consommés'}</div>
+        <div class="hero-value" id="hero">${compact(total).v}${compact(total).u ? `<span class="hero-unit">${compact(total).u}</span>` : ''}</div>
+      </div>
+      <div class="stat">
+        <span class="k">Modèles actifs</span>
+        <span class="v">${data.models_total ?? models.length}</span>
+      </div>
+      <div class="stat">
+        <span class="k">${tileDays > 1 ? 'Moyenne / jour' : 'Écart vs hier'}</span>
+        ${tileDays > 1
+          ? `<span class="v">${fmt(avg)}</span>${deltaHtml}`
+          : (deltaLarge || '<span class="v">—</span>')}
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="stack">
+        ${quota}
+        ${clientsSection}
+      </div>
+      <section aria-labelledby="split-h">
+        <h2 id="split-h" class="section-title">Répartition par modèle</h2>
+        <div class="models${staggerNext ? ' stagger' : ''}">${rows}</div>
+      </section>
+    </div>
+
+    ${data.error ? `<div class="warn-line" role="alert">Erreur d'indexation : ${data.error}</div>` : ''}
+  `;
+
+  document.getElementById('hero').setAttribute('aria-label',
+    `${exact(total)} ${unitOf(data)} ${isReq ? 'sur le mois en cours' : 'sur la période affichée'}`);
+
+  /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
+     au frame suivant pour que la transition se declenche, et les mises a jour
+     temps reel ne la rejouent pas. */
+  if (staggerNext) {
+    const list = app.querySelector('.models');
+    if (list) {
+      requestAnimationFrame(() => requestAnimationFrame(() => list.classList.remove('stagger')));
+    }
+    staggerNext = false;
+  }
+}
+
+/* =====================================================================
+   Theme : auto (suit macOS), clair ou sombre.
+   ===================================================================== */
+const THEMES = ['auto', 'light', 'dark'];
+const THEME_ICONS = { auto: '◐', light: '☀', dark: '☾' };
+let theme = 'auto';
+
+function applyTheme(value) {
+  theme = THEMES.includes(value) ? value : 'auto';
+  const root = document.documentElement;
+  if (theme === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
+
+  const icon = document.getElementById('theme-icon');
+  const button = document.getElementById('theme');
+  if (icon) icon.textContent = THEME_ICONS[theme];
+  if (button) button.title = 'Thème : ' +
+    (theme === 'auto' ? 'automatique' : theme === 'light' ? 'clair' : 'sombre');
+}
+
+document.getElementById('theme').addEventListener('click', async () => {
+  const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  applyTheme(next);
+  try {
+    await fetch('/api/theme', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: next }),
+    });
+  } catch { /* le reglage est deja applique localement */ }
+});
+
+/* =====================================================================
+   Chargement : flux pousse par le serveur (SSE), avec repli sur un fetch
+   si les flux ne sont pas disponibles.
+   ===================================================================== */
+let stream = null;
+let lastSignature = '';
+
+function applyData(data) {
+  /* Rien de neuf ? On ne redessine pas : sinon les animations d'entree
+     rejoueraient a chaque battement du flux. */
+  const signature = [
+    data.range, data.client, data.grand_total, data.messages, data.previous_total, data.error,
+    data.series?.buckets?.length, data.models?.length, data.clients?.length,
+    data.clients?.map(c => `${c.client}:${c.total}`).join(','),
+    data.quota?.current, data.quota?.monthly, data.quota?.rate_per_day,
+    data.quota?.resets_at, data.quota?.last_reading?.ts, data.theme,
+  ].join('|');
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+
+  lastData = data;
+  fillClientFilter(data.clients || []);
+  if (data.theme) applyTheme(data.theme);
+
+  const planEl = document.getElementById('plan');
+  if (data.account?.plan) {
+    planEl.textContent = 'Ollama ' + data.account.plan;
+    planEl.hidden = false;
+  }
+
+  if (data.error && !data.models) {
+    document.getElementById('app').innerHTML =
+      `<p class="state" role="alert">Erreur : ${data.error}</p>`;
+    return;
+  }
+  render(data);
+}
+
+function setLive(state) {
+  const el = document.getElementById('live');
+  el.hidden = false;
+  el.classList.toggle('stale', state !== 'on');
+  el.lastElementChild.textContent =
+    state === 'on' ? 'En direct' : state === 'off' ? 'Reconnexion…' : 'Connexion…';
+}
+
+function beat() {
+  const el = document.getElementById('live');
+  el.classList.remove('pulse');
+  void el.offsetWidth;          // force le redemarrage de l'animation
+  el.classList.add('pulse');
+}
+
+const query = () => `range=${range}${client ? `&client=${encodeURIComponent(client)}` : ''}`;
+
+function connect() {
+  if (stream) { stream.close(); stream = null; }
+
+  if (!('EventSource' in window)) {   // repli : interrogation periodique
+    setLive('off');
+    load();
+    setInterval(load, 5000);
+    return;
+  }
+
+  setLive('connecting');
+  stream = new EventSource(`/api/stream?${query()}`);
+  stream.onopen = () => setLive('on');
+  stream.onmessage = event => {
+    let data;
+    try { data = JSON.parse(event.data); } catch { return; }
+    setLive('on');
+    applyData(data);
+    beat();
+  };
+  stream.onerror = () => setLive('off');   // EventSource se reconnecte seul
+}
+
+/* Repli sans flux : un simple aller-retour HTTP. */
+async function load() {
+  try {
+    const res = await fetch(`/api/usage?${query()}`);
+    applyData(await res.json());
+  } catch (err) {
+    document.getElementById('app').innerHTML =
+      `<p class="state" role="alert">Impossible de lire l'usage : ${err.message}</p>`;
+  }
+}
+
+/* --- Quota : les controles sont recrees a chaque rendu, on delegue --- */
+async function postQuota(payload, button) {
+  if (button) button.disabled = true;
+  try {
+    const res = await fetch('/api/quota', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.quota && lastData) {
+      lastData = { ...lastData, quota: data.quota };
+      lastSignature = '';
+      if (lastData.models) render(lastData);
+    }
+  } catch { /* le flux resynchronisera */ }
+  finally { if (button) button.disabled = false; }
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  if (btn.id === 'save-reading') {
+    const raw = document.getElementById('reading').value.replace(',', '.');
+    const value = parseFloat(raw);
+    if (!Number.isFinite(value) || value < 0) {
+      document.getElementById('reading-hint').textContent = 'montant invalide';
+      return;
+    }
+    postQuota({ reading: value }, btn);
+  }
+
+  if (btn.id === 'save-monthly') {
+    const value = parseFloat(document.getElementById('monthly').value);
+    if (!Number.isFinite(value) || value <= 0) return;
+    postQuota({ monthly_quota: value }, btn);
+  }
+});
+
+/* Entree dans un champ de quota : on valide sans quitter le champ. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const id = e.target.id;
+  if (id === 'reading') document.getElementById('save-reading')?.click();
+  if (id === 'monthly') document.getElementById('save-monthly')?.click();
+});
+
+document.addEventListener('change', e => {
+  if (e.target.id !== 'reset-at' || !e.target.value) return;
+  const when = new Date(e.target.value + 'T00:00:00');
+  if (Number.isNaN(when.getTime())) return;
+  postQuota({ quota_reset_at: when.getTime() });
+});
+
+document.getElementById('client-filter').addEventListener('change', e => {
+  client = e.target.value;
+  const next = new URLSearchParams({ range });
+  if (client) next.set('client', client);
+  history.replaceState(null, '', `?${next}`);
+  document.getElementById('app').innerHTML = `<p class="state">Chargement…</p>`;
+  lastSignature = '';
+  connect();
+});
+
+/* Le selecteur n'apparait qu'a partir de deux clients distincts. */
+function fillClientFilter(list) {
+  const select = document.getElementById('client-filter');
+  const names = list.map(c => c.client);
+  if (names.length < 2) { select.hidden = true; return; }
+  const options = ['<option value="">Tous les clients</option>']
+    .concat(names.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`));
+  if (select.dataset.signature !== names.join('|')) {
+    select.innerHTML = options.join('');
+    select.dataset.signature = names.join('|');
+  }
+  select.hidden = false;
+  select.value = names.includes(client) ? client : '';
+}
+
+/* Revenir sur l'onglet ne doit pas laisser une vue figee. */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && (!stream || stream.readyState === EventSource.CLOSED)) {
+    lastSignature = '';
+    connect();
+  }
+});
+
+if (reduceMotion.matches) tipShownOnce = true;
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Secrets et etat local — jamais versionnes.
+# ---------------------------------------------------------------------------
+
+# Contient la cle API ollama.com. Voir config.example.json pour la forme.
+config.json
+
+# Index SQLite local. Supprimable : il se reconstruit au demarrage.
+usage.db
+usage.db-shm
+usage.db-wal
+
+# ---------------------------------------------------------------------------
+# Artefacts de construction
+# ---------------------------------------------------------------------------
+
+Ollama Buddy.app/
+*.icns
+
+# ---------------------------------------------------------------------------
+# Divers
+# ---------------------------------------------------------------------------
+
+__pycache__/
+*.pyc
+.DS_Store
+
+# Reglages locaux de Claude Code (permissions, chemins de la machine).
+.claude/settings.local.json
