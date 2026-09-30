@@ -44,7 +44,6 @@ arrête son serveur quand tu quittes.
 
 ```bash
 python3 ollama_buddy.py            # serveur + tableau de bord
-python3 ollama_buddy.py --once     # indexe et affiche un résumé, sans serveur
 ```
 
 > [!NOTE]

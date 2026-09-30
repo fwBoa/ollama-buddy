@@ -479,7 +479,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     @objc private func reload() { webView.reload() }
 
     @objc private func reloadFresh() {
-        // Force une relecture des transcripts avant de recharger la page.
+        // Redemande l'usage a ollama.com, puis recharge la page. Sans ce
+        // passage, le cache d'une minute servirait la meme valeur.
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/api/refresh")!)
         request.httpMethod = "POST"
         URLSession.shared.dataTask(with: request) { _, _, _ in
