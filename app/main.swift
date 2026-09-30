@@ -252,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     /// Le pourcentage. La couleur est reservee aux alertes : bleu partout
     /// serait du bruit permanent dans la barre de menus.
-    private func updateStatusTitle(ratio: Double?) {
+    private func updateStatusTitle(ratio: Double?, note: String = "") {
         guard let button = statusItem.button else { return }
         button.image = menuBarIcon() ?? dot(.secondaryLabelColor)
         button.imagePosition = .imageLeading
@@ -271,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             attributes: [.foregroundColor: color, .font: NSFont.systemFont(ofSize: 12)]
         )
         button.toolTip = ratio == nil
-            ? "Ollama Buddy — quota non configuré"
+            ? "Ollama Buddy — \(note.isEmpty ? "quota non configuré" : note)"
             : "Ollama Buddy — \(Int((ratio! * 100).rounded())) % du quota mensuel"
     }
 
@@ -346,10 +346,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             guard let payload = payload,
                   let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
                   let quota = json["quota"] as? [String: Any] else { return }
-            let monthly = quota["monthly"] as? Double ?? 0
-            let current = quota["current"] as? Double
-            let ratio = (monthly > 0 && current != nil) ? current! / monthly : nil
-            DispatchQueue.main.async { self.updateStatusTitle(ratio: ratio) }
+
+            // Le pourcentage n'est publie que par ollama.com. Sans cle — ou avec
+            // une cle refusee — `source` vaut "indisponible" et il n'y a rien a
+            // afficher. On lit la part telle que l'API la donne, jamais un
+            // rapport recalcule : la barre de menus ne peut plus diverger du
+            // tableau de bord.
+            let source = quota["source"] as? String
+            let ratio = source == "api" ? quota["ratio"] as? Double : nil
+
+            let note: String
+            if ratio != nil {
+                note = ""
+            } else if (quota["key_set"] as? Bool) == true {
+                note = quota["key_error"] as? String ?? "aucun chiffre publié"
+            } else {
+                note = "aucune clé API — ouvre le tableau de bord pour la saisir"
+            }
+            DispatchQueue.main.async { self.updateStatusTitle(ratio: ratio, note: note) }
         }.resume()
     }
 

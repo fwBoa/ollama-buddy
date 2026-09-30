@@ -66,9 +66,12 @@ Dans le tableau de bord, le bouton en haut à droite fait défiler les trois th�
 
 ### La barre de menus
 
-Un point de couleur — bleu, puis orange à 70 %, rouge à 90 % — suivi du pourcentage
-consommé. Un clic ouvre un résumé : quota, consommation du mois, trois principaux
-modèles, et un bouton vers le tableau de bord complet.
+Un point de couleur, puis le pourcentage consommé **quand une clé API est
+enregistrée** — bleu, orange à 70 %, rouge à 90 %. Sans clé, l'icône n'affiche
+qu'un lama suivi d'un tiret : aucun chiffre n'est publié.
+
+Un clic ouvre un résumé : quota, date de réinitialisation, consommation du mois,
+trois principaux modèles, et un bouton vers le tableau de bord complet.
 
 L'aperçu est lui aussi en direct : il se met à jour tant qu'il reste ouvert.
 
@@ -89,7 +92,7 @@ Ce que la clé débloque :
 |---|---|
 | Le pourcentage du mois | `limits.monthly.usage`, exact et rafraîchi tout seul |
 | Les requêtes par modèle | `limits.monthly.models`, **tous clients confondus** |
-| Le rythme en $/jour | mesuré sur des relevés pris toutes les cinq minutes |
+| Le rythme en $/jour | mesuré sur des échantillons pris toutes les cinq minutes |
 
 Ce qu'elle ne donne pas, et comment l'app s'en sort :
 
@@ -99,8 +102,11 @@ Ce qu'elle ne donne pas, et comment l'app s'en sort :
 | La date de réinitialisation | Déduite du cycle en cours : `activity.period.starting_at` donne le début de l'abonnement, le mois se rejoue au même quantième. Cycle ouvert le 07/09 → remise à zéro le 07/10. |
 
 > [!WARNING]
-> `ollama.com/api/usage` n'est **pas documenté**. L'app le dit franchement : si la route
-> disparaît ou si la clé est refusée, elle repasse d'elle-même sur les relevés manuels.
+> `ollama.com/api/usage` n'est **pas documenté**. Si la route disparaît ou si la clé
+> est refusée, l'app n'affiche **plus aucun chiffre de quota** : elle invite à en
+> saisir une. C'est délibéré — un montant saisi à la main vieillit sans prévenir, et
+> finit par être lu comme une mesure. Seule la date de réinitialisation survit, parce
+> qu'elle vient des réglages et non d'une observation.
 
 La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigateur — le
 champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
@@ -108,21 +114,19 @@ champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert q
 
 ### Sans clé
 
-L'app retombe sur deux sources locales :
+Le quota **n'est pas affiché du tout** — ni pourcentage, ni jauge, ni montant. La
+section se réduit à la carte de connexion et à la date de réinitialisation, qui reste
+réglable.
 
-- **Le quota** se suit par relevés : tu colles de temps en temps le montant affiché sur
-  `ollama.com/settings`. Dès le deuxième relevé, le rythme $/jour est *mesuré*, et
-  l'app projette le dépassement.
-- **Les modèles** viennent alors des transcripts Claude Code, en **tokens** — un seul
-  client, la seule chose que l'app puisse voir localement.
-
-C'est moins complet, mais ça ne demande aucune clé.
+Le reste du tableau de bord continue de fonctionner : les modèles viennent alors des
+transcripts Claude Code, en **tokens**. Un seul client — la seule chose que l'app
+puisse voir localement — mais une mesure réelle, mise à jour en direct.
 
 ## D'où viennent les chiffres
 
 | Source | Ce qu'elle apporte | Disponible |
 |---|---|---|
-| `ollama.com/api/usage` | Quota, requêtes par modèle, tous clients | Avec une clé |
+| `ollama.com/api/usage` | Quota, requêtes par modèle, tous clients | Avec une clé — sinon le quota n'est pas affiché |
 | `~/.claude/projects/**/*.jsonl` | Historique en tokens, remonte à avant l'app | Toujours |
 
 Deux précautions sur les transcripts :

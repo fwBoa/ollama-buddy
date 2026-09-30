@@ -141,29 +141,38 @@ function render(d) {
 
   if (d.theme) applyTheme(d.theme);
 
+  /* Le quota ne vient que d'ollama.com. Sans cle, on n'affiche aucun chiffre
+     plutot qu'un montant saisi a la main — il pouvait dater de semaines. La
+     date de reinitialisation, elle, reste : elle vient des reglages. */
+  const resetLine = q.days_left === null || q.days_left === undefined ? ''
+    : q.days_left < 1 ? "reset aujourd'hui"
+    : q.days_left < 2 ? 'reset demain'
+    : `reset dans ${Math.floor(q.days_left)} j`;
+
   let quotaBlock = '';
-  if (q.monthly && q.current !== null && q.current !== undefined) {
-    const ratio = q.current / q.monthly;
+  if (q.source === 'api' && typeof q.ratio === 'number') {
+    const ratio = q.ratio;
+    const has = q.current !== null && q.current !== undefined;
     quotaBlock = `
       <div class="row">
         <span class="label" style="margin:0">Quota mensuel</span>
         <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)} %</span>
       </div>
       <div class="meter" style="--fill:${severity(ratio)}" role="img"
-           aria-label="${pct(ratio)} pour cent du quota mensuel : ${usd(q.current)} sur ${usd(q.monthly)}">
+           aria-label="${pct(ratio)} pour cent du quota mensuel${
+             has ? ` : ${usd(q.current)} sur ${usd(q.monthly)}` : ''}">
         <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
       </div>
       <div class="row">
-        <span class="sub">${usd(q.current)} sur ${usd(q.monthly)}</span>
-        <span class="sub">${q.days_left === null ? '' :
-          q.days_left < 1 ? "reset aujourd'hui" :
-          q.days_left < 2 ? 'reset demain' : `reset dans ${Math.floor(q.days_left)} j`}</span>
+        <span class="sub">${has ? `${usd(q.current)} sur ${usd(q.monthly)}` : ''}</span>
+        <span class="sub">${resetLine}</span>
       </div>`;
-  } else if (q.monthly) {
-    quotaBlock = `<p class="label">Quota mensuel</p>
-      <p class="sub">Plafond ${usd(q.monthly)} — aucun relevé. Ouvre le tableau de bord pour saisir le montant affiché sur ollama.com.</p>`;
   } else {
-    quotaBlock = `<p class="sub">Aucun quota configuré. Ouvre le tableau de bord pour le définir.</p>`;
+    quotaBlock = `<p class="label">Quota mensuel</p>
+      <p class="sub">${q.key_set
+        ? 'Lecture impossible — vérifie ta clé API dans le tableau de bord.'
+        : 'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.'}</p>
+      ${resetLine ? `<p class="sub" style="margin-top:6px">${resetLine}</p>` : ''}`;
   }
 
   const models = (d.models || []).slice(0, 3).map(m =>
@@ -236,7 +245,9 @@ function connect() {
   stream.onerror = () => setLive(false);
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
-    const sig = `${d.grand_total}|${d.messages}|${d.models?.length}|${d.quota?.current}|${d.quota?.monthly}`;
+    const sig = `${d.grand_total}|${d.messages}|${d.models?.length}|${d.quota?.current}|${d.quota?.monthly}`
+      // source / key_set : sans eux, coller une cle refusee ne redessinerait rien.
+      + `|${d.quota?.source}|${d.quota?.key_set}`;
     if (sig === lastSig) return;
     lastSig = sig;
     setLive(true);

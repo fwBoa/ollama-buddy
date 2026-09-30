@@ -68,9 +68,8 @@ DEFAULT_CONFIG = {
     "daily_token_budget": 0,
     "monthly_quota": 0,        # plafond mensuel en dollars ($60 chez Ollama Pro)
     "quota_reset_at": 0,       # prochaine reinitialisation, en ms epoch
-    # Cle API ollama.com (https://ollama.com/settings/keys). Quand elle est
-    # renseignee, l'usage est lu directement a la source et les releves
-    # manuels ne servent plus a rien.
+    # Cle API ollama.com (https://ollama.com/settings/keys). Sans elle, aucun
+    # chiffre de quota n'est publie : ollama.com est la seule source.
     "ollama_api_key": "",
     "port": 11499,
     # Port du proxy. Mets 0 pour le desactiver.
@@ -208,13 +207,6 @@ CREATE TABLE IF NOT EXISTS model_color (
     slot  INTEGER NOT NULL
 );
 
--- Releves du compteur "$ used" d'ollama.com : c'est la seule mesure qui
--- couvre TOUS les clients, y compris ceux dont on ne voit pas les tokens.
-CREATE TABLE IF NOT EXISTS quota_readings (
-    ts     INTEGER PRIMARY KEY,
-    amount REAL NOT NULL
-);
-
 -- Echantillons de ollama.com/api/usage. Les compteurs de l'API sont des
 -- cumuls du mois en cours : c'est leur difference entre deux echantillons qui
 -- donne l'activite d'un intervalle. `model` vide = ligne globale.
@@ -247,6 +239,13 @@ def connect() -> sqlite3.Connection:
             conn.execute("UPDATE events SET client = ? WHERE client IS NULL",
                          (TRANSCRIPT_CLIENT,))
             conn.commit()
+
+    # Le quota ne se saisit plus a la main : un montant colle des semaines plus
+    # tot etait affiche comme le quota du jour. Ses releves n'ont plus de
+    # lecteur, la table part avec eux.
+    if "quota_readings" in tables:
+        conn.execute("DROP TABLE quota_readings")
+        conn.commit()
 
     conn.executescript(SCHEMA)
     return conn
@@ -627,103 +626,73 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) 
     L'API ne donne ni le montant en dollars ni la date de reinitialisation :
     `limits.monthly.usage` est une *part* du plafond, et la date se deduit du
     cycle en cours. Le reste (rythme, projection) se mesure sur les
-    echantillons. Sans cle, on retombe sur les releves saisis a la main.
+    echantillons.
+
+    Sans cle, l'etat est neutre : aucun chiffre de quota n'est publie. Mieux
+    vaut ne rien dire qu'afficher comme mesure un montant colle des semaines
+    plus tot.
     """
     monthly = float(cfg.get("monthly_quota") or 0)
     now_ms = int(time.time() * 1000)
     ratio = cloud_month_ratio(cloud)
 
-    if ratio is not None:
-        resets_at = deduce_reset(cloud, cfg)
-        days_left = max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None
-        share_per_day, _ = cloud_rate(conn, resets_at)
+    if ratio is None:
+        return quota_unavailable(cfg, cloud)
 
-        rate = share_per_day * monthly if share_per_day and monthly else None
-        current = ratio * monthly if monthly else None
-        period = ((cloud or {}).get("activity") or {}).get("period") or {}
-
-        return {
-            "source": "api",
-            "error": None,
-            "key_set": True,
-            "key_error": None,
-            "monthly": monthly,
-            "ratio": ratio,
-            "current": current,
-            "resets_at": resets_at,
-            "days_left": days_left,
-            "cycle_start": period.get("starting_at"),
-            "rate_per_day": rate,
-            "projected_at_reset": (current + rate * days_left
-                                   if current is not None and rate and days_left is not None
-                                   else None),
-            "exhausted_in_days": (max(0.0, (1.0 - ratio) / share_per_day)
-                                  if share_per_day else None),
-            "readings": [],
-            "last_reading": None,
-        }
-
-    return _build_quota_manual(conn, cfg, cloud)
-
-
-def _build_quota_manual(conn: sqlite3.Connection, cfg: dict,
-                        cloud: dict | None = None) -> dict:
-    """Repli : releves saisis a la main, quand aucune cle API n'est fournie."""
-    monthly = float(cfg.get("monthly_quota") or 0)
-    resets_at = int(cfg.get("quota_reset_at") or 0)
-    now_ms = int(time.time() * 1000)
-
-    rows = conn.execute(
-        "SELECT ts, amount FROM quota_readings WHERE ts >= ? ORDER BY ts",
-        (now_ms - 35 * DAY_MS,),   # un cycle mensuel suffit
-    ).fetchall()
-
-    # Un montant qui redescend signale une remise a zero : on ne garde que
-    # les releves posterieurs, sinon le rythme serait negatif.
-    segment: list[tuple[int, float]] = []
-    for ts, amount in rows:
-        if segment and amount < segment[-1][1]:
-            segment = []
-        segment.append((ts, amount))
-
-    current = segment[-1][1] if segment else None
-    last_age = ((now_ms - segment[-1][0]) / DAY_MS) if segment else None
-
-    rate = None
-    if len(segment) >= 2:
-        span = (segment[-1][0] - segment[0][0]) / DAY_MS
-        if span > 0.02:                     # deux releves trop rapproches : bruit
-            rate = (segment[-1][1] - segment[0][1]) / span
-            if rate <= 0:
-                rate = None
-
-    # On vieillit le dernier releve pour afficher un montant d'aujourd'hui.
-    if current is not None and rate and last_age:
-        current = current + rate * last_age
-
+    resets_at = deduce_reset(cloud, cfg)
     days_left = max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None
+    share_per_day, _ = cloud_rate(conn, resets_at)
+
+    rate = share_per_day * monthly if share_per_day and monthly else None
+    current = ratio * monthly if monthly else None
+    period = ((cloud or {}).get("activity") or {}).get("period") or {}
 
     return {
-        "source": "manuelle",
+        "source": "api",
         "error": None,
-        # L'interface doit distinguer « pas de cle » de « cle refusee » : dans
-        # les deux cas le calcul est manuel, mais le message n'est pas le meme.
-        "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
-        "key_error": (cloud or {}).get("error"),
+        "key_set": True,
+        "key_error": None,
         "monthly": monthly,
+        "ratio": ratio,
+        "current": current,
         "resets_at": resets_at,
         "days_left": days_left,
-        "current": current,
-        "cycle_start": None,
-        "readings": [{"ts": ts, "amount": a} for ts, a in segment],
-        "last_reading": ({"ts": segment[-1][0], "amount": segment[-1][1],
-                          "age_days": last_age} if segment else None),
+        "cycle_start": period.get("starting_at"),
         "rate_per_day": rate,
         "projected_at_reset": (current + rate * days_left
-                               if current is not None and rate and days_left is not None else None),
-        "exhausted_in_days": (max(0.0, (monthly - current) / rate)
-                              if current is not None and rate and monthly and rate > 0 else None),
-        "ratio": (current / monthly) if current is not None and monthly else None,
+                               if current is not None and rate and days_left is not None
+                               else None),
+        "exhausted_in_days": (max(0.0, (1.0 - ratio) / share_per_day)
+                              if share_per_day else None),
+    }
+
+
+def quota_unavailable(cfg: dict, cloud: dict | None = None) -> dict:
+    """Etat neutre : aucune part du plafond n'a pu etre lue.
+
+    Meme jeu de cles que la branche API, mesures a None. Elles sont nommees
+    explicitement : mini.html teste `days_left === null`, une cle absente
+    donnerait « reset dans NaN j ».
+
+    La date de reinitialisation, elle, reste renseignee. Elle vient des
+    reglages, pas d'une mesure : c'est un fait connu, qui ne se perime pas.
+    """
+    resets_at = int(cfg.get("quota_reset_at") or 0)
+    now_ms = int(time.time() * 1000)
+    return {
+        "source": "indisponible",
+        "error": None,
+        "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
+        "key_error": (cloud or {}).get("error"),
+        "monthly": float(cfg.get("monthly_quota") or 0),
+        "ratio": None,
+        "current": None,
+        "resets_at": resets_at,
+        "days_left": (max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None),
+        "cycle_start": None,
+        "rate_per_day": None,
+        "projected_at_reset": None,
+        "exhausted_in_days": None,
     }
 
 
@@ -1176,7 +1145,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True, "theme": theme})
 
     def update_quota(self) -> None:
-        """Reglages du plafond mensuel + enregistrement d'un releve en dollars."""
+        """Plafond mensuel, date de reinitialisation, et cle API ollama.com."""
         try:
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -1204,21 +1173,6 @@ class Handler(BaseHTTPRequestHandler):
             with self.state.lock:
                 self.state.cloud_data, self.state.cloud_ts = None, 0.0
         save_config(cfg)
-
-        if body.get("reading") is not None:
-            try:
-                amount = max(0.0, float(body["reading"]))
-            except (TypeError, ValueError):
-                self._json({"error": "montant invalide"}, 400)
-                return
-            now = int(time.time() * 1000)
-            with self.state.lock:
-                # On ecrase un releve de la meme minute : ajuster sa saisie ne
-                # doit pas fabriquer une fausse serie.
-                self.state.conn.execute("DELETE FROM quota_readings WHERE ts >= ?",
-                                        (now - 60_000,))
-                self.state.conn.execute("INSERT INTO quota_readings VALUES (?,?)", (now, amount))
-                self.state.conn.commit()
 
         with self.state.lock:
             quota = build_quota(self.state.conn, cfg, self.state.cloud())
