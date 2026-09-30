@@ -208,8 +208,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         panel.appearance = NSApp.effectiveAppearance
         // Sans canJoinAllApplications + stationary, le panneau ne suit pas les
         // autres Spaces et disparait derriere une app en plein ecran.
-        panel.collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications,
-                                    .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        // canJoinAllApplications n'existe qu'a partir de macOS 13 : sur Monterey
+        // on garde le reste, quitte a ce que le panneau cede devant une app en
+        // plein ecran. L'Info.plist annonce bien macOS 12 comme minimum.
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces,
+                                                     .fullScreenAuxiliary,
+                                                     .stationary, .ignoresCycle]
+        if #available(macOS 13.0, *) {
+            behavior.insert(.canJoinAllApplications)
+        }
+        panel.collectionBehavior = behavior
 
         // Fermeture quand on clique ailleurs. On s'appuie sur la perte de focus
         // plutot que sur un moniteur global d'evenements : celui-ci exige
