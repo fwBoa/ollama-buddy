@@ -719,16 +719,15 @@ function renderQuota(q) {
                  value="${monthlySet > 0 ? monthlySet : ''}"
                  placeholder="${monthly > 0 ? monthly : ''}">
         </label>
-      </div>
-      <p class="hint" id="cap-hint">
-        ${T('Leave empty to follow your Ollama plan.')}
-      </p>
         <label>${T('Next reset')}
           <input id="reset-at" type="date"
                  value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
         </label>
         <button class="btn" id="save-monthly" type="button">${T('Save')}</button>
       </div>
+      <p class="hint" id="cap-hint">
+        ${T('Leave empty to follow your Ollama plan.')}
+      </p>
       ${live ? `<div class="settings-row">
         <label>${T('ollama.com API key')}
           <input id="api-key" type="password" autocomplete="off" spellcheck="false"
