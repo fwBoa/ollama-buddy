@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ollama Buddy — consommation des modèles Ollama Cloud</title>
+<link rel="icon" href="ollama.png" type="image/png">
 <script>
   /* Pose avant le premier rendu, sinon le contenu saute quand la classe
      arrive. La fenetre native reserve la place des feux tricolores. */
@@ -225,12 +226,14 @@
   .stat .k { font-size: 12px; color: var(--text-muted); }
   .stat .v { font-size: clamp(1.05rem, 1.5vw, 1.25rem); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  /* --- Bloc du bas : le quota et la repartition se partagent la largeur.
-     Le graphe, lui, reste pleine largeur - c'est lui qui tire parti des
-     pixels supplementaires. --- */
+  /* --- Bloc du bas : le quota et la repartition se partagent la largeur. --- */
   .split { display: grid; gap: clamp(28px, 3vw, 48px); align-items: start; }
   @media (min-width: 940px) {
     .split { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.45fr); }
+    /* La liste des modeles est bien plus longue que la colonne du quota : sans
+       cela, celle-ci s'arrete a mi-hauteur et laisse un grand vide. Collante,
+       elle garde le quota en vue pendant qu'on fait defiler les modeles. */
+    .split .stack { position: sticky; top: clamp(16px, 2.5vw, 32px); }
   }
   .split .quota { margin-top: 0; }
   .split .section-title { margin-top: 0; }
@@ -469,9 +472,10 @@ function compact(n) {
 }
 const fmt = n => { const c = compact(n); return c.v + (c.u ? ' ' + c.u : ''); };
 
-/* L'API ollama.com compte des requêtes, les transcripts des tokens. Une seule
-   fonction décide du mot affiché : aucun libellé ne peut se tromper d'unité. */
-const unitOf = d => (d && d.unit === 'requetes' ? 'requêtes' : 'tokens');
+/* Une seule unité : l'API ollama.com publie des nombres d'appels, jamais de
+   tokens. Le serveur le confirme en envoyant `unit: "requetes"` — le libellé
+   est donc constant, et aucun texte ne peut se tromper d'unité. */
+const UNIT = 'requêtes';
 
 /* Seuils de gravité du quota : la barre change de couleur avant le plafond,
    jamais l'inverse — un rouge atteint trop tôt ne veut plus rien dire. */
@@ -534,7 +538,8 @@ function renderQuota(q) {
      inattendue n'appellent pas la meme action de la part de l'utilisateur. */
   const lead = !keySet
     ? `Relie ton compte pour lire le quota en direct : le pourcentage exact, et la
-       répartition par modèle pour <b>tous</b> tes outils — pas seulement Claude Code.`
+       répartition par modèle pour <b>tous</b> tes outils, y compris ceux dont
+       l'app ne voit jamais passer la requête.`
     : keyError === 'clé refusée'
       ? `<b class="bad">Clé refusée</b> — Ollama l'a rejetée. Crée-en une autre sur
          <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>.`
@@ -590,15 +595,15 @@ function renderQuota(q) {
       </div>
       <p class="hint" id="key-hint-2">
         Remplacer la clé révoque l'ancienne à la prochaine lecture. La retirer
-        masque le quota sans rien effacer d'autre : la répartition Claude Code
-        reste.
+        ne laisse que la carte de connexion : tout le quota vient d'ollama.com,
+        donc sans clé il ne reste aucun chiffre.
       </p>` : ''}
     </details>`;
 
-  /* Sans cle, la section se reduit a la carte de connexion. Rien de ce qui
-     s'affiche ici ne peut venir de Claude Code : le quota est une donnee
-     d'ollama.com, et sans cle il n'y en a aucune. La date reste reglable
-     dans les reglages, ou elle sert aussi de repli a l'API. */
+  /* Sans cle, la section se reduit a la carte de connexion : le quota est une
+     donnee d'ollama.com, et sans cle il n'y en a aucune — ni pourcentage, ni
+     jauge, ni montant. La date de reinitialisation reste reglable dans les
+     reglages, ou elle sert de repli a l'API. */
   if (!live) {
     return `
       <section class="quota" aria-labelledby="quota-h">
@@ -643,7 +648,6 @@ function render(data) {
   const app = document.getElementById('app');
   const models = data.models;
   const total = data.grand_total;
-  const isReq = data.unit === 'requetes';
 
   const sub = document.getElementById('sub');
 
@@ -673,7 +677,7 @@ function render(data) {
 
   /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
   const top = models[0];
-  let reading = `<b>${fmt(total)}</b> ${unitOf(data)} sur le mois en cours`;
+  let reading = `<b>${fmt(total)}</b> ${UNIT} sur le mois en cours`;
   if (models.length > 1) reading += `, portés à ${pct(top.share)} % par <b>${top.model}</b>`;
   else reading += `, tous sur <b>${top.model}</b>`;
   reading += '.';
@@ -693,9 +697,7 @@ function render(data) {
         <i class="swatch" style="background:var(${v})"></i>
         <div class="model-name">
           <span class="id">${m.model}</span>
-          <span class="n">${nf.format(m.messages)} ${isReq
-            ? (m.messages > 1 ? 'requêtes' : 'requête')
-            : (m.messages > 1 ? 'messages' : 'message')}</span>
+          <span class="n">${nf.format(m.messages)} ${m.messages > 1 ? 'requêtes' : 'requête'}</span>
         </div>
         <div class="bar" role="img" aria-label="${m.model} : ${pct(m.share)} % du total">
           <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
@@ -734,11 +736,11 @@ function render(data) {
       </section>
     </div>
 
-    ${data.error ? `<div class="warn-line" role="alert">Erreur d'indexation : ${data.error}</div>` : ''}
+    ${data.error ? `<div class="warn-line" role="alert">Erreur de lecture : ${data.error}</div>` : ''}
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
-    `${exact(total)} ${unitOf(data)} ${isReq ? 'sur le mois en cours' : 'sur la période affichée'}`);
+    `${exact(total)} ${UNIT} sur le mois en cours`);
 
   /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
      au frame suivant pour que la transition se declenche, et les mises a jour
@@ -906,8 +908,8 @@ document.addEventListener('click', e => {
   }
 
   if (btn.id === 'refresh') {
-    /* Le serveur relit les transcripts et purge son cache d'usage : sans ca, la
-       part du quota resterait figee une minute de plus. */
+    /* Le serveur purge son cache et redemande l'usage a ollama.com : sans ca,
+       la part du quota resterait figee une minute de plus. */
     btn.setAttribute('aria-busy', 'true');
     fetch('/api/refresh', { method: 'POST' })
       .catch(() => { /* le flux reprendra de toute facon */ })
@@ -931,9 +933,9 @@ document.addEventListener('click', e => {
   }
 });
 
-/* Changer de cle change la source des donnees (tokens ou requetes) : le flux
-   doit repartir de zero, sinon la vue reste sur l'ancienne source jusqu'au
-   prochain push — qui peut tarder. */
+/* Changer de cle change ce qu'ollama.com accepte de repondre — ou refuse de
+   repondre. Le flux doit repartir de zero, sinon la vue reste sur l'ancien
+   etat jusqu'au prochain push, qui peut tarder. */
 function reload() {
   lastSignature = '';
   connect();

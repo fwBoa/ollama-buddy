@@ -168,8 +168,9 @@ function render(d) {
         <span class="sub">${resetLine}</span>
       </div>`;
   } else {
-    /* Rien d'autre ici : sans cle, l'app n'a aucune donnee de quota a montrer.
-       Ce qui reste dans l'apercu vient de Claude Code, pas d'ollama.com. */
+    /* Rien d'autre ici : sans cle, ollama.com ne repond rien, et l'app n'a
+       donc aucun chiffre de quota a montrer — juste l'invitation a en saisir
+       une depuis le tableau de bord. */
     quotaBlock = `<p class="label">Quota mensuel</p>
       <p class="sub">${q.key_set
         ? 'Lecture impossible — vérifie ta clé API dans le tableau de bord.'
