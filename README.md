@@ -1,242 +1,237 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Ta consommation Ollama Cloud sur ton Mac — quota, modèles, en temps réel</em></p>
+  <p><em>Your Ollama Cloud usage on your Mac — quota, models, live</em></p>
 
   ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)
-  ![Aucune dépendance](https://img.shields.io/badge/d%C3%A9pendances-aucune-199e70)
-  ![Serveurs](https://img.shields.io/badge/serveurs-ollama.com%20uniquement-199e70)
-  ![macOS](https://img.shields.io/badge/macOS-app%20native-000000?logo=apple&logoColor=white)
-  ![Licence MIT](https://img.shields.io/badge/licence-MIT-199e70)
+  ![No dependencies](https://img.shields.io/badge/dependencies-none-199e70)
+  ![Servers](https://img.shields.io/badge/servers-ollama.com%20only-199e70)
+  ![macOS](https://img.shields.io/badge/macOS-native%20app-000000?logo=apple&logoColor=white)
+  ![MIT licence](https://img.shields.io/badge/licence-MIT-199e70)
 
-  [Fonctionnalités](#fonctionnalités) • [Installation](#installation) • [Utilisation](#utilisation) • [Le quota](#le-quota-mensuel) • [Conception](#conception)
+  [Features](#features) • [Install](#install) • [Usage](#usage) • [The monthly quota](#the-monthly-quota) • [Design](#design) • [Français](README.fr.md)
 </div>
 
-<img src="docs/tableau-de-bord.png" alt="Le tableau de bord d'Ollama Buddy : quota mensuel avec sa jauge, requêtes du mois, répartition par modèle" width="100%">
+<img src="docs/dashboard.png" alt="The Ollama Buddy dashboard: the monthly quota with its meter, this month's requests, the breakdown by model" width="100%">
 
 ---
 
-Une app macOS qui répond à une seule question : **où en est mon quota Ollama Cloud ?**
-Un serveur Python sans dépendance lit l'usage sur `ollama.com` avec ta clé, un tableau
-de bord l'affiche, et un aperçu discret reste en permanence dans la barre de menus.
+A macOS app that answers one question: **where has my Ollama Cloud quota got to?**
+A Python server with no dependencies reads your usage on `ollama.com` with your key,
+a dashboard displays it, and a discreet summary stays in the menu bar at all times.
 
-## Fonctionnalités
+## Features
 
-- **Quota mensuel exact, en direct** — le pourcentage publié par ollama.com, plus le
-  montant en dollars, le rythme de dépense et la date de réinitialisation.
-- **Répartition par modèle, tous clients confondus** — le terminal, l'app Ollama,
-  la recherche web et le reste, avec les mêmes chiffres qu'ollama.com.
-- **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage
-  (avec une clé), qui ouvre un résumé compact.
-- **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
-  rien périodiquement. Côté serveur, ollama.com est sollicité au plus une fois par
-  minute, quel que soit le nombre d'onglets ouverts.
-- **Aucune dépendance** — bibliothèque standard de Python 3.9+. Pour construire
-  l'app : `swiftc` et Pillow.
+- **Exact monthly quota, live** — the percentage published by ollama.com, plus the
+  amount in dollars, the burn rate and the reset date.
+- **Breakdown by model, across every client** — the terminal, the Ollama app,
+  web search and the rest, with the same figures ollama.com shows.
+- **A permanent summary in the menu bar** — a coloured dot and the percentage
+  (with a key), which opens a compact summary.
+- **Real time** — the server pushes changes over SSE, the interface polls nothing.
+  On the server side, ollama.com is queried at most once a minute, however many
+  tabs are open.
+- **No dependencies** — Python 3.9+ standard library only. To build the app:
+  `swiftc` and Pillow.
 
-## Installation
+## Install
 
-**Prérequis** — macOS, et les outils en ligne de commande Xcode, d'où vient `swiftc` :
+**Requirements** — macOS, and the Xcode command line tools, where `swiftc` comes from:
 
 ```bash
 xcode-select --install
-pip3 install pillow          # pour générer l'icône
+pip3 install pillow          # to generate the icon
 ```
 
 ```bash
 git clone https://github.com/fwBoa/ollama-buddy.git
 cd ollama-buddy
-./build_app.sh --install     # construit et copie dans /Applications
+./build_app.sh --install     # builds and copies into /Applications
 ```
 
-Puis glisse `Ollama Buddy.app` dans le Dock. L'app démarre son serveur, ouvre le
-tableau de bord dans une fenêtre native, expose l'aperçu de la barre de menus, et
-arrête son serveur quand tu quittes. Sans `--install`, le bundle reste dans le
-dossier du projet.
+Then drag `Ollama Buddy.app` into the Dock. The app starts its server, opens the
+dashboard in a native window, exposes the menu bar summary, and stops its server
+when you quit. Without `--install`, the bundle stays in the project folder.
 
-Le binaire est **universel** : Apple Silicon et Intel.
+The binary is **universal**: Apple Silicon and Intel.
 
-**En ligne de commande** — le même programme, sans l'enveloppe macOS :
+**From the command line** — the same program, without the macOS wrapper:
 
 ```bash
-python3 ollama_buddy.py            # serveur + tableau de bord
+python3 ollama_buddy.py            # server + dashboard
 ```
 
 > [!NOTE]
-> Fermer la fenêtre **ne quitte pas** l'app : elle continue de vivre dans la barre de
-> menus. `⌘Q` arrête le serveur.
+> Closing the window **does not quit** the app: it lives on in the menu bar.
+> `⌘Q` stops the server.
 
-### Chez quelqu'un d'autre
+### On someone else's machine
 
-Le chemin propre est **la même commande** : clone et build sur place. Un binaire
-compilé localement ne porte pas le marqueur de quarantaine, donc macOS ne demande
-rien.
+The clean path is **the same command**: clone and build in place. A binary compiled
+locally carries no quarantine marker, so macOS asks nothing.
 
-Si tu joins plutôt un `.app` déjà construit — une Release GitHub, par exemple —
-l'archive arrive marquée `com.apple.quarantine` et Gatekeeper la refuse : la
-signature est **ad-hoc**, sans développeur identifié. La personne qui la reçoit
-lève ça en une commande :
+If you would rather ship an already-built `.app` — a GitHub Release, say — the
+archive arrives tagged `com.apple.quarantine` and Gatekeeper refuses it: the
+signature is **ad-hoc**, with no identified developer. Whoever receives it lifts
+that with one command:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Ollama Buddy.app"
 ```
 
-Deux réserves, dites franchement :
+Two caveats, stated plainly:
 
-- Sur macOS 26, un `.app` signé ad-hoc **et** en quarantaine peut afficher « est
-  endommagé et ne peut pas être ouvert », parfois sans bouton pour passer outre.
-  La commande ci-dessus reste la sortie.
-- Un `.app` téléchargé a besoin de `/usr/bin/python3`, qui réclame lui aussi les
-  outils Xcode. Sans eux, l'app s'ouvre puis échoue. Le build depuis les sources
-  n'a pas ce problème, puisque `swiftc` les exige déjà.
+- On macOS 26, an ad-hoc signed `.app` **in quarantine** may report "is damaged and
+  can't be opened", sometimes with no button to override it. The command above
+  remains the way out.
+- A downloaded `.app` needs `/usr/bin/python3`, which itself requires the Xcode
+  tools. Without them, the app opens and then fails. Building from source has no
+  such problem, since `swiftc` already demands them.
 
-Éviter tout ça demanderait une signature *Developer ID* et une notarisation Apple,
-donc l'Apple Developer Program à 99 $/an. Sans lui, **le build depuis les sources
-est le seul chemin sans friction** — et c'est celui à recommander.
+Avoiding all that would mean a *Developer ID* signature and Apple notarisation,
+hence the Apple Developer Program at $99/year. Without it, **building from source
+is the only frictionless path** — and the one to recommend.
 
 > [!NOTE]
-> Homebrew n'est plus une porte de sortie : depuis le 1er septembre 2026, les casks
-> qui échouent au contrôle Gatekeeper ne sont plus acceptés dans les dépôts
-> officiels.
+> Homebrew is no longer a way out either: since 1 September 2026, casks that fail
+> the Gatekeeper check are no longer accepted into the official repositories.
 
-## Utilisation
+## Usage
 
-| Raccourci | Action |
+| Shortcut | Action |
 |---|---|
-| `⌘1` | Afficher la fenêtre |
-| `⌘R` | Recharger le tableau de bord |
-| `⌘⇧R` | Redemander l'usage à ollama.com |
-| `⌘O` | Ouvrir dans le navigateur |
-| `⌘Q` | Quitter (arrête le serveur) |
+| `⌘1` | Show the window |
+| `⌘R` | Reload the dashboard |
+| `⌘⇧R` | Ask ollama.com for usage again |
+| `⌘O` | Open in the browser |
+| `⌘Q` | Quit (stops the server) |
 
-Dans le tableau de bord, le bouton en haut à droite fait défiler les trois thèmes :
-**automatique** (suit macOS), **clair**, **sombre**. Le réglage est conservé. Celui
-d'à côté redemande l'usage à ollama.com — sans lui, le cache d'une minute servirait la
-même valeur.
+In the dashboard, the button in the top right cycles the three themes: **automatic**
+(follows macOS), **light**, **dark**. The setting is remembered. The one next to it
+asks ollama.com for usage again — without it, the one-minute cache would serve the
+same value.
 
-### La barre de menus
+### The menu bar
 
-Un point de couleur, puis le pourcentage consommé **quand une clé API est
-enregistrée** — bleu, orange à 70 %, rouge à 90 %. Sans clé, l'icône n'affiche
-qu'un lama suivi d'un tiret : aucun chiffre n'est publié.
+A coloured dot, then the percentage consumed **when an API key is stored** — blue,
+orange at 70%, red at 90%. With no key, the icon shows only a llama followed by a
+dash: no figure is published.
 
-Un clic ouvre un résumé : quota, date de réinitialisation, consommation du mois et
-trois principaux modèles — avec une clé. Sans clé, il se contente de l'invitation à en
-saisir une, et d'un bouton vers le tableau de bord.
+A click opens a summary: quota, reset date, this month's consumption and the top
+three models — with a key. Without one, it settles for the invitation to enter a
+key, and a button to the dashboard.
 
-L'aperçu est lui aussi en direct : il se met à jour tant qu'il reste ouvert.
+The summary is live too: it updates for as long as it stays open.
 
-## Le quota mensuel
+## The monthly quota
 
-Ollama Pro inclut **60 $ d'usage par mois**. C'est la mesure qui compte, parce qu'elle
-couvre **tous** tes clients, y compris ceux dont l'app ne voit jamais passer la requête.
+Ollama Pro includes **$60 of usage per month**. That is the measure that matters,
+because it covers **all** your clients, including those whose requests the app never
+sees.
 
-### Relier ton compte (BYOK)
+### Linking your account (BYOK)
 
-L'app fonctionne avec **ta propre clé** : crée-la sur
-[ollama.com/settings/keys](https://ollama.com/settings/keys), colle-la dans le tableau
-de bord, et l'usage se lit en direct.
+The app works with **your own key**: create one at
+[ollama.com/settings/keys](https://ollama.com/settings/keys), paste it into the
+dashboard, and your usage is read live.
 
-Ce que la clé débloque :
+What the key unlocks:
 
 | | |
 |---|---|
-| Le pourcentage du mois | `limits.monthly.usage`, exact et rafraîchi tout seul |
-| Les requêtes par modèle | `limits.monthly.models`, **tous clients confondus** |
-| Le rythme en $/jour | mesuré sur des échantillons pris toutes les cinq minutes, une fois une journée pleine accumulée |
+| The month's percentage | `limits.monthly.usage`, exact and refreshed on its own |
+| Requests per model | `limits.monthly.models`, **across every client** |
+| The rate in $/day | measured from samples taken every five minutes, once a full day has accumulated |
 
-Ce qu'elle ne donne pas, et comment l'app s'en sort :
+What it does not give you, and how the app copes:
 
 | | |
 |---|---|
-| Le montant en dollars | L'API ne renvoie qu'une **part** (`0,874`), pas une somme. L'app la multiplie par le plafond du plan, ce qui retombe sur la somme affichée par le site. |
-| La date de réinitialisation | Déduite du cycle en cours : `activity.period.starting_at` donne le début de l'abonnement, le mois se rejoue au même quantième. Cycle ouvert le 07/09 → remise à zéro le 07/10. |
+| The amount in dollars | The API returns only a **share** (`0.874`), not a sum. The app multiplies it by the plan's cap, which lands back on the figure the site displays. |
+| The reset date | Deduced from the current cycle: `activity.period.starting_at` gives the subscription's start, and the month replays on the same day number. Cycle opened on 07/09 → reset on 07/10. |
 
 > [!WARNING]
-> `ollama.com/api/usage` n'est **pas documenté**. Si la route disparaît ou si la clé
-> est refusée, l'app n'affiche **plus aucun chiffre de quota** : elle invite à en
-> saisir une. C'est délibéré : le quota est une donnée d'ollama.com, et sans clé il n'y
-> en a aucune. La date de réinitialisation reste modifiable dans les réglages, où elle
-> sert de repli à l'API.
+> `ollama.com/api/usage` is **not documented**. If the route disappears or the key is
+> refused, the app shows **no quota figure at all**: it invites you to enter one. That
+> is deliberate: the quota is ollama.com's data, and without a key there is none. The
+> reset date stays editable in the settings, where it acts as a fallback for the API.
 
-La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigateur — le
-champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
-**lire** ton usage.
+The key lives in `config.json`, at `0600`, and is never sent back to the browser —
+the input field stays empty even when a key is stored. It serves only to **read**
+your usage.
 
-Pour la **remplacer ou la retirer** : *Paramètres*, sous le quota.
+To **replace or remove it**: *Settings*, below the quota.
 
-### Sans clé
+### Without a key
 
-L'app **ne montre rien du tout** — ni pourcentage, ni jauge, ni montant, ni compte à
-rebours, ni répartition. La page se réduit à la carte de connexion.
+The app **shows nothing at all** — no percentage, no meter, no amount, no countdown,
+no breakdown. The page reduces to the sign-in card.
 
-C'est délibéré. Le quota est une donnée d'ollama.com : sans clé, l'app n'en a aucune,
-et elle préfère le dire plutôt que d'afficher un à-peu-près. La date de réinitialisation
-reste modifiable dans les réglages — elle y sert de repli à l'API — mais elle ne
-s'affiche pas : ce n'est pas une mesure, juste un paramètre.
+That is deliberate. The quota is ollama.com's data: without a key, the app has none,
+and it would rather say so than display an approximation. The reset date stays
+editable in the settings — it acts as a fallback for the API there — but it is not
+displayed: it is not a measurement, only a setting.
 
-## D'où viennent les chiffres
+## Where the figures come from
 
-Une seule source : `ollama.com/api/usage`, avec ta clé. Elle couvre **tous** tes
-clients, y compris ceux dont l'app ne voit jamais passer la requête.
+A single source: `ollama.com/api/usage`, with your key. It covers **all** your
+clients, including those whose requests the app never sees.
 
-`web search` et `web fetch` apparaissent comme des modèles — Ollama les compte ainsi.
-Au-delà de huit modèles, le reste est regroupé sous « Autres ».
+`web search` and `web fetch` appear as models — that is how Ollama counts them.
+Beyond eight models, the rest is grouped under "Other".
 
-## Conception
+## Design
 
-**Mise en page.** Fluide plutôt que figée : largeur maximale 1560 px, gouttières et
-tailles de titre en `clamp()`, deux colonnes qui se replient en une seule sous 940 px.
-Les composants utilisent des **container queries** — la liste des modèles réagit à *sa*
-largeur, pas à celle de la fenêtre.
+**Layout.** Fluid rather than fixed: maximum width 1560px, gutters and heading sizes
+in `clamp()`, two columns that fold into one below 940px. Components use **container
+queries** — the model list reacts to *its* width, not the window's.
 
-**Couleurs.** Huit teintes catégorielles — celles de la palette de référence de
-l'outil de validation — plus un gris pour « Autres », qui n'est pas une série mais un
-reste. Le validateur confirme, dans les deux thèmes : bande de clarté, plancher de
-chroma, et séparation pour les daltonismes (ΔE ≥ 8 en OKLab). En thème sombre, les
-huit passent aussi le seuil de contraste de 3:1 ; **en thème clair, trois d'entre
-elles — aqua, jaune, magenta — restent en dessous**, et c'est documenté comme tel.
-La parade n'est pas la couleur : chaque modèle porte son nom, son nombre de requêtes
-et son pourcentage **écrits à côté**. L'information n'est jamais portée par la teinte
-seule. Chaque modèle garde la sienne de façon **permanente** (stockée en base),
-jamais selon son rang.
+**Colours.** Eight categorical hues — those of the validation tool's reference
+palette — plus a grey for "Other", which is not a series but a remainder. The
+validator confirms, in both themes: lightness band, chroma floor, and separation for
+colour vision deficiencies (ΔE ≥ 8 in OKLab). In the dark theme, all eight also clear
+the 3:1 contrast threshold; **in the light theme, three of them — aqua, yellow,
+magenta — stay below it**, and that is documented as such. The remedy is not colour:
+each model carries its name, its request count and its percentage **written beside
+it**. Information is never carried by hue alone. Each model keeps its own
+**permanently** (stored in the database), never according to its rank.
 
-**Thème.** Clair et sombre sont deux palettes **choisies**, pas une inversion
-automatique. Le thème suit macOS par défaut, et peut être forcé.
+**Theme.** Light and dark are two **chosen** palettes, not an automatic inversion.
+The theme follows macOS by default, and can be forced.
 
-**Le lama.** `web/ollama.png` sert de **masque CSS** dans l'en-tête — il prend donc la
-couleur du texte et suit les deux thèmes sans qu'il faille deux fichiers — et d'**image
-gabarit** dans la barre de menus, où macOS l'inverse selon le fond.
+**The llama.** `web/ollama.png` serves as a **CSS mask** in the header — so it takes
+the text colour and follows both themes without needing two files — and as a
+**template image** in the menu bar, where macOS inverts it according to the
+background.
 
-**Mouvement.** Courbes d'easing personnalisées, transitions sous 300 ms, `scale(0.97)`
-au clic, apparition en cascade. Les survols sont conditionnés à `@media (hover: hover)`.
-`prefers-reduced-motion` est respecté : les fondus restent, les déplacements disparaissent.
+**Motion.** Custom easing curves, transitions under 300ms, `scale(0.97)` on click,
+staggered entrance. Hover states are gated behind `@media (hover: hover)`.
+`prefers-reduced-motion` is respected: fades remain, movement disappears.
 
-**Accessibilité.** Lien d'évitement, focus visible au clavier uniquement, libellés
-programmatiques, région `aria-live`, cibles ≥ 24 px, et **aucune information portée par
-la seule couleur** : la jauge du quota change de teinte, mais le pourcentage est écrit
-à côté.
+**Accessibility.** Skip link, focus visible for keyboard only, programmatic labels,
+an `aria-live` region, targets ≥ 24px, and **no information carried by colour alone**:
+the quota meter changes hue, but the percentage is written beside it.
 
-## Fichiers
+## Files
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `ollama_buddy.py` | Serveur HTTP, lecture de l'usage ollama.com, flux SSE |
-| `web/index.html` | Le tableau de bord |
-| `web/mini.html` | L'aperçu de la barre de menus |
-| `app/main.swift` | L'enveloppe macOS : fenêtre, barre de menus, cycle de vie |
-| `app/make_icon.py` | Génère `AppIcon.icns` (Pillow + `iconutil`) |
-| `build_app.sh` | Assemble le bundle, `--install` pour le copier dans /Applications |
-| `config.example.json` | Forme du fichier de configuration |
-| `config.json` | Ta configuration. **Non versionné** |
-| `usage.db` | Index SQLite local. Supprimable, il se reconstruit |
+| `ollama_buddy.py` | HTTP server, reading ollama.com usage, SSE stream |
+| `web/index.html` | The dashboard |
+| `web/mini.html` | The menu bar summary |
+| `app/main.swift` | The macOS wrapper: window, menu bar, lifecycle |
+| `app/make_icon.py` | Generates `AppIcon.icns` (Pillow + `iconutil`) |
+| `build_app.sh` | Assembles the bundle, `--install` to copy it into /Applications |
+| `config.example.json` | The shape of the configuration file |
+| `config.json` | Your configuration. **Not versioned** |
+| `usage.db` | Local SQLite index. Deletable, it rebuilds itself |
 
-L'app macOS stocke ses données dans `~/Library/Application Support/OllamaBuddy/`.
+The macOS app stores its data in `~/Library/Application Support/OllamaBuddy/`.
 
 ## Notes
 
-- Le serveur écoute uniquement sur `127.0.0.1`.
-- Seuls `127.0.0.1:11434` (Ollama, pour le nom du plan) et `ollama.com` (avec une clé)
-  sont interrogés. Rien de ce que l'app mesure ne quitte la machine : seuls la clé et
-  la requête d'usage partent vers ollama.com.
-- **`11435` est déjà pris par l'app Ollama** — d'où le port `11499` par défaut.
+- The server listens only on `127.0.0.1`.
+- Only `127.0.0.1:11434` (Ollama, for the plan name) and `ollama.com` (with a key)
+  are queried. Nothing the app measures leaves the machine: only the key and the
+  usage request go to ollama.com.
+- **`11435` is already taken by the Ollama app** — hence the default port `11499`.
