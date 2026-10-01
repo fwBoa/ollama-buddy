@@ -230,10 +230,6 @@
   .split { display: grid; gap: clamp(28px, 3vw, 48px); align-items: start; }
   @media (min-width: 940px) {
     .split { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.45fr); }
-    /* La liste des modeles est bien plus longue que la colonne du quota : sans
-       cela, celle-ci s'arrete a mi-hauteur et laisse un grand vide. Collante,
-       elle garde le quota en vue pendant qu'on fait defiler les modeles. */
-    .split .stack { position: sticky; top: clamp(16px, 2.5vw, 32px); }
   }
   .split .quota { margin-top: 0; }
   .split .section-title { margin-top: 0; }
