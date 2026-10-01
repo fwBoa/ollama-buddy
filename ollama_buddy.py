@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Ollama Buddy - suivi local de la consommation des modeles Ollama Cloud.
+"""Ollama Buddy - suivi de la consommation des modeles Ollama Cloud.
 
-Lit les transcripts Claude Code (~/.claude/projects/**/*.jsonl), en extrait
-l'usage en tokens par modele, et sert un tableau de bord sur 127.0.0.1.
+Lit le quota mensuel et la repartition par modele sur ollama.com/api/usage,
+avec la cle API de l'utilisateur, et sert un tableau de bord sur 127.0.0.1.
+Sans cle, aucune mesure n'existe : l'app n'affiche alors aucun chiffre.
 
-Aucune donnee ne quitte la machine : tout reste en local (SQLite + HTTP local).
+Rien ne quitte la machine : les mesures restent en local (SQLite + HTTP local),
+et seuls la cle et la requete d'usage partent vers ollama.com.
 """
 
 from __future__ import annotations
@@ -433,8 +435,8 @@ def quota_unavailable(cfg: dict, cloud: dict | None = None) -> dict:
 def empty_usage() -> dict:
     """Aucune source : pas de cle, donc pas de chiffres.
 
-    L'usage de Claude Code n'est plus lu du tout. Il ne couvrait qu'un client
-    sur onze, et le montrer laissait croire a une mesure globale.
+    L'app ne remonte plus aucune mesure partielle. Un chiffre qui ne couvre
+    qu'une partie des clients laisserait croire a une mesure globale.
     """
     return {
         "unit": "requetes",
@@ -559,8 +561,8 @@ class State:
     def payload(self) -> dict:
         """Une seule source : ollama.com, avec une cle.
 
-        Sans cle il n'y a rien a montrer. L'usage de Claude Code n'est plus
-        remonte : il ne couvrait qu'un client sur onze.
+        Sans cle il n'y a rien a montrer : on renvoie alors la forme vide,
+        meme cle, mesures a None.
         """
         cloud = self.cloud()
         live = bool(cloud) and "error" not in (cloud or {})
@@ -637,17 +639,17 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"error": "not found"}, 404)
 
     def refresh_all(self) -> None:
-        """Relit les transcripts ET redemande l'usage a ollama.com.
+        """Purge le cache et redemande l'usage a ollama.com.
 
-        Le cache de la cle dure une minute : sans cette purge, un rafraichissement
-        manuel afficherait la meme valeur qu'avant.
+        Le cache dure une minute : sans cette purge, un rafraichissement manuel
+        afficherait la meme valeur qu'avant.
         """
         self.state.invalidate_cloud()
         self.state.broadcast()
         self._json({"ok": True, "error": self.state.last_error})
 
     def stream(self) -> None:
-        """Flux SSE : le serveur pousse l'usage des qu'un transcript change."""
+        """Flux SSE : le serveur pousse l'usage des qu'il change."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache, no-transform")
@@ -741,38 +743,6 @@ class Handler(BaseHTTPRequestHandler):
             quota = build_quota(self.state.conn, cfg, self.state.cloud())
         self.state.broadcast()
         self._json({"ok": True, "quota": quota})
-
-
-# --------------------------------------------------------------------------
-# Proxy : compte les tokens de TOUS les clients, pas seulement Claude Code
-# --------------------------------------------------------------------------
-
-# Le User-Agent est le signal le plus fiable pour nommer le client.
-CLIENT_SIGNATURES = [
-    ("claude",   "Claude Code"),
-    ("codex",    "Codex"),
-    ("opencode", "opencode"),
-    ("chatgpt",  "ChatGPT"),
-    ("copilot",  "Copilot"),
-    ("continue", "Continue"),
-    ("cursor",   "Cursor"),
-    ("openwebui", "Open WebUI"),
-    ("open-webui", "Open WebUI"),
-    ("zed",      "Zed"),
-    ("dsh",      "DSH"),
-    ("hermes",   "Hermes"),
-]
-
-# A defaut de User-Agent reconnaissable, le chemin d'API trahit la famille.
-API_FAMILIES = {
-    "/v1/messages": "API Anthropic",
-    "/v1/chat/completions": "API OpenAI",
-    "/v1/completions": "API OpenAI",
-    "/v1/embeddings": "API OpenAI",
-    "/v1/responses": "API OpenAI",
-    "/api/chat": "Ollama CLI",
-    "/api/generate": "Ollama CLI",
-}
 
 
 # --------------------------------------------------------------------------
