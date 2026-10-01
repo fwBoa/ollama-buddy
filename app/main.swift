@@ -93,6 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             backing: .buffered,
             defer: false
         )
+        // Par defaut, AppKit libere la fenetre des qu'on la ferme. La propriete
+        // `window` pointerait alors sur une adresse liberee, et la rouvrir depuis
+        // la barre de menus plantait en SIGSEGV — le cas normal, puisque fermer
+        // la fenetre ne quitte pas l'app.
+        window.isReleasedWhenClosed = false
         window.title = appName
         window.titlebarAppearsTransparent = true
         // Le titre systeme chevauchait celui de la page : la page porte deja
