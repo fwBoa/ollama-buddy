@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Ollama Buddy — summary</title>
+<link rel="icon" href="ollama.png" type="image/png">
 <style>
   /* Meme palette que le tableau de bord, en plus compact. */
   :root {
@@ -127,35 +128,83 @@
   <span class="live" id="live"><i aria-hidden="true"></i><span>…</span></span>
 </div>
 
-<div id="body"><p class="empty">Reading…</p></div>
+<div id="body"><p class="empty" id="boot">Reading…</p></div>
 
 <script>
 "use strict";
-const nf = new Intl.NumberFormat('en-US');
+/* Meme mecanique et meme raisonnement que le tableau de bord. L'apercu n'a
+   pas de bouton de langue : le reglage se fait dans le tableau de bord, et il
+   suit ici comme le theme. */
+const FR = {
+  'Ollama Buddy — summary': 'Ollama Buddy — aperçu',
+  'Reading…': 'Lecture…',
+  'reset today': "réinitialisation aujourd'hui",
+  'reset tomorrow': 'réinitialisation demain',
+  'reset in {n} days': 'réinitialisation dans {n} jours',
+  'Monthly quota': 'Quota mensuel',
+  '{pct} of the monthly quota': '{pct} du quota mensuel',
+  ': {current} of {monthly}': ' : {current} sur {monthly}',
+  '{current} of {monthly}': '{current} sur {monthly}',
+  'Cannot read — check your API key in the dashboard.': 'Lecture impossible — vérifie ta clé API dans le tableau de bord.',
+  'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.':
+    'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.',
+  '{amount} / day': '{amount} / jour',
+  ' — cap reached in {n} days': ' — plafond atteint dans {n} jours',
+  'This month': 'Ce mois',
+  'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
+  'Other ({n})': 'Autres ({n})',
+  'Open the dashboard': 'Ouvrir le tableau de bord',
+  'Live': 'En direct',
+  'Reconnecting': 'Reconnexion',
+};
+
+let lang = 'en';
 let lastSig = '';
 let hasRendered = false;
 
-const compact = n => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B'
-  : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
-  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k'
-  : String(n);
-const usd = n => '$' + n.toFixed(2);
-const pct = x => (x * 100).toFixed(1) + '%';
+const squeeze = s => s.replace(/\s+/g, ' ').trim();
+const FR_BY_KEY = new Map(Object.entries(FR).map(([k, v]) => [squeeze(k), v]));
+const fill = (text, values) =>
+  text.replace(/\{(\w+)\}/g, (m, k) => (k in values ? values[k] : m));
+const T = s => (lang === 'fr' ? (FR_BY_KEY.get(squeeze(s)) ?? s) : s);
+const locale = () => (lang === 'fr' ? 'fr-FR' : 'en-US');
+
+function resolveLang(pref) {
+  if (pref === 'fr' || pref === 'en') return pref;
+  return String(navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+
+const compact = n => {
+  const fr = lang === 'fr';
+  const num = (v, d) => (fr ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
+  const unit = u => (fr ? ' ' : '') + u;
+  if (n >= 1e9) return num(n / 1e9, 2) + unit(fr ? 'Md' : 'B');
+  if (n >= 1e6) return num(n / 1e6, 2) + unit('M');
+  if (n >= 1e3) return num(n / 1e3, 1) + unit('k');
+  return String(n);
+};
+const exact = n => new Intl.NumberFormat(locale()).format(n);
+const usd = n => (lang === 'fr' ? n.toFixed(2).replace('.', ',') + ' $' : '$' + n.toFixed(2));
+const pct = x => (lang === 'fr'
+  ? (x * 100).toFixed(1).replace('.', ',') + ' %'
+  : (x * 100).toFixed(1) + '%');
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
+const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
 
 function render(d) {
   const q = d.quota || {};
   const body = document.getElementById('body');
 
   if (d.theme) applyTheme(d.theme);
+  if (d.lang) applyLang(d.lang);
 
   /* Le quota ne vient que d'ollama.com. Sans cle, on n'affiche aucun chiffre
      plutot qu'un montant saisi a la main — il pouvait dater de semaines. La
      date de reinitialisation, elle, reste : elle vient des reglages. */
   const resetLine = q.days_left === null || q.days_left === undefined ? ''
-    : q.days_left < 1 ? 'reset today'
-    : q.days_left < 2 ? 'reset tomorrow'
-    : `reset in ${Math.floor(q.days_left)} days`;
+    : q.days_left < 1 ? T('reset today')
+    : q.days_left < 2 ? T('reset tomorrow')
+    : fill(T('reset in {n} days'), { n: Math.floor(q.days_left) });
 
   let quotaBlock = '';
   if (q.source === 'api' && typeof q.ratio === 'number') {
@@ -163,37 +212,37 @@ function render(d) {
     const has = q.current !== null && q.current !== undefined;
     quotaBlock = `
       <div class="row">
-        <span class="label" style="margin:0">Monthly quota</span>
+        <span class="label" style="margin:0">${T('Monthly quota')}</span>
         <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)}</span>
       </div>
       <div class="meter" style="--fill:${severity(ratio)}" role="img"
-           aria-label="${pct(ratio)} of the monthly quota${
-             has ? `: ${usd(q.current)} of ${usd(q.monthly)}` : ''}">
+           aria-label="${T('{pct} of the monthly quota').replace('{pct}', pct(ratio))}${
+             has ? fill(T(': {current} of {monthly}'), { current: usd(q.current), monthly: usd(q.monthly) }) : ''}">
         <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
       </div>
       <div class="row">
-        <span class="sub">${has ? `${usd(q.current)} of ${usd(q.monthly)}` : ''}</span>
+        <span class="sub">${has ? fill(T('{current} of {monthly}'), { current: usd(q.current), monthly: usd(q.monthly) }) : ''}</span>
         <span class="sub">${resetLine}</span>
       </div>`;
   } else {
     /* Rien d'autre ici : sans cle, ollama.com ne repond rien, et l'app n'a
        donc aucun chiffre de quota a montrer — juste l'invitation a en saisir
        une depuis le tableau de bord. */
-    quotaBlock = `<p class="label">Monthly quota</p>
+    quotaBlock = `<p class="label">${T('Monthly quota')}</p>
       <p class="sub">${q.key_set
-        ? 'Cannot read — check your API key in the dashboard.'
-        : 'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.'}</p>`;
+        ? T('Cannot read — check your API key in the dashboard.')
+        : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   }
 
   const models = (d.models || []).slice(0, 3).map(m =>
     `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
-       <span class="n">${m.model}</span><span class="v">${compact(m.total)}</span></div>`
+       <span class="n">${modelLabel(m)}</span><span class="v">${compact(m.total)}</span></div>`
   ).join('');
 
   const rate = q.rate_per_day && q.exhausted_in_days !== null && q.exhausted_in_days !== undefined
-    ? `<p class="sub" style="margin:10px 0 0">${usd(q.rate_per_day)} / day${
+    ? `<p class="sub" style="margin:10px 0 0">${fill(T('{amount} / day'), { amount: usd(q.rate_per_day) })}${
         q.days_left !== null && q.exhausted_in_days < q.days_left
-          ? ` — cap reached in ${Math.floor(q.exhausted_in_days)} days` : ''}</p>`
+          ? fill(T(' — cap reached in {n} days'), { n: Math.floor(q.exhausted_in_days) }) : ''}</p>`
     : '';
 
   /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
@@ -205,14 +254,14 @@ function render(d) {
     ${rate}
     ${live ? `
       <hr>
-      <p class="label">This month</p>
+      <p class="label">${T('This month')}</p>
       <div class="row">
         <span class="big">${compact(d.grand_total || 0)}</span>
-        <span class="sub">${nf.format(d.messages || 0)} req.</span>
+        <span class="sub">${exact(d.messages || 0)} req.</span>
       </div>
-      <div class="models">${models || '<p class="empty">No usage in this cycle.</p>'}</div>` : ''}
+      <div class="models">${models || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
     <div class="actions">
-      <button type="button" id="open">Open the dashboard</button>
+      <button type="button" id="open">${T('Open the dashboard')}</button>
     </div>`;
 
   document.getElementById('open').addEventListener('click', () => {
@@ -228,7 +277,7 @@ function render(d) {
 function setLive(on) {
   const el = document.getElementById('live');
   el.classList.toggle('stale', !on);
-  el.lastElementChild.textContent = on ? 'Live' : 'Reconnecting';
+  el.lastElementChild.textContent = T(on ? 'Live' : 'Reconnecting');
 }
 
 /* Le popover s'ajuste a la hauteur reelle du contenu : sans cela il garde la
@@ -251,7 +300,22 @@ function applyTheme(value) {
   else root.removeAttribute('data-theme');
 }
 
+/* L'apercu n'a pas de bouton de langue : il suit le reglage du tableau de
+   bord. "auto" se resout ici sur la langue du systeme, comme la-bas. */
+function applyLang(pref) {
+  lang = resolveLang(pref);
+  document.documentElement.lang = lang;
+  document.title = T('Ollama Buddy — summary');
+  // Le texte d'attente, avant le premier envoi du serveur. Il disparait avec
+  // #body au premier rendu.
+  const boot = document.getElementById('boot');
+  if (boot) boot.textContent = T('Reading…');
+}
+
 new ResizeObserver(reportSize).observe(document.body);
+/* Peinture immediate : navigator.language est disponible avant tout appel au
+   serveur, donc le titre ne reste pas en anglais sur un Mac francais. */
+applyLang('auto');
 window.addEventListener('load', reportSize);
 
 function connect() {
@@ -262,7 +326,10 @@ function connect() {
     let d; try { d = JSON.parse(e.data); } catch { return; }
     const sig = `${d.grand_total}|${d.messages}|${d.models?.length}|${d.quota?.current}|${d.quota?.monthly}`
       // source / key_set : sans eux, coller une cle refusee ne redessinerait rien.
-      + `|${d.quota?.source}|${d.quota?.key_set}`;
+      + `|${d.quota?.source}|${d.quota?.key_set}`
+      // lang : un changement de langue ne bouge aucun chiffre, mais doit
+      // redessiner tout le texte.
+      + `|${d.lang}`;
     if (sig === lastSig) return;
     lastSig = sig;
     setLive(true);

@@ -71,6 +71,10 @@ DEFAULT_CONFIG = {
     "port": 11499,
     # "auto" suit macOS, "light" et "dark" forcent le theme.
     "theme": "auto",
+    # "auto" suit la langue du systeme, "fr" et "en" forcent. Le serveur ne
+    # choisit pas a la place des clients : il ne connait ni la langue du
+    # navigateur ni celle du systeme. Chacun resout "auto" de son cote.
+    "lang": "auto",
     # Intervalle de veille. Le cache interne limite les appels a ollama.com a
     # une par minute, quelle que soit cette valeur.
     "watch_seconds": 2,
@@ -224,6 +228,9 @@ def fold_extra(rows: list[dict]) -> list[dict]:
         return rows
     rows.append({
         "model": f"Other ({len(over)})",
+        # Le libelle affiche est compose par le client : seul lui sait dans
+        # quelle langue la page se lit. Le serveur fournit de quoi le faire.
+        "other_count": len(over),
         "slot": MAX_SLOTS,
         "total": sum(r["total"] for r in over),
         "messages": sum(r["messages"] for r in over),
@@ -573,6 +580,7 @@ class State:
         data["account"] = ollama_account()
         data["error"] = self.last_error
         data["theme"] = self.cfg.get("theme") or "auto"
+        data["lang"] = self.cfg.get("lang") or "auto"
         return data
 
 
@@ -687,11 +695,17 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/quota":
             self.update_quota()
             return
-        if url.path == "/api/theme":
-            self.update_theme()
+        if url.path in ("/api/theme", "/api/lang"):
+            self.update_prefs()
             return
 
-    def update_theme(self) -> None:
+    def update_prefs(self) -> None:
+        """Reglages d'affichage : theme et langue.
+
+        Les deux vivent dans le meme handler parce qu'ils se comportent pareil :
+        une valeur contrainte, ecrite dans la config, puis poussee aux clients
+        deja ouverts. Seuls les champs presents sont touches.
+        """
         try:
             length = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -699,16 +713,27 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "corps invalide"}, 400)
             return
 
-        theme = str(body.get("theme") or "auto")
-        if theme not in ("auto", "light", "dark"):
-            self._json({"error": "theme inconnu"}, 400)
-            return
+        cfg = self.state.cfg
+        if "theme" in body:
+            theme = str(body.get("theme") or "auto")
+            if theme not in ("auto", "light", "dark"):
+                self._json({"error": "theme inconnu"}, 400)
+                return
+            cfg["theme"] = theme
+        if "lang" in body:
+            lang = str(body.get("lang") or "auto")
+            if lang not in ("auto", "en", "fr"):
+                self._json({"error": "langue inconnue"}, 400)
+                return
+            cfg["lang"] = lang
 
-        self.state.cfg["theme"] = theme
-        save_config(self.state.cfg)
-        self.state.cache.clear()
+        save_config(cfg)
+        # Le theme et la langue voyagent dans le payload : sans cette purge et
+        # ce reveil, une deuxieme fenetre garderait l'ancien reglage jusqu'a ce
+        # que l'usage change d'elle-meme.
         self.state.broadcast()
-        self._json({"ok": True, "theme": theme})
+        self._json({"ok": True, "theme": cfg.get("theme"),
+                    "lang": cfg.get("lang")})
 
     def update_quota(self) -> None:
         """Plafond mensuel, date de reinitialisation, et cle API ollama.com."""

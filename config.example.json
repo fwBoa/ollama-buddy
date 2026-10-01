@@ -4,5 +4,6 @@
   "ollama_api_key": "",
   "port": 11499,
   "theme": "auto",
+  "lang": "auto",
   "watch_seconds": 2
 }

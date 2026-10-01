@@ -10,6 +10,69 @@ import WebKit
 private let basePort = 11499
 private let portAttempts = 4
 private let appName = "Ollama Buddy"
+
+/// Traductions. Comme dans les pages web, la recherche se fait par la chaine
+/// anglaise : une cle absente laisse l'anglais, donc un texte neuf reste
+/// lisible au lieu de disparaitre.
+private let FRENCH: [String: String] = [
+    "About %@": "À propos d'%@",
+    "Show Window": "Afficher la fenêtre",
+    "Open in Browser": "Ouvrir dans le navigateur",
+    "Open Data Folder": "Ouvrir le dossier de données",
+    "Hide %@": "Masquer %@",
+    "Quit %@": "Quitter %@",
+    "View": "Présentation",
+    "Reload": "Recharger",
+    "Refresh Data": "Actualiser les données",
+    "Actual Size": "Taille réelle",
+    "Zoom In": "Agrandir",
+    "Zoom Out": "Réduire",
+    "Enter Full Screen": "Plein écran",
+    "Window": "Fenêtre",
+    "Minimize": "Réduire",
+    "quota not configured": "quota non configuré",
+    "no figures published": "aucun chiffre publié",
+    "no API key — open the dashboard to enter one":
+        "aucune clé API — ouvre le tableau de bord pour la saisir",
+    // Sentinelles envoyees par le serveur : voir cloud_usage cote Python.
+    // Elles traversent `key_error` jusqu'a l'infobulle de la barre de menus.
+    "key rejected": "clé refusée",
+    "no key": "aucune clé",
+    "Reading…": "Lecture…",
+    "Starting the local server. This takes a moment on first launch.":
+        "Démarrage du serveur local. Cela prend un instant au premier lancement.",
+    "The embedded server is missing from the app.":
+        "Le serveur embarqué est introuvable dans l'application.",
+    "The server did not respond in time.":
+        "Le serveur n'a pas répondu dans le délai imparti.",
+    "Could not start the server: %@": "Impossible de lancer le serveur : %@",
+    "Could not connect to the local server.\n\n%@":
+        "Connexion au serveur local impossible.\n\n%@",
+];
+
+/// La langue de l'interface, resolue une fois pour toutes.
+///
+/// "auto" se resout ici et non cote serveur : lui seul sait dans quelle langue
+/// la page s'affiche, et il ne connait pas la langue du Mac.
+enum Lang {
+    static var current = "en"
+
+    static func resolve(_ pref: String) -> String {
+        if pref == "fr" || pref == "en" { return pref }
+        let first = Locale.preferredLanguages.first ?? "en"
+        return first.lowercased().hasPrefix("fr") ? "fr" : "en"
+    }
+
+    static func t(_ english: String) -> String {
+        current == "fr" ? (FRENCH[english] ?? english) : english
+    }
+
+    /// Le pourcentage colle a son symbole en anglais, detache en francais.
+    static func percent(_ value: Double) -> String {
+        let n = Int((value * 100).rounded())
+        return current == "fr" ? "\(n) %" : "\(n)%"
+    }
+}
 private let panelWidth: CGFloat = 300
 
 /// Panneau flottant qui n'active pas l'app. Un NSPopover exige que
@@ -42,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     // MARK: - Cycle de vie
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Avant buildMenu : les menus sont construits une fois, et doivent
+        // naitre dans la bonne langue.
+        Lang.current = Lang.resolve("auto")
         buildMenu()
         buildWindow()
         buildStatusItem()
@@ -112,48 +178,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Reconstruit toute la barre de menus dans la langue courante.
+    ///
+    /// AppKit ne sait pas retraduire un menu en place : changer de langue
+    /// passe donc par une reconstruction complete. C'est sans effet de bord,
+    /// les raccourcis et les selecteurs restant identiques.
     private func buildMenu() {
         let main = NSMenu()
 
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About \(appName)",
+        appMenu.addItem(withTitle: String(format: Lang.t("About %@"), appName),
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Show Window",
+        appMenu.addItem(withTitle: Lang.t("Show Window"),
                         action: #selector(showWindowAction), keyEquivalent: "1")
-        appMenu.addItem(withTitle: "Open in Browser",
+        appMenu.addItem(withTitle: Lang.t("Open in Browser"),
                         action: #selector(openInBrowser), keyEquivalent: "o")
-        appMenu.addItem(withTitle: "Open Data Folder",
+        appMenu.addItem(withTitle: Lang.t("Open Data Folder"),
                         action: #selector(openDataFolder), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide \(appName)",
+        appMenu.addItem(withTitle: String(format: Lang.t("Hide %@"), appName),
                         action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit \(appName)",
+        appMenu.addItem(withTitle: String(format: Lang.t("Quit %@"), appName),
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let viewItem = NSMenuItem()
         main.addItem(viewItem)
-        let viewMenu = NSMenu(title: "View")
-        viewMenu.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
-        viewMenu.addItem(withTitle: "Refresh Data",
+        let viewMenu = NSMenu(title: Lang.t("View"))
+        viewMenu.addItem(withTitle: Lang.t("Reload"), action: #selector(reload), keyEquivalent: "r")
+        viewMenu.addItem(withTitle: Lang.t("Refresh Data"),
                          action: #selector(reloadFresh), keyEquivalent: "R")
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Actual Size", action: #selector(actualSize), keyEquivalent: "0")
-        viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "+")
-        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-")
+        viewMenu.addItem(withTitle: Lang.t("Actual Size"), action: #selector(actualSize), keyEquivalent: "0")
+        viewMenu.addItem(withTitle: Lang.t("Zoom In"), action: #selector(zoomIn), keyEquivalent: "+")
+        viewMenu.addItem(withTitle: Lang.t("Zoom Out"), action: #selector(zoomOut), keyEquivalent: "-")
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)),
+        viewMenu.addItem(withTitle: Lang.t("Enter Full Screen"), action: #selector(NSWindow.toggleFullScreen(_:)),
                          keyEquivalent: "f")
         viewItem.submenu = viewMenu
 
         let windowItem = NSMenuItem()
         main.addItem(windowItem)
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
+        let windowMenu = NSMenu(title: Lang.t("Window"))
+        windowMenu.addItem(withTitle: Lang.t("Minimize"), action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.zoom(_:)), keyEquivalent: "")
         windowItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
@@ -278,7 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let color: NSColor
         if let ratio = ratio {
             color = ratio >= 0.9 ? .systemRed : ratio >= 0.7 ? .systemOrange : .labelColor
-            text = " \(Int((ratio * 100).rounded()))%"
+            text = " " + Lang.percent(ratio)
         } else {
             color = .secondaryLabelColor
             text = " —"
@@ -288,8 +359,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             attributes: [.foregroundColor: color, .font: NSFont.systemFont(ofSize: 12)]
         )
         button.toolTip = ratio == nil
-            ? "Ollama Buddy — \(note.isEmpty ? "quota not configured" : note)"
-            : "Ollama Buddy — \(Int((ratio! * 100).rounded()))% of the monthly quota"
+            ? "Ollama Buddy — \(note.isEmpty ? Lang.t("quota not configured") : note)"
+            : (Lang.current == "fr"
+               ? "Ollama Buddy — \(Lang.percent(ratio!)) du quota mensuel"
+               : "Ollama Buddy — \(Lang.percent(ratio!)) of the monthly quota")
     }
 
     private func dot(_ color: NSColor) -> NSImage {
@@ -376,11 +449,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             if ratio != nil {
                 note = ""
             } else if (quota["key_set"] as? Bool) == true {
-                note = quota["key_error"] as? String ?? "no figures published"
+                // `key_error` vient du serveur : la sentinelle connue est
+                // traduite, un code HTTP ou un nom d'exception reste tel quel.
+                note = Lang.t(quota["key_error"] as? String ?? "no figures published")
             } else {
-                note = "no API key — open the dashboard to enter one"
+                note = Lang.t("no API key — open the dashboard to enter one")
             }
-            DispatchQueue.main.async { self.updateStatusTitle(ratio: ratio, note: note) }
+
+            // La langue voyage dans le meme payload que le quota : un
+            // changement fait depuis le tableau de bord reconstruit donc les
+            // menus ici, sans qu'aucun des deux n'ait a prevenir l'autre.
+            let resolved = Lang.resolve(json["lang"] as? String ?? "auto")
+            let needsMenu = resolved != Lang.current
+            if needsMenu { Lang.current = resolved }
+
+            DispatchQueue.main.async {
+                if needsMenu { self.buildMenu() }
+                self.updateStatusTitle(ratio: ratio, note: note)
+            }
         }.resume()
     }
 
@@ -421,7 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private func launchServer(at port: Int) {
         guard let script = Bundle.main.url(forResource: "ollama_buddy", withExtension: "py",
                                            subdirectory: "app") else {
-            showFatal("The embedded server is missing from the app.")
+            showFatal(Lang.t("The embedded server is missing from the app."))
             return
         }
 
@@ -442,7 +528,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         do {
             try process.run()
         } catch {
-            showFatal("Could not start the server: \(error.localizedDescription)")
+            showFatal(String(format: Lang.t("Could not start the server: %@"),
+                             error.localizedDescription))
             return
         }
 
@@ -454,7 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     private func waitForServer(attempts: Int) {
         guard attempts > 0 else {
-            showFatal("The server did not respond in time.")
+            showFatal(Lang.t("The server did not respond in time."))
             return
         }
         // Le processus a pu mourir (port occupe, python absent) : on tente un autre port.
@@ -547,7 +634,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             miniBroken = true
             return
         }
-        showFatal("Could not connect to the local server.\n\n\(error.localizedDescription)")
+        showFatal(String(format: Lang.t("Could not connect to the local server.\n\n%@"),
+                         error.localizedDescription))
     }
 
     // Les liens externes s'ouvrent dans le navigateur, pas dans la fenetre.
@@ -602,8 +690,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     private func loadingPage() -> String {
-        shell("Reading…",
-              "Starting the local server. This takes a moment on first launch.",
+        shell(Lang.t("Reading…"),
+              Lang.t("Starting the local server. This takes a moment on first launch."),
               spinner: true)
     }
 
