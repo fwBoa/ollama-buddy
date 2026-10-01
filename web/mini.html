@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Ollama Buddy — aperçu</title>
+<title>Ollama Buddy — summary</title>
 <style>
   /* Meme palette que le tableau de bord, en plus compact. */
   :root {
@@ -127,20 +127,20 @@
   <span class="live" id="live"><i aria-hidden="true"></i><span>…</span></span>
 </div>
 
-<div id="body"><p class="empty">Lecture…</p></div>
+<div id="body"><p class="empty">Reading…</p></div>
 
 <script>
 "use strict";
-const nf = new Intl.NumberFormat('fr-FR');
+const nf = new Intl.NumberFormat('en-US');
 let lastSig = '';
 let hasRendered = false;
 
-const compact = n => n >= 1e9 ? (n / 1e9).toFixed(2).replace('.', ',') + ' Md'
-  : n >= 1e6 ? (n / 1e6).toFixed(2).replace('.', ',') + ' M'
-  : n >= 1e3 ? (n / 1e3).toFixed(1).replace('.', ',') + ' k'
+const compact = n => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B'
+  : n >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
+  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k'
   : String(n);
-const usd = n => n.toFixed(2).replace('.', ',') + ' $';
-const pct = x => (x * 100).toFixed(1).replace('.', ',');
+const usd = n => '$' + n.toFixed(2);
+const pct = x => (x * 100).toFixed(1) + '%';
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
 
 function render(d) {
@@ -153,9 +153,9 @@ function render(d) {
      plutot qu'un montant saisi a la main — il pouvait dater de semaines. La
      date de reinitialisation, elle, reste : elle vient des reglages. */
   const resetLine = q.days_left === null || q.days_left === undefined ? ''
-    : q.days_left < 1 ? "reset aujourd'hui"
-    : q.days_left < 2 ? 'reset demain'
-    : `reset dans ${Math.floor(q.days_left)} j`;
+    : q.days_left < 1 ? 'reset today'
+    : q.days_left < 2 ? 'reset tomorrow'
+    : `reset in ${Math.floor(q.days_left)} days`;
 
   let quotaBlock = '';
   if (q.source === 'api' && typeof q.ratio === 'number') {
@@ -163,26 +163,26 @@ function render(d) {
     const has = q.current !== null && q.current !== undefined;
     quotaBlock = `
       <div class="row">
-        <span class="label" style="margin:0">Quota mensuel</span>
-        <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)} %</span>
+        <span class="label" style="margin:0">Monthly quota</span>
+        <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)}</span>
       </div>
       <div class="meter" style="--fill:${severity(ratio)}" role="img"
-           aria-label="${pct(ratio)} pour cent du quota mensuel${
-             has ? ` : ${usd(q.current)} sur ${usd(q.monthly)}` : ''}">
+           aria-label="${pct(ratio)} of the monthly quota${
+             has ? `: ${usd(q.current)} of ${usd(q.monthly)}` : ''}">
         <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
       </div>
       <div class="row">
-        <span class="sub">${has ? `${usd(q.current)} sur ${usd(q.monthly)}` : ''}</span>
+        <span class="sub">${has ? `${usd(q.current)} of ${usd(q.monthly)}` : ''}</span>
         <span class="sub">${resetLine}</span>
       </div>`;
   } else {
     /* Rien d'autre ici : sans cle, ollama.com ne repond rien, et l'app n'a
        donc aucun chiffre de quota a montrer — juste l'invitation a en saisir
        une depuis le tableau de bord. */
-    quotaBlock = `<p class="label">Quota mensuel</p>
+    quotaBlock = `<p class="label">Monthly quota</p>
       <p class="sub">${q.key_set
-        ? 'Lecture impossible — vérifie ta clé API dans le tableau de bord.'
-        : 'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.'}</p>`;
+        ? 'Cannot read — check your API key in the dashboard.'
+        : 'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.'}</p>`;
   }
 
   const models = (d.models || []).slice(0, 3).map(m =>
@@ -191,9 +191,9 @@ function render(d) {
   ).join('');
 
   const rate = q.rate_per_day && q.exhausted_in_days !== null && q.exhausted_in_days !== undefined
-    ? `<p class="sub" style="margin:10px 0 0">${usd(q.rate_per_day)} / jour${
+    ? `<p class="sub" style="margin:10px 0 0">${usd(q.rate_per_day)} / day${
         q.days_left !== null && q.exhausted_in_days < q.days_left
-          ? ` — plafond atteint dans ${Math.floor(q.exhausted_in_days)} j` : ''}</p>`
+          ? ` — cap reached in ${Math.floor(q.exhausted_in_days)} days` : ''}</p>`
     : '';
 
   /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
@@ -205,14 +205,14 @@ function render(d) {
     ${rate}
     ${live ? `
       <hr>
-      <p class="label">Ce mois</p>
+      <p class="label">This month</p>
       <div class="row">
         <span class="big">${compact(d.grand_total || 0)}</span>
         <span class="sub">${nf.format(d.messages || 0)} req.</span>
       </div>
-      <div class="models">${models || '<p class="empty">Aucune consommation sur ce cycle.</p>'}</div>` : ''}
+      <div class="models">${models || '<p class="empty">No usage in this cycle.</p>'}</div>` : ''}
     <div class="actions">
-      <button type="button" id="open">Ouvrir le tableau de bord</button>
+      <button type="button" id="open">Open the dashboard</button>
     </div>`;
 
   document.getElementById('open').addEventListener('click', () => {
@@ -228,7 +228,7 @@ function render(d) {
 function setLive(on) {
   const el = document.getElementById('live');
   el.classList.toggle('stale', !on);
-  el.lastElementChild.textContent = on ? 'En direct' : 'Reconnexion';
+  el.lastElementChild.textContent = on ? 'Live' : 'Reconnecting';
 }
 
 /* Le popover s'ajuste a la hauteur reelle du contenu : sans cela il garde la

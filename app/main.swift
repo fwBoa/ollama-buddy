@@ -118,42 +118,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let appItem = NSMenuItem()
         main.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "À propos d'\(appName)",
+        appMenu.addItem(withTitle: "About \(appName)",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Afficher la fenêtre",
+        appMenu.addItem(withTitle: "Show Window",
                         action: #selector(showWindowAction), keyEquivalent: "1")
-        appMenu.addItem(withTitle: "Ouvrir dans le navigateur",
+        appMenu.addItem(withTitle: "Open in Browser",
                         action: #selector(openInBrowser), keyEquivalent: "o")
-        appMenu.addItem(withTitle: "Ouvrir le dossier de données",
+        appMenu.addItem(withTitle: "Open Data Folder",
                         action: #selector(openDataFolder), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Masquer \(appName)",
+        appMenu.addItem(withTitle: "Hide \(appName)",
                         action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quitter \(appName)",
+        appMenu.addItem(withTitle: "Quit \(appName)",
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let viewItem = NSMenuItem()
         main.addItem(viewItem)
-        let viewMenu = NSMenu(title: "Présentation")
-        viewMenu.addItem(withTitle: "Recharger", action: #selector(reload), keyEquivalent: "r")
-        viewMenu.addItem(withTitle: "Actualiser les données",
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+        viewMenu.addItem(withTitle: "Refresh Data",
                          action: #selector(reloadFresh), keyEquivalent: "R")
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Taille réelle", action: #selector(actualSize), keyEquivalent: "0")
-        viewMenu.addItem(withTitle: "Agrandir", action: #selector(zoomIn), keyEquivalent: "+")
-        viewMenu.addItem(withTitle: "Réduire", action: #selector(zoomOut), keyEquivalent: "-")
+        viewMenu.addItem(withTitle: "Actual Size", action: #selector(actualSize), keyEquivalent: "0")
+        viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "+")
+        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-")
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Plein écran", action: #selector(NSWindow.toggleFullScreen(_:)),
+        viewMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)),
                          keyEquivalent: "f")
         viewItem.submenu = viewMenu
 
         let windowItem = NSMenuItem()
         main.addItem(windowItem)
-        let windowMenu = NSMenu(title: "Fenêtre")
-        windowMenu.addItem(withTitle: "Réduire", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.zoom(_:)), keyEquivalent: "")
         windowItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
@@ -278,7 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let color: NSColor
         if let ratio = ratio {
             color = ratio >= 0.9 ? .systemRed : ratio >= 0.7 ? .systemOrange : .labelColor
-            text = " \(Int((ratio * 100).rounded())) %"
+            text = " \(Int((ratio * 100).rounded()))%"
         } else {
             color = .secondaryLabelColor
             text = " —"
@@ -288,8 +288,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             attributes: [.foregroundColor: color, .font: NSFont.systemFont(ofSize: 12)]
         )
         button.toolTip = ratio == nil
-            ? "Ollama Buddy — \(note.isEmpty ? "quota non configuré" : note)"
-            : "Ollama Buddy — \(Int((ratio! * 100).rounded())) % du quota mensuel"
+            ? "Ollama Buddy — \(note.isEmpty ? "quota not configured" : note)"
+            : "Ollama Buddy — \(Int((ratio! * 100).rounded()))% of the monthly quota"
     }
 
     private func dot(_ color: NSColor) -> NSImage {
@@ -376,9 +376,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             if ratio != nil {
                 note = ""
             } else if (quota["key_set"] as? Bool) == true {
-                note = quota["key_error"] as? String ?? "aucun chiffre publié"
+                note = quota["key_error"] as? String ?? "no figures published"
             } else {
-                note = "aucune clé API — ouvre le tableau de bord pour la saisir"
+                note = "no API key — open the dashboard to enter one"
             }
             DispatchQueue.main.async { self.updateStatusTitle(ratio: ratio, note: note) }
         }.resume()
@@ -421,7 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private func launchServer(at port: Int) {
         guard let script = Bundle.main.url(forResource: "ollama_buddy", withExtension: "py",
                                            subdirectory: "app") else {
-            showFatal("Le serveur embarqué est introuvable dans l'application.")
+            showFatal("The embedded server is missing from the app.")
             return
         }
 
@@ -442,7 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         do {
             try process.run()
         } catch {
-            showFatal("Impossible de lancer le serveur : \(error.localizedDescription)")
+            showFatal("Could not start the server: \(error.localizedDescription)")
             return
         }
 
@@ -454,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     private func waitForServer(attempts: Int) {
         guard attempts > 0 else {
-            showFatal("Le serveur n'a pas répondu dans le délai imparti.")
+            showFatal("The server did not respond in time.")
             return
         }
         // Le processus a pu mourir (port occupe, python absent) : on tente un autre port.
@@ -547,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             miniBroken = true
             return
         }
-        showFatal("Connexion au serveur local impossible.\n\n\(error.localizedDescription)")
+        showFatal("Could not connect to the local server.\n\n\(error.localizedDescription)")
     }
 
     // Les liens externes s'ouvrent dans le navigateur, pas dans la fenetre.
@@ -602,8 +602,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     private func loadingPage() -> String {
-        shell("Lecture…",
-              "Indexation de ton historique. Cela prend quelques secondes au premier lancement.",
+        shell("Reading…",
+              "Starting the local server. This takes a moment on first launch.",
               spinner: true)
     }
 

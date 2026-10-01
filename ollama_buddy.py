@@ -53,7 +53,7 @@ CLOUD_SAMPLE_SECONDS = 300
 
 DAY_MS = 86_400_000
 
-# Un modele au-dela de ce slot est regroupe dans "Autres" (la 9e serie n'a
+# Un modele au-dela de ce slot est regroupe dans "Other" (la 9e serie n'a
 # jamais de teinte inventee).
 MAX_SLOTS = 8
 
@@ -122,7 +122,7 @@ def cloud_usage(api_key: str) -> dict:
     dict — soit les donnees, soit `{"error": ...}` que l'interface affiche.
     """
     if not api_key:
-        return {"error": "aucune clé"}
+        return {"error": "no key"}
 
     req = urllib.request.Request(
         f"{OLLAMA_CLOUD}/api/usage",
@@ -137,7 +137,7 @@ def cloud_usage(api_key: str) -> dict:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            return {"error": "clé refusée"}
+            return {"error": "key rejected"}
         return {"error": f"HTTP {exc.code}"}
     except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError) as exc:
         return {"error": type(exc).__name__}
@@ -223,7 +223,7 @@ def fold_extra(rows: list[dict]) -> list[dict]:
     if not over:
         return rows
     rows.append({
-        "model": f"Autres ({len(over)})",
+        "model": f"Other ({len(over)})",
         "slot": MAX_SLOTS,
         "total": sum(r["total"] for r in over),
         "messages": sum(r["messages"] for r in over),
@@ -751,7 +751,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Tableau de bord Ollama Cloud")
+    parser = argparse.ArgumentParser(description="Ollama Cloud dashboard")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
@@ -788,7 +788,7 @@ def main() -> int:
     threading.Thread(target=watcher, daemon=True).start()
 
     url = f"http://127.0.0.1:{port}/"
-    print(f"Ollama Buddy -> {url}   (Ctrl+C pour quitter)")
+    print(f"Ollama Buddy -> {url}   (Ctrl+C to quit)")
 
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

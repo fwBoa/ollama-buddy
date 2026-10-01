@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ollama Buddy — consommation des modèles Ollama Cloud</title>
+<title>Ollama Buddy — Ollama Cloud model usage</title>
 <link rel="icon" href="ollama.png" type="image/png">
 <script>
   /* Pose avant le premier rendu, sinon le contenu saute quand la classe
@@ -429,7 +429,7 @@
 </head>
 <body>
 
-<a class="skip" href="#main">Aller au contenu</a>
+<a class="skip" href="#main">Skip to content</a>
 
 <div class="wrap">
   <header class="topbar">
@@ -437,23 +437,23 @@
     <h1>Ollama Buddy</h1>
     <span class="plan" id="plan" hidden></span>
     <span class="live" id="live" role="status" aria-live="polite" hidden>
-      <i aria-hidden="true"></i><span>Connexion…</span>
+      <i aria-hidden="true"></i><span>Connecting…</span>
     </span>
     <button type="button" class="icon-btn" id="refresh"
-            aria-label="Rafraîchir la consommation"
-            title="Redemander l'usage à ollama.com sans attendre la fin du cache">
+            aria-label="Refresh usage"
+            title="Ask ollama.com for usage again without waiting for the cache to expire">
       <span aria-hidden="true">↻</span>
     </button>
-    <button type="button" class="icon-btn" id="theme" aria-label="Changer de thème"
-            title="Thème : automatique">
+    <button type="button" class="icon-btn" id="theme" aria-label="Change theme"
+            title="Theme: automatic">
       <span aria-hidden="true" id="theme-icon">◐</span>
     </button>
   </header>
 
   <main id="main">
-    <p class="sub" id="sub">Consommation Ollama Cloud</p>
+    <p class="sub" id="sub">Ollama Cloud usage</p>
 
-    <div id="app"><p class="state">Lecture…</p></div>
+    <div id="app"><p class="state">Reading…</p></div>
   </main>
 </div>
 
@@ -461,26 +461,26 @@
 "use strict";
 
 const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--s9'];
-const nf = new Intl.NumberFormat('fr-FR');
+const nf = new Intl.NumberFormat('en-US');
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 let lastData = null;
 let tipShownOnce = false;
 let staggerNext = true;   // l'entree en cascade joue au prochain rendu
 
-/* --- Formatage compact francais (Md / M / k), pas le B/M/K anglais --- */
+/* --- Formatage compact anglais (B / M / k), pas le Md/M/k francais --- */
 function compact(n) {
-  if (n >= 1e9) return { v: (n / 1e9).toFixed(2).replace('.', ','), u: 'Md' };
-  if (n >= 1e6) return { v: (n / 1e6).toFixed(2).replace('.', ','), u: 'M'  };
-  if (n >= 1e3) return { v: (n / 1e3).toFixed(1).replace('.', ','), u: 'k'  };
+  if (n >= 1e9) return { v: (n / 1e9).toFixed(2), u: 'B' };
+  if (n >= 1e6) return { v: (n / 1e6).toFixed(2), u: 'M' };
+  if (n >= 1e3) return { v: (n / 1e3).toFixed(1), u: 'k' };
   return { v: String(n), u: '' };
 }
-const fmt = n => { const c = compact(n); return c.v + (c.u ? ' ' + c.u : ''); };
+const fmt = n => { const c = compact(n); return c.v + c.u; };
 
 /* Une seule unité : l'API ollama.com publie des nombres d'appels, jamais de
    tokens. Le serveur le confirme en envoyant `unit: "requetes"` — le libellé
    est donc constant, et aucun texte ne peut se tromper d'unité. */
-const UNIT = 'requêtes';
+const UNIT = 'requests';
 
 /* Seuils de gravité du quota : la barre change de couleur avant le plafond,
    jamais l'inverse — un rouge atteint trop tôt ne veut plus rien dire. */
@@ -490,15 +490,15 @@ function severity(ratio) {
   return 'var(--accent)';
 }
 const exact = n => nf.format(n);
-const pct = x => (x * 100).toFixed(1).replace('.', ',');
-const usd = n => n.toFixed(2).replace('.', ',') + ' $';
+const pct = x => (x * 100).toFixed(1) + '%';
+const usd = n => '$' + n.toFixed(2);
 
 
 function whenText(days) {
   if (days === null || days === undefined) return '';
-  if (days < 1) return "aujourd'hui";
-  if (days < 2) return 'demain';
-  return `dans ${Math.floor(days)} jours`;
+  if (days < 1) return 'today';
+  if (days < 2) return 'tomorrow';
+  return `in ${Math.floor(days)} days`;
 }
 
 
@@ -522,37 +522,37 @@ function renderQuota(q) {
      porte le pourcentage, meme si le plafond n'est pas renseigne. */
   const ratio = live && typeof q.ratio === 'number' ? q.ratio : 0;
   const resetText = q.days_left === null || q.days_left === undefined ? ''
-    : q.days_left < 1 ? "réinitialisation aujourd'hui"
-    : q.days_left < 2 ? 'réinitialisation demain'
-    : `réinitialisation dans ${Math.floor(q.days_left)} jours`;
+    : q.days_left < 1 ? 'reset today'
+    : q.days_left < 2 ? 'reset tomorrow'
+    : `reset in ${Math.floor(q.days_left)} days`;
 
   let rateLine = '';
   if (has && q.rate_per_day) {
-    const bits = [`À ce rythme : <b>+${usd(q.rate_per_day)} / jour</b>`];
+    const bits = [`At this rate: <b>+${usd(q.rate_per_day)} / day</b>`];
     if (q.exhausted_in_days !== null && q.exhausted_in_days !== undefined) {
       const beforeReset = q.days_left !== null && q.exhausted_in_days < q.days_left;
       const when = whenText(q.exhausted_in_days);
       bits.push(beforeReset
-        ? `<span class="alert">plafond atteint ${when}, avant la réinitialisation</span>`
-        : `plafond atteint ${when}`);
+        ? `<span class="alert">cap reached ${when}, before the reset</span>`
+        : `cap reached ${when}`);
     }
     rateLine = `<p class="quota-rate">${bits.join(' · ')}</p>`;
   }
 
-  /* Le motif exact compte : « clé refusée » (401), panne reseau et reponse
+  /* Le motif exact compte : « key rejected » (401), panne reseau et reponse
      inattendue n'appellent pas la meme action de la part de l'utilisateur. */
   const lead = !keySet
-    ? `Relie ton compte pour lire le quota en direct : le pourcentage exact, et la
-       répartition par modèle pour <b>tous</b> tes outils, y compris ceux dont
-       l'app ne voit jamais passer la requête.`
-    : keyError === 'clé refusée'
-      ? `<b class="bad">Clé refusée</b> — Ollama l'a rejetée. Crée-en une autre sur
+    ? `Connect your account to read the quota live: the exact percentage, and the
+       breakdown by model for <b>all</b> your tools, including those whose
+       requests the app never sees.`
+    : keyError === 'key rejected'
+      ? `<b class="bad">Key rejected</b> — Ollama turned it down. Create another one at
          <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>.`
       : keyError
-        ? `<b class="bad">Lecture impossible</b> (${keyError}) — ollama.com n'a pas
-           répondu comme prévu. Nouvelle tentative à la prochaine actualisation.`
-        : `<b class="bad">Réponse inattendue</b> d'ollama.com. L'usage n'a pas pu
-           être lu.`;
+        ? `<b class="bad">Cannot read</b> (${keyError}) — ollama.com did not
+           answer as expected. Another attempt on the next refresh.`
+        : `<b class="bad">Unexpected response</b> from ollama.com. Usage could not
+           be read.`;
 
   /* --- Carte de connexion : le seul endroit où l'app demande une clé.
          Le champ reste vide même quand une clé est enregistrée : le secret
@@ -561,15 +561,15 @@ function renderQuota(q) {
     <div class="connect">
       <p class="connect-lead">${lead}</p>
       <div class="connect-row">
-        <label class="visually-hidden" for="api-key">Clé API ollama.com</label>
+        <label class="visually-hidden" for="api-key">ollama.com API key</label>
         <input id="api-key" type="password" autocomplete="off" spellcheck="false"
-               placeholder="${keySet ? 'coller une autre clé' : 'coller ta clé API'}"
+               placeholder="${keySet ? 'paste another key' : 'paste your API key'}"
                aria-describedby="key-hint">
-        <button class="btn primary" id="save-key" type="button">Enregistrer</button>
+        <button class="btn primary" id="save-key" type="button">Save</button>
       </div>
       <p class="hint" id="key-hint">
-        Crée-la sur <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>.
-        Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.
+        Create one at <a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>.
+        It never leaves your machine and serves only to <em>read</em> your usage.
       </p>
     </div>`;
 
@@ -579,29 +579,29 @@ function renderQuota(q) {
      au point. */
   const settings = `
     <details class="quota-settings">
-      <summary>Paramètres</summary>
+      <summary>Settings</summary>
       <div class="settings-row">
-        <label>Plafond mensuel
+        <label>Monthly cap
           <input id="monthly" type="number" min="1" step="1" value="${monthly}" inputmode="decimal">
         </label>
-        <label>Prochaine réinitialisation
+        <label>Next reset
           <input id="reset-at" type="date"
                  value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
         </label>
-        <button class="btn" id="save-monthly" type="button">Enregistrer</button>
+        <button class="btn" id="save-monthly" type="button">Save</button>
       </div>
       ${live ? `<div class="settings-row">
-        <label>Clé API ollama.com
+        <label>ollama.com API key
           <input id="api-key" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="coller une autre clé" aria-describedby="key-hint-2">
+                 placeholder="paste another key" aria-describedby="key-hint-2">
         </label>
-        <button class="btn" id="save-key" type="button">Changer</button>
-        <button class="btn" id="remove-key" type="button">Retirer</button>
+        <button class="btn" id="save-key" type="button">Change</button>
+        <button class="btn" id="remove-key" type="button">Remove</button>
       </div>
       <p class="hint" id="key-hint-2">
-        Remplacer la clé révoque l'ancienne à la prochaine lecture. La retirer
-        ne laisse que la carte de connexion : tout le quota vient d'ollama.com,
-        donc sans clé il ne reste aucun chiffre.
+        Replacing the key revokes the old one on the next read. Removing it leaves
+        only the sign-in card: the whole quota comes from ollama.com, so with no
+        key there is no figure left.
       </p>` : ''}
     </details>`;
 
@@ -612,7 +612,7 @@ function renderQuota(q) {
   if (!live) {
     return `
       <section class="quota" aria-labelledby="quota-h">
-        <h2 id="quota-h" class="visually-hidden">Quota mensuel</h2>
+        <h2 id="quota-h" class="visually-hidden">Monthly quota</h2>
         ${connect}
         ${settings}
       </section>`;
@@ -620,27 +620,27 @@ function renderQuota(q) {
 
   return `
     <section class="quota" aria-labelledby="quota-h">
-      <h2 id="quota-h" class="visually-hidden">Quota mensuel</h2>
+      <h2 id="quota-h" class="visually-hidden">Monthly quota</h2>
       <div class="quota-head">
-        <span class="t">Quota mensuel</span>
-        <span class="pct">${pct(ratio)} %</span>
+        <span class="t">Monthly quota</span>
+        <span class="pct">${pct(ratio)}</span>
       </div>
       <div class="meter" role="img" style="--fill:${severity(ratio)}"
-           aria-label="${pct(ratio)} pour cent du quota mensuel consommé${
-             has ? ` : ${usd(q.current)} sur ${usd(monthly)}` : ''}">
+           aria-label="${pct(ratio)} of the monthly quota consumed${
+             has ? `: ${usd(q.current)} of ${usd(monthly)}` : ''}">
         <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
       </div>
       <div class="quota-foot">
-        <span>${has ? `${usd(q.current)} sur ${usd(monthly)}` : 'plafond non renseigné'}</span>
-        <span>${has && q.projected_at_reset ? `projeté au reset : ${usd(q.projected_at_reset)}` : resetText}</span>
+        <span>${has ? `${usd(q.current)} of ${usd(monthly)}` : 'no cap set'}</span>
+        <span>${has && q.projected_at_reset ? `projected at reset: ${usd(q.projected_at_reset)}` : resetText}</span>
       </div>
       ${rateLine}
       <p class="quota-source">
         ${q.cycle_start
-          ? `Cycle ouvert le <b>${new Date(q.cycle_start).toLocaleDateString('fr-FR')}</b>. `
-          : ''}<b>ollama.com</b> publie le pourcentage consommé ; le montant en
-        dollars est ce pourcentage appliqué au plafond du plan. Il tombe donc
-        sur la somme affichée sur le site.
+          ? `Cycle opened on <b>${new Date(q.cycle_start).toLocaleDateString('en-US')}</b>. `
+          : ''}<b>ollama.com</b> publishes the consumed percentage; the amount in
+        dollars is that percentage applied to the plan's cap. It therefore lands
+        on the sum shown on the site.
       </p>
       ${settings}
     </section>`;
@@ -673,18 +673,18 @@ function render(data) {
   const quota = renderQuota(data.quota);
 
   if (!models.length) {
-    sub.textContent = 'Consommation Ollama Cloud';
+    sub.textContent = 'Ollama Cloud usage';
     app.innerHTML = `
-      <p class="state">Aucune consommation sur ce cycle.</p>
+      <p class="state">No usage in this cycle.</p>
       ${quota}`;
     return;
   }
 
   /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
   const top = models[0];
-  let reading = `<b>${fmt(total)}</b> ${UNIT} sur le mois en cours`;
-  if (models.length > 1) reading += `, portés à ${pct(top.share)} % par <b>${top.model}</b>`;
-  else reading += `, tous sur <b>${top.model}</b>`;
+  let reading = `<b>${fmt(total)}</b> ${UNIT} this month`;
+  if (models.length > 1) reading += `, led by <b>${top.model}</b> at ${pct(top.share)}`;
+  else reading += `, all on <b>${top.model}</b>`;
   reading += '.';
   sub.innerHTML = reading;
 
@@ -702,31 +702,31 @@ function render(data) {
         <i class="swatch" style="background:var(${v})"></i>
         <div class="model-name">
           <span class="id">${m.model}</span>
-          <span class="n">${nf.format(m.messages)} ${m.messages > 1 ? 'requêtes' : 'requête'}</span>
+          <span class="n">${nf.format(m.messages)} ${m.messages > 1 ? 'requests' : 'request'}</span>
         </div>
-        <div class="bar" role="img" aria-label="${m.model} : ${pct(m.share)} % du total">
+        <div class="bar" role="img" aria-label="${m.model}: ${pct(m.share)} of the total">
           <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
         </div>
         <div class="model-stats">
-          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)} %</span>
+          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)}</span>
         </div>
       </div>`;
   }).join('');
 
   app.innerHTML = `
-    <h2 class="visually-hidden">Vue d'ensemble</h2>
+    <h2 class="visually-hidden">Overview</h2>
 
     <div class="hero-row">
       <div class="hero-figure">
-        <div class="hero-label">Requêtes ce mois</div>
+        <div class="hero-label">Requests this month</div>
         <div class="hero-value" id="hero">${compact(total).v}${compact(total).u ? `<span class="hero-unit">${compact(total).u}</span>` : ''}</div>
       </div>
       <div class="stat">
-        <span class="k">Modèles actifs</span>
+        <span class="k">Active models</span>
         <span class="v">${data.models_total ?? models.length}</span>
       </div>
       <div class="stat">
-        <span class="k">Moyenne / jour</span>
+        <span class="k">Average / day</span>
         <span class="v">${fmt(avg)}</span>
       </div>
     </div>
@@ -736,16 +736,16 @@ function render(data) {
         ${quota}
       </div>
       <section aria-labelledby="split-h">
-        <h2 id="split-h" class="section-title">Répartition par modèle</h2>
+        <h2 id="split-h" class="section-title">Breakdown by model</h2>
         <div class="models${staggerNext ? ' stagger' : ''}">${rows}</div>
       </section>
     </div>
 
-    ${data.error ? `<div class="warn-line" role="alert">Erreur de lecture : ${data.error}</div>` : ''}
+    ${data.error ? `<div class="warn-line" role="alert">Read error: ${data.error}</div>` : ''}
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
-    `${exact(total)} ${UNIT} sur le mois en cours`);
+    `${exact(total)} ${UNIT} this month`);
 
   /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
      au frame suivant pour que la transition se declenche, et les mises a jour
@@ -775,8 +775,8 @@ function applyTheme(value) {
   const icon = document.getElementById('theme-icon');
   const button = document.getElementById('theme');
   if (icon) icon.textContent = THEME_ICONS[theme];
-  if (button) button.title = 'Thème : ' +
-    (theme === 'auto' ? 'automatique' : theme === 'light' ? 'clair' : 'sombre');
+  if (button) button.title = 'Theme: ' +
+    (theme === 'auto' ? 'automatic' : theme === 'light' ? 'light' : 'dark');
 }
 
 document.getElementById('theme').addEventListener('click', async () => {
@@ -826,7 +826,7 @@ function applyData(data) {
 
   if (data.error && !data.models) {
     document.getElementById('app').innerHTML =
-      `<p class="state" role="alert">Erreur : ${data.error}</p>`;
+      `<p class="state" role="alert">Error: ${data.error}</p>`;
     return;
   }
   render(data);
@@ -837,7 +837,7 @@ function setLive(state) {
   el.hidden = false;
   el.classList.toggle('stale', state !== 'on');
   el.lastElementChild.textContent =
-    state === 'on' ? 'En direct' : state === 'off' ? 'Reconnexion…' : 'Connexion…';
+    state === 'on' ? 'Live' : state === 'off' ? 'Reconnecting…' : 'Connecting…';
 }
 
 function beat() {
@@ -878,7 +878,7 @@ async function load() {
     applyData(await res.json());
   } catch (err) {
     document.getElementById('app').innerHTML =
-      `<p class="state" role="alert">Impossible de lire l'usage : ${err.message}</p>`;
+      `<p class="state" role="alert">Could not read usage: ${err.message}</p>`;
   }
 }
 

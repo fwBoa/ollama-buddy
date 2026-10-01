@@ -14,6 +14,6 @@
     <key>LSMinimumSystemVersion</key>        <string>12.0</string>
     <key>NSHighResolutionCapable</key>       <true/>
     <key>LSApplicationCategoryType</key>     <string>public.app-category.developer-tools</string>
-    <key>NSHumanReadableCopyright</key>      <string>Suivi local de la consommation Ollama Cloud</string>
+    <key>NSHumanReadableCopyright</key>      <string>Local Ollama Cloud usage tracking</string>
 </dict>
 </plist>
