@@ -190,10 +190,16 @@ tailles de titre en `clamp()`, deux colonnes qui se replient en une seule sous 9
 Les composants utilisent des **container queries** — la liste des modèles réagit à *sa*
 largeur, pas à celle de la fenêtre.
 
-**Couleurs.** Palette catégorielle validée par calcul, dans les deux thèmes, sur la
-surface réelle : bande de clarté, plancher de chroma, séparation pour les daltonismes
-(ΔE ≥ 8 en OKLab) et contraste ≥ 3:1. Chaque modèle garde sa teinte de façon
-**permanente** (stockée en base), jamais selon son rang.
+**Couleurs.** Huit teintes catégorielles — celles de la palette de référence de
+l'outil de validation — plus un gris pour « Autres », qui n'est pas une série mais un
+reste. Le validateur confirme, dans les deux thèmes : bande de clarté, plancher de
+chroma, et séparation pour les daltonismes (ΔE ≥ 8 en OKLab). En thème sombre, les
+huit passent aussi le seuil de contraste de 3:1 ; **en thème clair, trois d'entre
+elles — aqua, jaune, magenta — restent en dessous**, et c'est documenté comme tel.
+La parade n'est pas la couleur : chaque modèle porte son nom, son nombre de requêtes
+et son pourcentage **écrits à côté**. L'information n'est jamais portée par la teinte
+seule. Chaque modèle garde la sienne de façon **permanente** (stockée en base),
+jamais selon son rang.
 
 **Thème.** Clair et sombre sont deux palettes **choisies**, pas une inversion
 automatique. Le thème suit macOS par défaut, et peut être forcé.
