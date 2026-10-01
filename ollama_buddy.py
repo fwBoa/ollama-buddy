@@ -117,6 +117,28 @@ def ollama_account() -> dict | None:
         return None
 
 
+# Dollars d'usage inclus par mois, par offre Ollama Cloud. Sert uniquement de
+# valeur de depart : des qu'un plafond est saisi, c'est le sien qui compte.
+# Ollama a deja change ses tarifs, donc cette table peut vieillir — le reglage
+# manuel reste la sortie, et une offre absente de la table n'affiche aucun
+# montant plutot qu'un montant faux.
+PLAN_CAPS = {"pro": 60.0, "max": 300.0}
+
+
+def monthly_cap(cfg: dict, account: dict | None) -> float:
+    """Plafond mensuel en dollars : celui saisi, sinon celui de l'offre.
+
+    Zero veut dire « pas saisi » : c'est la valeur par defaut. C'est aussi ce
+    qui permet a une offre Max de ne pas afficher des montants calcules sur le
+    plafond d'une Pro.
+    """
+    configured = float(cfg.get("monthly_quota") or 0)
+    if configured > 0:
+        return configured
+    plan = str((account or {}).get("plan") or "").strip().lower()
+    return PLAN_CAPS.get(plan, 0.0)
+
+
 def cloud_usage(api_key: str) -> dict:
     """Usage du compte ollama.com, lu avec une cle API.
 
@@ -363,7 +385,8 @@ def cloud_rate(conn: sqlite3.Connection, resets_at: int) -> tuple[float | None, 
     return share_per_day, rows[-1][1]
 
 
-def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) -> dict:
+def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
+                account: dict | None = None) -> dict:
     """Etat du plafond mensuel, lu sur ollama.com quand une cle est fournie.
 
     L'API ne donne ni le montant en dollars ni la date de reinitialisation :
@@ -375,12 +398,12 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) 
     vaut ne rien dire qu'afficher comme mesure un montant colle des semaines
     plus tot.
     """
-    monthly = float(cfg.get("monthly_quota") or 0)
+    monthly = monthly_cap(cfg, account)
     now_ms = int(time.time() * 1000)
     ratio = cloud_month_ratio(cloud)
 
     if ratio is None:
-        return quota_unavailable(cfg, cloud)
+        return quota_unavailable(cfg, cloud, account)
 
     resets_at = deduce_reset(cloud, cfg)
     days_left = max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None
@@ -396,6 +419,9 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) 
         "key_set": True,
         "key_error": None,
         "monthly": monthly,
+        # Ce qui est saisi, a part du plafond en vigueur : l'interface doit
+        # pouvoir montrer « rien de saisi » sans confondre ca avec « zero ».
+        "monthly_set": float(cfg.get("monthly_quota") or 0),
         "ratio": ratio,
         "current": current,
         "resets_at": resets_at,
@@ -410,7 +436,8 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None) 
     }
 
 
-def quota_unavailable(cfg: dict, cloud: dict | None = None) -> dict:
+def quota_unavailable(cfg: dict, cloud: dict | None = None,
+                      account: dict | None = None) -> dict:
     """Etat neutre : aucune part du plafond n'a pu etre lue.
 
     Meme jeu de cles que la branche API, mesures a None. Elles sont nommees
@@ -427,7 +454,8 @@ def quota_unavailable(cfg: dict, cloud: dict | None = None) -> dict:
         "error": None,
         "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
         "key_error": (cloud or {}).get("error"),
-        "monthly": float(cfg.get("monthly_quota") or 0),
+        "monthly": monthly_cap(cfg, account),
+        "monthly_set": float(cfg.get("monthly_quota") or 0),
         "ratio": None,
         "current": None,
         "resets_at": resets_at,
@@ -572,12 +600,15 @@ class State:
         meme cle, mesures a None.
         """
         cloud = self.cloud()
+        # Le compte est lu une fois : l'offre sert au plafond, et part aussi
+        # telle quelle dans le payload pour le badge.
+        account = ollama_account()
         live = bool(cloud) and "error" not in (cloud or {})
         with self.lock:
             data = build_cloud_usage(self.conn, cloud) if live else empty_usage()
-            data["quota"] = build_quota(self.conn, self.cfg, cloud)
+            data["quota"] = build_quota(self.conn, self.cfg, cloud, account)
         data["cloud"] = cloud
-        data["account"] = ollama_account()
+        data["account"] = account
         data["error"] = self.last_error
         data["theme"] = self.cfg.get("theme") or "auto"
         data["lang"] = self.cfg.get("lang") or "auto"
@@ -765,7 +796,10 @@ class Handler(BaseHTTPRequestHandler):
         save_config(cfg)
 
         with self.state.lock:
-            quota = build_quota(self.state.conn, cfg, self.state.cloud())
+            # L'offre est repassee : vider le plafond doit rendre celui du plan
+            # tout de suite, sans attendre le prochain envoi.
+            quota = build_quota(self.state.conn, cfg, self.state.cloud(),
+                                ollama_account())
         self.state.broadcast()
         self._json({"ok": True, "quota": quota})
 

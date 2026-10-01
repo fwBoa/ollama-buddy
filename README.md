@@ -132,9 +132,13 @@ The summary is live too: it updates for as long as it stays open.
 
 ## The monthly quota
 
-Ollama Pro includes **$60 of usage per month**. That is the measure that matters,
-because it covers **all** your clients, including those whose requests the app never
-sees.
+Ollama includes **$60 of usage per month on Pro**, and **$300 on Max**. That is the
+measure that matters, because it covers **all** your clients, including those whose
+requests the app never sees.
+
+The app reads your plan from the local Ollama app and takes its cap from there. The
+**Monthly cap** setting overrides that — leave the field empty to follow the plan
+again. A plan the app doesn't know shows no dollar amount rather than a wrong one.
 
 ### Linking your account (BYOK)
 

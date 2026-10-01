@@ -138,8 +138,13 @@ L'aperçu est lui aussi en direct : il se met à jour tant qu'il reste ouvert.
 
 ## Le quota mensuel
 
-Ollama Pro inclut **60 $ d'usage par mois**. C'est la mesure qui compte, parce qu'elle
-couvre **tous** tes clients, y compris ceux dont l'app ne voit jamais passer la requête.
+Ollama inclut **60 $ d'usage par mois en Pro**, et **300 $ en Max**. C'est la mesure
+qui compte, parce qu'elle couvre **tous** tes clients, y compris ceux dont l'app ne
+voit jamais passer la requête.
+
+L'app lit ton offre sur l'app Ollama locale et en tire le plafond. Le réglage
+**Plafond mensuel** prend le dessus — laisse le champ vide pour revenir à l'offre. Une
+offre que l'app ne connaît pas n'affiche aucun montant plutôt qu'un montant faux.
 
 ### Relier ton compte (BYOK)
 

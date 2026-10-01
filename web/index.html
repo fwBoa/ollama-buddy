@@ -521,6 +521,7 @@ const FR = {
     "Crée-la sur {link}. Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.",
   'Settings': 'Paramètres',
   'Monthly cap': 'Plafond mensuel',
+  'Leave empty to follow your Ollama plan.': 'Laisse vide pour suivre ton offre Ollama.',
   'Next reset': 'Prochaine réinitialisation',
   'Language': 'Langue',
   'Automatic': 'Automatique',
@@ -638,7 +639,8 @@ function renderQuota(q) {
   const live = q.source === 'api';
   const keySet = !!q.key_set;
   const keyError = q.key_error || null;
-  const monthly = q.monthly || 0;
+  const monthly = q.monthly || 0;          // le plafond en vigueur
+  const monthlySet = q.monthly_set || 0;   // ce qui est saisi, zero si rien
   const has = q.current !== null && q.current !== undefined;
   /* La part vient de l'API, jamais d'un rapport recalcule : c'est elle qui
      porte le pourcentage, meme si le plafond n'est pas renseigne. */
@@ -713,8 +715,14 @@ function renderQuota(q) {
       </div>
       <div class="settings-row">
         <label>${T('Monthly cap')}
-          <input id="monthly" type="number" min="1" step="1" value="${monthly}" inputmode="decimal">
+          <input id="monthly" type="number" min="1" step="1" inputmode="decimal"
+                 value="${monthlySet > 0 ? monthlySet : ''}"
+                 placeholder="${monthly > 0 ? monthly : ''}">
         </label>
+      </div>
+      <p class="hint" id="cap-hint">
+        ${T('Leave empty to follow your Ollama plan.')}
+      </p>
         <label>${T('Next reset')}
           <input id="reset-at" type="date"
                  value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
@@ -1113,8 +1121,11 @@ document.addEventListener('click', e => {
 
 
   if (btn.id === 'save-monthly') {
-    const value = parseFloat(document.getElementById('monthly').value);
-    if (!Number.isFinite(value) || value <= 0) return;
+    const raw = document.getElementById('monthly').value.trim();
+    // Vide veut dire « suis l'offre » : c'est la valeur par defaut, et le seul
+    // chemin de retour une fois un plafond saisi.
+    const value = raw === '' ? 0 : parseFloat(raw);
+    if (!Number.isFinite(value) || value < 0) return;
     postQuota({ monthly_quota: value }, btn);
   }
 
