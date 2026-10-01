@@ -270,7 +270,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                              styleMask: [.borderless, .nonactivatingPanel],
                              backing: .buffered, defer: false)
         panel.contentView = container
-        panel.isFloatingPanel = true
+        // Pas de isFloatingPanel : ce n'est pas un drapeau mais une affectation
+        // de niveau — elle vaut .floating (3) — et AppKit la reapplique a
+        // l'affichage. Le niveau voulu, pose juste apres, etait donc ecrase, et
+        // l'apercu repassait derriere la fenetre active. Ce que la propriete
+        // apporte par ailleurs — rester visible quand l'app n'est pas active —
+        // est deja assure par hidesOnDeactivate plus bas.
         // .floating (3) et .statusBar (25) passent SOUS le contenu plein ecran.
         // Recommandation d'un ingenieur DTS d'Apple : niveau .screenSaver.
         panel.level = .screenSaver
@@ -282,18 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         // Sans apparence explicite, la webview du panneau ne recoit pas le
         // theme du systeme et reste en clair.
         panel.appearance = NSApp.effectiveAppearance
-        // Sans canJoinAllApplications + stationary, le panneau ne suit pas les
-        // autres Spaces et disparait derriere une app en plein ecran.
-        // canJoinAllApplications n'existe qu'a partir de macOS 13 : sur Monterey
-        // on garde le reste, quitte a ce que le panneau cede devant une app en
-        // plein ecran. L'Info.plist annonce bien macOS 12 comme minimum.
-        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces,
-                                                     .fullScreenAuxiliary,
-                                                     .stationary, .ignoresCycle]
-        if #available(macOS 13.0, *) {
-            behavior.insert(.canJoinAllApplications)
-        }
-        panel.collectionBehavior = behavior
+        panel.collectionBehavior = panelBehavior()
 
         // Fermeture quand on clique ailleurs. On s'appuie sur la perte de focus
         // plutot que sur un moniteur global d'evenements : celui-ci exige
@@ -376,6 +370,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         return image
     }
 
+    /// Comportement de Space du panneau : il suit l'utilisateur partout.
+    ///
+    /// Sans canJoinAllApplications + stationary, le panneau ne suit pas les
+    /// autres Spaces et disparait derriere une app en plein ecran.
+    /// canJoinAllApplications n'existe qu'a partir de macOS 13 : sur Monterey on
+    /// garde le reste, quitte a ce que le panneau cede devant une app en plein
+    /// ecran. L'Info.plist annonce bien macOS 12 comme minimum.
+    private func panelBehavior() -> NSWindow.CollectionBehavior {
+        var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces,
+                                                     .fullScreenAuxiliary,
+                                                     .stationary, .ignoresCycle]
+        if #available(macOS 13.0, *) {
+            behavior.insert(.canJoinAllApplications)
+        }
+        return behavior
+    }
+
     @objc private func togglePanel(_ sender: Any?) {
         if panel.isVisible {
             hidePanel()
@@ -383,6 +394,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         loadMini()
         positionPanel()
+        // Le niveau est repose a chaque ouverture, et pas seulement a la
+        // construction : AppKit le remet a celui de son choix dans certains cas
+        // — panneau masque puis reaffiche, changement de Space, app active qui
+        // change — et l'apercu repassait alors derriere la fenetre au premier
+        // plan. Le poser ici, juste avant l'affichage, est ce qui compte.
+        panel.level = .screenSaver
+        panel.collectionBehavior = panelBehavior()
         // orderFrontRegardless : s'affiche sans que l'app ait a passer au
         // premier plan, ce qu'un popover ne savait pas faire.
         panel.orderFrontRegardless()
