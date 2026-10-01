@@ -25,17 +25,26 @@
     --surface-raised: #ffffff;
     --text-primary:   #0b0b0b;
     --text-secondary: #52514e;
-    --text-muted:     #898781;
+    --text-muted:     #6e6c67;
     --gridline:       #e1e0d9;
     --baseline:       #c3c2b7;
     --border:         rgba(11,11,11,0.10);
     --ghost:          rgba(11,11,11,0.04);
     --shadow:         0 1px 2px rgba(11,11,11,.05), 0 6px 20px rgba(11,11,11,.05);
-    --good:      #0ca30c;
-    --warning:   #fab219;
-    --serious:   #ec835a;
+    /* Gravite et accent sont calibres PAR THEME, au contraste mesure : 4,5:1
+       pour le texte, 3:1 pour un remplissage. Un ambre ou un orange clair
+       tient sur le fond sombre mais pas sur le fond clair, et un rouge assez
+       sombre pour le clair ne tient plus sur le sombre — d'ou deux jeux. */
+    --good:      #008800;
+    --warning:   #c57f00;
+    --serious:   #bc572e;
     --critical:  #d03b3b;
-    --accent:    #2a78d6;
+    --accent:    #2271ce;
+    /* L'accent sert de couleur de TEXTE (liens) : il doit etre clair sur fond
+       sombre. Mais il sert aussi de FOND a du texte blanc, ou il doit etre
+       sombre. Deux roles opposes — d'ou ce second jeton, assez sombre pour
+       porter du blanc dans les deux themes (5,7:1). */
+    --accent-solid: #1f66bb;
     --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
     --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
 
@@ -60,7 +69,7 @@
       --good:      #0ca30c;
       --warning:   #fab219;
       --serious:   #ec835a;
-      --critical:  #d03b3b;
+      --critical:  #de4946;
       --accent:    #3987e5;
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
       --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
@@ -85,7 +94,7 @@
     --good:      #0ca30c;
     --warning:   #fab219;
     --serious:   #ec835a;
-    --critical:  #d03b3b;
+    --critical:  #de4946;
     --accent:    #3987e5;
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
     --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
@@ -121,7 +130,7 @@
   .skip {
     position: absolute; left: 50%; top: 8px; transform: translate(-50%, -200%);
     z-index: 100; padding: 10px 18px; border-radius: 10px;
-    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+    background: var(--accent-solid); color: #fff; font-size: 14px; font-weight: 600;
     text-decoration: none; transition: transform 160ms var(--ease-out);
   }
   .skip:focus-visible { transform: translate(-50%, 0); }
@@ -314,9 +323,9 @@
   @media (hover: hover) and (pointer: fine) { .btn:hover { background: var(--ghost); } }
   /* L'action attendue du bloc : une seule par ecran, jamais deux. */
   .btn.primary {
-    color: #fff; background: var(--accent); border-color: transparent;
+    color: #fff; background: var(--accent-solid); border-color: transparent;
   }
-  @media (hover: hover) and (pointer: fine) { .btn.primary:hover { background: var(--accent); filter: brightness(1.08); } }
+  @media (hover: hover) and (pointer: fine) { .btn.primary:hover { background: var(--accent-solid); filter: brightness(1.08); } }
   .btn[disabled] { opacity: .55; cursor: default; }
   details.quota-settings { margin-top: 16px; }
   details.quota-settings summary {
