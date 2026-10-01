@@ -44,7 +44,7 @@ pip3 install pillow          # pour générer l'icône
 ```
 
 ```bash
-git clone https://github.com/<ton-compte>/ollama-buddy.git
+git clone https://github.com/fwBoa/ollama-buddy.git
 cd ollama-buddy
 ./build_app.sh --install     # construit et copie dans /Applications
 ```
