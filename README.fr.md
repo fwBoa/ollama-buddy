@@ -34,6 +34,8 @@ de bord l'affiche, et un aperçu discret reste en permanence dans la barre de me
 - **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
   rien périodiquement. Côté serveur, ollama.com est sollicité au plus une fois par
   minute, quel que soit le nombre d'onglets ouverts.
+- **En français et en anglais** — l'app suit la langue de ton Mac, ou tu peux
+  forcer l'une ou l'autre. Les deux réglages sont conservés.
 - **Aucune dépendance** — bibliothèque standard de Python 3.9+. Pour construire
   l'app : `swiftc` et Pillow.
 
@@ -112,10 +114,15 @@ est le seul chemin sans friction** — et c'est celui à recommander.
 | `⌘O` | Ouvrir dans le navigateur |
 | `⌘Q` | Quitter (arrête le serveur) |
 
-Dans le tableau de bord, le bouton en haut à droite fait défiler les trois thèmes :
-**automatique** (suit macOS), **clair**, **sombre**. Le réglage est conservé. Celui
-d'à côté redemande l'usage à ollama.com — sans lui, le cache d'une minute servirait la
-même valeur.
+Le tableau de bord porte trois boutons en haut à droite. Le premier redemande l'usage
+à ollama.com — sans lui, le cache d'une minute servirait la même valeur. Le deuxième
+fait défiler les trois thèmes : **automatique** (suit macOS), **clair**, **sombre**.
+Le troisième fait défiler la langue : **automatique** (suit la langue du système),
+**anglais**, **français**. Les deux réglages sont conservés, et se retrouvent tous les
+deux en liste dans *Paramètres*.
+
+L'aperçu de la barre de menus et les menus macOS suivent le même réglage — un seul
+endroit à configurer.
 
 ### La barre de menus
 

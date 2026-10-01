@@ -31,6 +31,8 @@ a dashboard displays it, and a discreet summary stays in the menu bar at all tim
 - **Real time** — the server pushes changes over SSE, the interface polls nothing.
   On the server side, ollama.com is queried at most once a minute, however many
   tabs are open.
+- **In English and French** — the app follows your Mac's language, or you can
+  force either one. Both settings are remembered.
 - **No dependencies** — Python 3.9+ standard library only. To build the app:
   `swiftc` and Pillow.
 
@@ -106,10 +108,15 @@ is the only frictionless path** — and the one to recommend.
 | `⌘O` | Open in the browser |
 | `⌘Q` | Quit (stops the server) |
 
-In the dashboard, the button in the top right cycles the three themes: **automatic**
-(follows macOS), **light**, **dark**. The setting is remembered. The one next to it
-asks ollama.com for usage again — without it, the one-minute cache would serve the
-same value.
+The dashboard carries three buttons in its top right. The first asks ollama.com for
+usage again — without it, the one-minute cache would serve the same value. The second
+cycles the three themes: **automatic** (follows macOS), **light**, **dark**. The third
+cycles the language: **automatic** (follows the system language), **English**,
+**French**. Both settings are remembered, and both appear again as a list in
+*Settings*.
+
+The menu bar summary and the macOS menus follow the same setting — no second place to
+configure.
 
 ### The menu bar
 
