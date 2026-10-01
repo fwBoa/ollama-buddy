@@ -24,8 +24,8 @@ de bord l'affiche, et un aperçu discret reste en permanence dans la barre de me
 
 - **Quota mensuel exact, en direct** — le pourcentage publié par ollama.com, plus le
   montant en dollars, le rythme de dépense et la date de réinitialisation.
-- **Répartition par modèle, tous clients confondus** — Claude Code, l'app Ollama, la
-  recherche web et le reste, avec les mêmes chiffres qu'ollama.com.
+- **Répartition par modèle, tous clients confondus** — le terminal, l'app Ollama,
+  la recherche web et le reste, avec les mêmes chiffres qu'ollama.com.
 - **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage
   (avec une clé), qui ouvre un résumé compact.
 - **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
