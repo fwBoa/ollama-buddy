@@ -191,6 +191,13 @@ const pct = x => (lang === 'fr'
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
 const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
 
+/* En jours du calendrier, pas en tranches de 24 h : une remise a zero demain
+   a 11 h est « demain », pas « aujourd'hui » parce qu'il reste 23 heures. */
+const DAY_MS = 86400000;
+const joursEntre = (instant, maintenant) =>
+  Math.round((new Date(instant).setHours(0, 0, 0, 0)
+              - new Date(maintenant).setHours(0, 0, 0, 0)) / DAY_MS);
+
 function render(d) {
   const q = d.quota || {};
   const body = document.getElementById('body');
@@ -199,12 +206,15 @@ function render(d) {
   if (d.lang) applyLang(d.lang);
 
   /* Le quota ne vient que d'ollama.com. Sans cle, on n'affiche aucun chiffre
-     plutot qu'un montant saisi a la main — il pouvait dater de semaines. La
-     date de reinitialisation, elle, reste : elle vient des reglages. */
-  const resetLine = q.days_left === null || q.days_left === undefined ? ''
-    : q.days_left < 1 ? T('reset today')
-    : q.days_left < 2 ? T('reset tomorrow')
-    : fill(T('reset in {n} days'), { n: Math.floor(q.days_left) });
+     plutot qu'un montant saisi a la main — il pouvait dater de semaines.
+     Le compte a rebours, lui, se tait quand la date n'est pas connue : les
+     reglages, ou une remise a zero deja vue, sont les seules sources. */
+  const resetDays = q.days_left === null || q.days_left === undefined ? null
+    : joursEntre(q.resets_at, Date.now());
+  const resetLine = resetDays === null ? ''
+    : resetDays <= 0 ? T('reset today')
+    : resetDays === 1 ? T('reset tomorrow')
+    : fill(T('reset in {n} days'), { n: resetDays });
 
   let quotaBlock = '';
   if (q.source === 'api' && typeof q.ratio === 'number') {

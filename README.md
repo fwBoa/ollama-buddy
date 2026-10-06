@@ -159,13 +159,14 @@ What it does not give you, and how the app copes:
 | | |
 |---|---|
 | The amount in dollars | The API returns only a **share** (`0.874`), not a sum. The app multiplies it by the plan's cap, which lands back on the figure the site displays. |
-| The reset date | Deduced from the current cycle: `activity.period.starting_at` gives the subscription's start, and the month replays on the same day number. Cycle opened on 07/09 → reset on 07/10. |
+| The reset date | ollama.com does not publish it — `activity.period` is a rolling four-week window, not a billing cycle. The app takes the date from the **Next reset** setting, and failing that from the first reset it observes: usage falling back to zero gives the day number, and it replays monthly. Until it has one of the two, it says so instead of inventing a date. |
 
 > [!WARNING]
 > `ollama.com/api/usage` is **not documented**. If the route disappears or the key is
 > refused, the app shows **no quota figure at all**: it invites you to enter one. That
 > is deliberate: the quota is ollama.com's data, and without a key there is none. The
-> reset date stays editable in the settings, where it acts as a fallback for the API.
+> reset date, though, still works: it comes from your settings or from a reset the app
+> observed earlier, neither of which depends on reading today's usage.
 
 The key lives in `config.json`, at `0600`, and is never sent back to the browser —
 the input field stays empty even when a key is stored. It serves only to **read**
@@ -180,8 +181,8 @@ no breakdown. The page reduces to the sign-in card.
 
 That is deliberate. The quota is ollama.com's data: without a key, the app has none,
 and it would rather say so than display an approximation. The reset date stays
-editable in the settings — it acts as a fallback for the API there — but it is not
-displayed: it is not a measurement, only a setting.
+editable in the settings — that is where it comes from, not from the API — but it is
+not displayed: it is not a measurement, only a setting.
 
 ## Where the figures come from
 

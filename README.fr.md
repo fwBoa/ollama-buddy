@@ -165,14 +165,15 @@ Ce qu'elle ne donne pas, et comment l'app s'en sort :
 | | |
 |---|---|
 | Le montant en dollars | L'API ne renvoie qu'une **part** (`0,874`), pas une somme. L'app la multiplie par le plafond du plan, ce qui retombe sur la somme affichée par le site. |
-| La date de réinitialisation | Déduite du cycle en cours : `activity.period.starting_at` donne le début de l'abonnement, le mois se rejoue au même quantième. Cycle ouvert le 07/09 → remise à zéro le 07/10. |
+| La date de réinitialisation | ollama.com ne la publie pas — `activity.period` est une fenêtre glissante de quatre semaines, pas un cycle de facturation. L'app la prend du réglage **Prochaine réinitialisation**, et à défaut de la première remise à zéro qu'elle observe : la part qui retombe à zéro donne le quantième, et il se rejoue chaque mois. Tant qu'elle n'a ni l'un ni l'autre, elle le dit plutôt que d'inventer une date. |
 
 > [!WARNING]
 > `ollama.com/api/usage` n'est **pas documenté**. Si la route disparaît ou si la clé
 > est refusée, l'app n'affiche **plus aucun chiffre de quota** : elle invite à en
 > saisir une. C'est délibéré : le quota est une donnée d'ollama.com, et sans clé il n'y
-> en a aucune. La date de réinitialisation reste modifiable dans les réglages, où elle
-> sert de repli à l'API.
+> en a aucune. La date de réinitialisation, elle, fonctionne toujours : elle vient des
+> réglages ou d'une remise à zéro déjà observée, ni l'un ni l'autre ne dépendant de la
+> lecture du jour.
 
 La clé vit dans `config.json`, en `0600`, et n'est jamais renvoyée au navigateur — le
 champ de saisie reste vide même quand une clé est enregistrée. Elle ne sert qu'à
@@ -187,8 +188,8 @@ rebours, ni répartition. La page se réduit à la carte de connexion.
 
 C'est délibéré. Le quota est une donnée d'ollama.com : sans clé, l'app n'en a aucune,
 et elle préfère le dire plutôt que d'afficher un à-peu-près. La date de réinitialisation
-reste modifiable dans les réglages — elle y sert de repli à l'API — mais elle ne
-s'affiche pas : ce n'est pas une mesure, juste un paramètre.
+reste modifiable dans les réglages — c'est de là qu'elle vient, pas de l'API — mais elle
+ne s'affiche pas : ce n'est pas une mesure, juste un paramètre.
 
 ## D'où viennent les chiffres
 

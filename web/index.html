@@ -521,7 +521,6 @@ const FR = {
     "Crée-la sur {link}. Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.",
   'Settings': 'Paramètres',
   'Monthly cap': 'Plafond mensuel',
-  'Leave empty to follow your Ollama plan.': 'Laisse vide pour suivre ton offre Ollama.',
   'Next reset': 'Prochaine réinitialisation',
   'Language': 'Langue',
   'Automatic': 'Automatique',
@@ -534,9 +533,18 @@ const FR = {
   '{current} of {monthly}': '{current} sur {monthly}',
   ' — {current} of {monthly}': ' — {current} sur {monthly}',
   'projected at reset: {amount}': 'projeté au reset : {amount}',
-  'Cycle opened on <b>{date}</b>. ': 'Cycle ouvert le <b>{date}</b>. ',
   "<b>ollama.com</b> publishes the consumed percentage; the amount in dollars is that percentage applied to the plan's cap. It therefore lands on the sum shown on the site.":
     "<b>ollama.com</b> publie le pourcentage consommé ; le montant en dollars est ce pourcentage appliqué au plafond du plan. Il tombe donc sur la somme affichée sur le site.",
+  'Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.':
+    "Cycle ouvert le <b>{date}</b> — l'app a mesuré cette remise à zéro elle-même : ollama.com ne publie pas la date.",
+  'Reset date: the one set in Settings. ollama.com does not publish it.':
+    "Date de réinitialisation : celle saisie dans les réglages. ollama.com ne la publie pas.",
+  'Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.':
+    "Date de réinitialisation inconnue — ollama.com ne la publie pas. L'app la notera la première fois qu'elle en verra une.",
+  'Monthly cap — leave empty to follow your Ollama plan.':
+    "Plafond mensuel — laisse vide pour suivre ton offre Ollama.",
+  'Next reset — leave empty, and the app dates it from the first reset it observes.':
+    "Prochaine réinitialisation — laisse vide, et l'app la dattera de la première remise à zéro qu'elle observera.",
 
   'Other ({n})': 'Autres ({n})',
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
@@ -616,12 +624,22 @@ const usd = n => (lang === 'fr'
   ? n.toFixed(2).replace('.', ',') + ' $'
   : '$' + n.toFixed(2));
 
+/* Nombre de jours du calendrier entre deux instants, en heure locale : c'est
+   ce que « demain » veut dire pour qui lit la page. */
+const DAY_MS = 86400000;
+const joursEntre = (instant, maintenant) =>
+  Math.round((new Date(instant).setHours(0, 0, 0, 0)
+              - new Date(maintenant).setHours(0, 0, 0, 0)) / DAY_MS);
+
 
 function whenText(days) {
   if (days === null || days === undefined) return '';
-  if (days < 1) return T('today');
-  if (days < 2) return T('tomorrow');
-  return fill(T('in {n} days'), { n: Math.floor(days) });
+  // Une duree projetee se lit elle aussi en jours du calendrier : « dans
+  // 0,9 jour » a 18 h, c'est demain.
+  const n = joursEntre(Date.now() + days * DAY_MS, Date.now());
+  if (n <= 0) return T('today');
+  if (n === 1) return T('tomorrow');
+  return fill(T('in {n} days'), { n });
 }
 
 
@@ -645,14 +663,38 @@ function renderQuota(q) {
   /* La part vient de l'API, jamais d'un rapport recalcule : c'est elle qui
      porte le pourcentage, meme si le plafond n'est pas renseigne. */
   const ratio = live && typeof q.ratio === 'number' ? q.ratio : 0;
-  const resetText = q.days_left === null || q.days_left === undefined ? ''
-    : q.days_left < 1 ? T('reset today')
-    : q.days_left < 2 ? T('reset tomorrow')
-    : fill(T('reset in {n} days'), { n: Math.floor(q.days_left) });
+  /* En jours du calendrier, pas en tranches de 24 h : une remise a zero
+     demain a 11 h est « demain », pas « aujourd'hui » parce qu'il reste
+     23 heures. La date vient du serveur ; `days_left` ne sert plus qu'a
+     savoir s'il y en a une. */
+  const resetDays = q.days_left === null || q.days_left === undefined ? null
+    : joursEntre(q.resets_at, Date.now());
+  const resetText = resetDays === null ? ''
+    : resetDays <= 0 ? T('reset today')
+    : resetDays === 1 ? T('reset tomorrow')
+    : fill(T('reset in {n} days'), { n: resetDays });
 
+  /* D'ou vient la date de remise a zero. Une date sans origine est justement
+     ce qui trompait : l'app la deduisait d'une fenetre glissante, et le
+     quantieme se decalait d'une semaine chaque semaine. Elle se tait
+     desormais quand elle ne sait pas. */
+  const resetNote = q.resets_source === 'observed' && q.cycle_start
+    ? fill(T('Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.'),
+           { date: new Date(q.cycle_start).toLocaleDateString(locale()) })
+    : q.resets_source === 'settings'
+      ? T('Reset date: the one set in Settings. ollama.com does not publish it.')
+      : T('Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.');
+
+  /* Les projections vivent ici, avec le rythme dont elles decoulent. Le pied
+     de la jauge, lui, porte ce qui est constate : la consommation et le temps
+     restant. Un compte a rebours masque par une projection, c'est un compte a
+     rebours qu'on ne voit jamais. */
   let rateLine = '';
   if (has && q.rate_per_day) {
     const bits = [fill(T('At this rate: <b>+{amount} / day</b>'), { amount: usd(q.rate_per_day) })];
+    if (q.projected_at_reset) {
+      bits.push(fill(T('projected at reset: {amount}'), { amount: usd(q.projected_at_reset) }));
+    }
     if (q.exhausted_in_days !== null && q.exhausted_in_days !== undefined) {
       const beforeReset = q.days_left !== null && q.exhausted_in_days < q.days_left;
       const when = whenText(q.exhausted_in_days);
@@ -721,12 +763,13 @@ function renderQuota(q) {
         </label>
         <label>${T('Next reset')}
           <input id="reset-at" type="date"
-                 value="${q.resets_at ? new Date(q.resets_at).toISOString().slice(0, 10) : ''}">
+                 value="${q.resets_set ? new Date(q.resets_set).toISOString().slice(0, 10) : ''}">
         </label>
         <button class="btn" id="save-monthly" type="button">${T('Save')}</button>
       </div>
       <p class="hint" id="cap-hint">
-        ${T('Leave empty to follow your Ollama plan.')}
+        ${T('Monthly cap — leave empty to follow your Ollama plan.')}<br>
+        ${T('Next reset — leave empty, and the app dates it from the first reset it observes.')}
       </p>
       ${live ? `<div class="settings-row">
         <label>${T('ollama.com API key')}
@@ -744,7 +787,7 @@ function renderQuota(q) {
   /* Sans cle, la section se reduit a la carte de connexion : le quota est une
      donnee d'ollama.com, et sans cle il n'y en a aucune — ni pourcentage, ni
      jauge, ni montant. La date de reinitialisation reste reglable dans les
-     reglages, ou elle sert de repli a l'API. */
+     reglages : c'est de la, ou d'une remise a zero deja vue, qu'elle vient. */
   if (!live) {
     return `
       <section class="quota" aria-labelledby="quota-h">
@@ -770,13 +813,11 @@ function renderQuota(q) {
       </div>
       <div class="quota-foot">
         <span>${has ? fill(T('{current} of {monthly}'), { current: usd(q.current), monthly: usd(monthly) }) : T('no cap set')}</span>
-        <span>${has && q.projected_at_reset ? fill(T('projected at reset: {amount}'), { amount: usd(q.projected_at_reset) }) : resetText}</span>
+        <span>${resetText}</span>
       </div>
       ${rateLine}
       <p class="quota-source">
-        ${q.cycle_start
-          ? fill(T('Cycle opened on <b>{date}</b>. '), { date: new Date(q.cycle_start).toLocaleDateString(locale()) })
-          : ''}${T("<b>ollama.com</b> publishes the consumed percentage; the amount in dollars is that percentage applied to the plan's cap. It therefore lands on the sum shown on the site.")}
+        ${resetNote} ${T("<b>ollama.com</b> publishes the consumed percentage; the amount in dollars is that percentage applied to the plan's cap. It therefore lands on the sum shown on the site.")}
       </p>
       ${settings}
     </section>`;
@@ -835,9 +876,10 @@ function render(data) {
 
   /* La fenetre utile est le cycle d'abonnement, pas le mois civil : sinon
      « moyenne / jour » diviserait un cumul de plusieurs semaines par un jour.
-     Arrondi, parce que sous 1000 compact() afficherait la valeur brute,
-     decimales comprises. */
-  const avg = Math.round(total / Math.max(1, data.cycle_days || 1));
+     Quand le debut du cycle n'est pas connu, il n'y a pas de moyenne — plutot
+     qu'un chiffre divise par rien. Arrondi, parce que sous 1000 compact()
+     afficherait la valeur brute, decimales comprises. */
+  const avg = data.cycle_days ? Math.round(total / data.cycle_days) : null;
 
   /* Repartition par modele */
   const rows = models.map(m => {
@@ -872,7 +914,7 @@ function render(data) {
       </div>
       <div class="stat">
         <span class="k">${T('Average / day')}</span>
-        <span class="v">${fmt(avg)}</span>
+        <span class="v">${avg === null ? '—' : fmt(avg)}</span>
       </div>
     </div>
 
