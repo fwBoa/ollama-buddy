@@ -159,7 +159,7 @@ What it does not give you, and how the app copes:
 | | |
 |---|---|
 | The amount in dollars | The API returns only a **share** (`0.874`), not a sum. The app multiplies it by the plan's cap, which lands back on the figure the site displays. |
-| The reset date | ollama.com does not publish it — `activity.period` is a rolling four-week window, not a billing cycle. So the app measures it: usage falling back to zero is a reset, and that day number then replays monthly, like the subscription. Once two resets have been seen, the measured gap decides instead, in case the cycle is not a calendar month. The **Next reset** setting carries the first cycle, before anything has been observed; after that the measurement wins, because a date typed into a field is confirmed by nothing. Until it has one of the two, it says so instead of inventing a date. |
+| The reset date | ollama.com does not publish it — `activity.period` is a rolling four-week window, not a billing cycle. So the app measures it: usage falling back to zero is a reset, and that day number then replays monthly, like the subscription. Once two resets have been seen, they say which of the two it is: the same day number twice means a calendar month, and the app keeps replaying the day; a day number that has moved means a fixed interval, and it replays that many days instead. The **Next reset** setting carries the first cycle, before anything has been observed; after that the measurement wins, because a date typed into a field is confirmed by nothing. Until it has one of the two, it says so instead of inventing a date. |
 
 > [!WARNING]
 > `ollama.com/api/usage` is **not documented**. If the route disappears or the key is

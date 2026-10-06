@@ -317,31 +317,49 @@ def cloud_month_models(cloud: dict | None) -> list[dict]:
     return rows
 
 
-def measured_interval(conn: sqlite3.Connection) -> int | None:
-    """Ecart mesure entre les deux dernieres remises a zero, en jours.
+def measured_cadence(conn: sqlite3.Connection) -> int | None:
+    """Cadence du cycle, lue sur les deux dernieres remises a zero.
 
-    La remise a zero suit l'abonnement. Ollama l'annonce mensuel, donc au meme
-    quantieme — mais rien ne le garantit : un cycle de quatre semaines
-    donnerait le 09/11 la ou un mois calendaire donne le 12/11. Des la
-    deuxieme remise a zero vue, c'est cet ecart qui tranche, et il corrige la
-    supposition tout seul.
+    Rend un nombre de jours si le cycle est a intervalle fixe, et `None` si
+    c'est un mois calendaire — auquel cas c'est le quantieme qui se rejoue,
+    comme l'abonnement. `None` veut aussi dire « pas de quoi trancher » : les
+    deux reponses sont alors la meme.
+
+    Deux dates suffisent a les distinguer, et il faut les distinguer : un
+    ecart de 31 jours entre le 12/10 et le 12/11 decrit le mois d'octobre.
+    Le rejouer tel quel donnerait le 13/12, alors que novembre compte 30
+    jours et que la remise a zero tombe le 12. Un cycle de quatre semaines,
+    lui, donnerait le 09/11 — le quantieme aurait bouge.
+
+    Seul un intervalle fixe se rejoue donc en jours ; un mois calendaire se
+    rejoue en mois.
     """
     rows = conn.execute(
         "SELECT cycle_start FROM quota_resets ORDER BY cycle_start DESC LIMIT 2"
     ).fetchall()
-    if len(rows) == 2:
-        ecart = (rows[0][0] - rows[1][0]) / DAY_MS
-        # Un cycle plausible. En dehors, la mesure est douteuse : deux remises
-        # a zero separees par trois jours ne decrivent pas un cycle.
-        if 20 <= ecart <= 40:
-            return round(ecart)
-    return None
+    if len(rows) != 2:
+        return None
+
+    dernier = datetime.fromtimestamp(rows[0][0] / 1000, timezone.utc)
+    avant = datetime.fromtimestamp(rows[1][0] / 1000, timezone.utc)
+    ecart = (dernier - avant).total_seconds() / 86400
+    # Un cycle plausible. En dehors, la mesure est douteuse : deux remises a
+    # zero separees par trois jours ne decrivent pas un cycle.
+    if not 20 <= ecart <= 40:
+        return None
+
+    # Le quantieme se rejoue-t-il ? `month_shift` decrit exactement ca. La
+    # tolerance couvre l'imprecision de la datation — l'instant vrai est
+    # encadre par deux echantillons, donc connu a quelques minutes pres.
+    if abs((dernier - month_shift(avant, 1)).total_seconds()) <= 3600:
+        return None
+    return round(ecart)
 
 
 def next_occurrence(anchor: datetime, now: datetime, jours: int | None) -> int:
     """Prochaine occurrence de `anchor`, en ms epoch. 0 si aucune.
 
-    Sans intervalle mesure, le quantieme se rejoue de mois en mois, comme
+    Sans cadence mesuree, le quantieme se rejoue de mois en mois, comme
     l'abonnement. `month_shift` borne alors le jour au dernier du mois : une
     remise a zero le 31 tombe le 30 en novembre.
     """
@@ -398,7 +416,7 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
     plutot que d'en inventer une. Les deux rendent leur `origine`, pour que
     l'interface puisse dire d'ou vient la date.
     """
-    jours = measured_interval(conn)
+    jours = measured_cadence(conn)
 
     seen = observed_reset(conn)
     if seen:
