@@ -165,7 +165,7 @@ Ce qu'elle ne donne pas, et comment l'app s'en sort :
 | | |
 |---|---|
 | Le montant en dollars | L'API ne renvoie qu'une **part** (`0,874`), pas une somme. L'app la multiplie par le plafond du plan, ce qui retombe sur la somme affichée par le site. |
-| La date de réinitialisation | ollama.com ne la publie pas — `activity.period` est une fenêtre glissante de quatre semaines, pas un cycle de facturation. L'app la prend du réglage **Prochaine réinitialisation**, et à défaut de la première remise à zéro qu'elle observe : la part qui retombe à zéro donne le quantième, et il se rejoue chaque mois. Tant qu'elle n'a ni l'un ni l'autre, elle le dit plutôt que d'inventer une date. |
+| La date de réinitialisation | ollama.com ne la publie pas — `activity.period` est une fenêtre glissante de quatre semaines, pas un cycle de facturation. L'app la mesure donc : la part qui retombe à zéro est une remise à zéro, et ce quantième se rejoue chaque mois. Le réglage **Prochaine réinitialisation** porte le premier cycle, tant que rien n'a été vu ; ensuite la mesure l'emporte, parce qu'une date tapée dans un champ n'est confirmée par rien. Tant qu'elle n'a ni l'un ni l'autre, elle le dit plutôt que d'inventer une date. |
 
 > [!WARNING]
 > `ollama.com/api/usage` n'est **pas documenté**. Si la route disparaît ou si la clé
@@ -188,8 +188,9 @@ rebours, ni répartition. La page se réduit à la carte de connexion.
 
 C'est délibéré. Le quota est une donnée d'ollama.com : sans clé, l'app n'en a aucune,
 et elle préfère le dire plutôt que d'afficher un à-peu-près. La date de réinitialisation
-reste modifiable dans les réglages — c'est de là qu'elle vient, pas de l'API — mais elle
-ne s'affiche pas : ce n'est pas une mesure, juste un paramètre.
+reste modifiable dans les réglages — elle vient de là ou d'une remise à zéro déjà
+observée, jamais de l'API — mais elle ne s'affiche pas : ce n'est pas une mesure, juste
+un paramètre.
 
 ## D'où viennent les chiffres
 

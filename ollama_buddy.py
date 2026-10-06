@@ -359,23 +359,20 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
 
     Restent deux sources, dans cet ordre :
 
-      1. la date saisie dans les reglages — un fait, lu sur le site ;
-      2. une remise a zero deja observee sur les echantillons — mesuree.
+      1. une remise a zero deja observee sur les echantillons — mesuree ;
+      2. la date saisie dans les reglages — un fait, lu sur le site.
+
+    La mesure passe devant, et c'est un renversement : une date saisie ne se
+    perime pas toute seule, mais rien ne la confirme non plus. Le 07/10 saisi
+    un jour et le site qui annonce cinq jours plus tard ne se reconcilient
+    pas, et l'app affichait la saisie avec l'assurance d'une mesure. Une
+    remise a zero vue, elle, ne peut pas avoir tort. La saisie reste la
+    premiere source d'un cycle : elle amorce, tant que rien n'a ete vu.
 
     Sans l'une ni l'autre, il n'y a pas de date : le compte a rebours se tait
     plutot que d'en inventer une. Les deux rendent leur `origine`, pour que
     l'interface puisse dire d'ou vient la date.
     """
-    declared = int(cfg.get("quota_reset_at") or 0)
-    if declared:
-        anchor = datetime.fromtimestamp(declared / 1000, timezone.utc)
-        resets_at = next_occurrence(anchor, now)
-        if not resets_at:
-            return 0, None, None
-        # Le debut du cycle n'a pas ete vu : on le suppose a un mois en arriere.
-        start = month_shift(datetime.fromtimestamp(resets_at / 1000, timezone.utc), -1)
-        return resets_at, int(start.timestamp() * 1000), "settings"
-
     seen = observed_reset(conn)
     if seen:
         before, after = seen
@@ -386,6 +383,16 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
         resets_at = next_occurrence(anchor, now)
         if resets_at:
             return resets_at, after, "observed"
+
+    declared = int(cfg.get("quota_reset_at") or 0)
+    if declared:
+        anchor = datetime.fromtimestamp(declared / 1000, timezone.utc)
+        resets_at = next_occurrence(anchor, now)
+        if not resets_at:
+            return 0, None, None
+        # Le debut du cycle n'a pas ete vu : on le suppose a un mois en arriere.
+        start = month_shift(datetime.fromtimestamp(resets_at / 1000, timezone.utc), -1)
+        return resets_at, int(start.timestamp() * 1000), "settings"
 
     return 0, None, None
 

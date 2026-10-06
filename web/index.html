@@ -537,8 +537,8 @@ const FR = {
     "<b>ollama.com</b> publie le pourcentage consommé ; le montant en dollars est ce pourcentage appliqué au plafond du plan. Il tombe donc sur la somme affichée sur le site.",
   'Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.':
     "Cycle ouvert le <b>{date}</b> — l'app a mesuré cette remise à zéro elle-même : ollama.com ne publie pas la date.",
-  'Reset date: the one set in Settings. ollama.com does not publish it.':
-    "Date de réinitialisation : celle saisie dans les réglages. ollama.com ne la publie pas.",
+  'Reset date: the one set in Settings — the app has not seen a reset yet.':
+    "Date de réinitialisation : celle saisie dans les réglages — l'app n'a pas encore vu de remise à zéro.",
   'Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.':
     "Date de réinitialisation inconnue — ollama.com ne la publie pas. L'app la notera la première fois qu'elle en verra une.",
   'Monthly cap — leave empty to follow your Ollama plan.':
@@ -682,7 +682,7 @@ function renderQuota(q) {
     ? fill(T('Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.'),
            { date: new Date(q.cycle_start).toLocaleDateString(locale()) })
     : q.resets_source === 'settings'
-      ? T('Reset date: the one set in Settings. ollama.com does not publish it.')
+      ? T('Reset date: the one set in Settings — the app has not seen a reset yet.')
       : T('Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.');
 
   /* Les projections vivent ici, avec le rythme dont elles decoulent. Le pied
