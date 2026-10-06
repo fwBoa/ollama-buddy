@@ -64,6 +64,7 @@ RESET_DROP_MIN = 0.05
 # On prefere alors ne rien dater — la remise a zero suivante sera vue.
 RESET_MAX_GAP_MS = CLOUD_SAMPLE_SECONDS * 3 * 1000
 
+
 DAY_MS = 86_400_000
 
 # Un modele au-dela de ce slot est regroupe dans "Other" (la 9e serie n'a
@@ -241,7 +242,6 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
-
 def assign_model_colors(conn: sqlite3.Connection, names) -> None:
     """Attribue un slot de couleur stable a chaque modele (jamais selon son rang).
 
@@ -287,7 +287,6 @@ def fold_extra(rows: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------
 
 
-
 def month_shift(moment: datetime, months: int) -> datetime:
     """Decale d'un nombre de mois en conservant le quantieme."""
     index = moment.month - 1 + months
@@ -318,18 +317,44 @@ def cloud_month_models(cloud: dict | None) -> list[dict]:
     return rows
 
 
-def next_occurrence(anchor: datetime, now: datetime) -> int:
-    """Prochaine occurrence du quantieme de `anchor`, en ms epoch. 0 si aucune.
+def measured_interval(conn: sqlite3.Connection) -> int | None:
+    """Ecart mesure entre les deux dernieres remises a zero, en jours.
 
-    Le quantieme se rejoue de mois en mois. `month_shift` borne le jour au
-    dernier du mois : une remise a zero le 31 tombe le 30 en novembre.
+    La remise a zero suit l'abonnement. Ollama l'annonce mensuel, donc au meme
+    quantieme — mais rien ne le garantit : un cycle de quatre semaines
+    donnerait le 09/11 la ou un mois calendaire donne le 12/11. Des la
+    deuxieme remise a zero vue, c'est cet ecart qui tranche, et il corrige la
+    supposition tout seul.
     """
+    rows = conn.execute(
+        "SELECT cycle_start FROM quota_resets ORDER BY cycle_start DESC LIMIT 2"
+    ).fetchall()
+    if len(rows) == 2:
+        ecart = (rows[0][0] - rows[1][0]) / DAY_MS
+        # Un cycle plausible. En dehors, la mesure est douteuse : deux remises
+        # a zero separees par trois jours ne decrivent pas un cycle.
+        if 20 <= ecart <= 40:
+            return round(ecart)
+    return None
+
+
+def next_occurrence(anchor: datetime, now: datetime, jours: int | None) -> int:
+    """Prochaine occurrence de `anchor`, en ms epoch. 0 si aucune.
+
+    Sans intervalle mesure, le quantieme se rejoue de mois en mois, comme
+    l'abonnement. `month_shift` borne alors le jour au dernier du mois : une
+    remise a zero le 31 tombe le 30 en novembre.
+    """
+    def suivant(moment: datetime, pas: int) -> datetime:
+        return (moment + timedelta(days=pas * jours) if jours
+                else month_shift(moment, pas))
+
     if anchor > now:
         return int(anchor.timestamp() * 1000)
-    # De mois en mois jusqu'a depasser aujourd'hui : robuste quand la derniere
-    # observation a plus d'un cycle de retard.
-    for step in range(1, 14):
-        candidate = month_shift(anchor, step)
+    # De cycle en cycle jusqu'a depasser aujourd'hui : robuste quand la
+    # derniere observation a plus d'un cycle de retard.
+    for pas in range(1, 14):
+        candidate = suivant(anchor, pas)
         if candidate > now:
             return int(candidate.timestamp() * 1000)
     return 0
@@ -373,6 +398,8 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
     plutot que d'en inventer une. Les deux rendent leur `origine`, pour que
     l'interface puisse dire d'ou vient la date.
     """
+    jours = measured_interval(conn)
+
     seen = observed_reset(conn)
     if seen:
         before, after = seen
@@ -380,18 +407,19 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
         # est encadre, rien ne dit qu'il est plus pres de l'un que de l'autre.
         # Le cycle, lui, commence au premier echantillon d'apres.
         anchor = datetime.fromtimestamp((before + after) / 2000, timezone.utc)
-        resets_at = next_occurrence(anchor, now)
+        resets_at = next_occurrence(anchor, now, jours)
         if resets_at:
             return resets_at, after, "observed"
 
     declared = int(cfg.get("quota_reset_at") or 0)
     if declared:
         anchor = datetime.fromtimestamp(declared / 1000, timezone.utc)
-        resets_at = next_occurrence(anchor, now)
+        resets_at = next_occurrence(anchor, now, jours)
         if not resets_at:
             return 0, None, None
-        # Le debut du cycle n'a pas ete vu : on le suppose a un mois en arriere.
-        start = month_shift(datetime.fromtimestamp(resets_at / 1000, timezone.utc), -1)
+        # Le debut du cycle n'a pas ete vu : on le suppose un cycle en arriere.
+        fin = datetime.fromtimestamp(resets_at / 1000, timezone.utc)
+        start = fin - timedelta(days=jours) if jours else month_shift(fin, -1)
         return resets_at, int(start.timestamp() * 1000), "settings"
 
     return 0, None, None
