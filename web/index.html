@@ -499,9 +499,9 @@ const FR = {
   'today': "aujourd'hui",
   'tomorrow': 'demain',
   'in {n} days': 'dans {n} jours',
-  'reset today': "réinitialisation aujourd'hui",
-  'reset tomorrow': 'réinitialisation demain',
-  'reset in {n} days': 'réinitialisation dans {n} jours',
+  'Reset on {date}': 'Réinitialisation le {date}',
+  ' · reset tomorrow': ' · demain',
+  ' · reset in {n} days': ' ·\u00A0dans {n} jours',
   'At this rate: <b>+{amount} / day</b>': 'À ce rythme : <b>+{amount} / jour</b>',
   'cap reached {when}, before the reset': 'plafond atteint {when}, avant la réinitialisation',
   'cap reached {when}': 'plafond atteint {when}',
@@ -624,22 +624,29 @@ const usd = n => (lang === 'fr'
   ? n.toFixed(2).replace('.', ',') + ' $'
   : '$' + n.toFixed(2));
 
-/* Nombre de jours du calendrier entre deux instants, en heure locale : c'est
-   ce que « demain » veut dire pour qui lit la page. */
-const DAY_MS = 86400000;
-const joursEntre = (instant, maintenant) =>
-  Math.round((new Date(instant).setHours(0, 0, 0, 0)
-              - new Date(maintenant).setHours(0, 0, 0, 0)) / DAY_MS);
-
 
 function whenText(days) {
   if (days === null || days === undefined) return '';
-  // Une duree projetee se lit elle aussi en jours du calendrier : « dans
-  // 0,9 jour » a 18 h, c'est demain.
-  const n = joursEntre(Date.now() + days * DAY_MS, Date.now());
-  if (n <= 0) return T('today');
+  const n = Math.floor(days);
+  if (n === 0) return T('today');
   if (n === 1) return T('tomorrow');
   return fill(T('in {n} days'), { n });
+}
+
+
+/* Combien de jours pleins il reste, comme ollama.com les compte. Le libelle
+   porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
+   meme remise a zero selon qu'on compte les jours pleins ou ceux du
+   calendrier, et c'est la date qui tranche. */
+function resetLabel(quota) {
+  if (!quota.resets_at || quota.days_left === null || quota.days_left === undefined) return '';
+  const quand = new Date(quota.resets_at)
+    .toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+  const jours = Math.floor(quota.days_left);
+  return fill(T('Reset on {date}'), { date: quand })
+    + (jours === 0 ? ''
+      : jours === 1 ? T(' · reset tomorrow')
+      : fill(T(' · reset in {n} days'), { n: jours }));
 }
 
 
@@ -663,16 +670,7 @@ function renderQuota(q) {
   /* La part vient de l'API, jamais d'un rapport recalcule : c'est elle qui
      porte le pourcentage, meme si le plafond n'est pas renseigne. */
   const ratio = live && typeof q.ratio === 'number' ? q.ratio : 0;
-  /* En jours du calendrier, pas en tranches de 24 h : une remise a zero
-     demain a 11 h est « demain », pas « aujourd'hui » parce qu'il reste
-     23 heures. La date vient du serveur ; `days_left` ne sert plus qu'a
-     savoir s'il y en a une. */
-  const resetDays = q.days_left === null || q.days_left === undefined ? null
-    : joursEntre(q.resets_at, Date.now());
-  const resetText = resetDays === null ? ''
-    : resetDays <= 0 ? T('reset today')
-    : resetDays === 1 ? T('reset tomorrow')
-    : fill(T('reset in {n} days'), { n: resetDays });
+  const resetText = resetLabel(q);
 
   /* D'ou vient la date de remise a zero. Une date sans origine est justement
      ce qui trompait : l'app la deduisait d'une fenetre glissante, et le
