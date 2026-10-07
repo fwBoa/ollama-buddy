@@ -27,8 +27,8 @@ de bord l'affiche, et un aperçu discret reste en permanence dans la barre de me
 
 - **Quota mensuel exact, en direct** — le pourcentage publié par ollama.com, plus le
   montant en dollars, le rythme de dépense et la date de réinitialisation.
-- **La consommation jour par jour** — ce qu'a coûté chacune des trente dernières
-  journées, en dollars, avec le nombre de requêtes qui va avec.
+- **Le cycle, jour par jour** — ce qu'a coûté chaque journée du cycle, en dollars,
+  avec le nombre de requêtes qui va avec, et la répartition par modèle au-dessus.
 - **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage
   (avec une clé), qui ouvre un résumé compact.
 - **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
@@ -206,8 +206,10 @@ clients, y compris ceux dont l'app ne voit jamais passer la requête.
 > porte ce qui a disparu, et rien de tout cela n'est documenté.
 >
 > L'app additionne les jours depuis le début du cycle — que fournit le réglage
-> **Prochaine réinitialisation** — et divise par le plafond du plan. La répartition
-> par modèle, elle, est perdue, et la page montre les jours à la place.
+> **Prochaine réinitialisation** — et divise par le plafond du plan. La page montre
+> ces jours un par un et, au-dessus, la répartition par modèle telle qu'elle était
+> à la dernière lecture qui la portait — datée, parce que ces compteurs se sont
+> arrêtés.
 
 ## Conception
 
@@ -216,10 +218,11 @@ tailles de titre en `clamp()`, deux colonnes qui se replient en une seule sous 9
 Les composants utilisent des **container queries** — la liste des jours réagit à *sa*
 largeur, pas à celle de la fenêtre.
 
-**Couleurs.** Une seule teinte d'accent, et plus de palette catégorielle. Il y en
-avait huit — une par modèle, tenue en base pour qu'un modèle garde la sienne d'une
-session à l'autre. La répartition par modèle a disparu de l'API le 7 octobre 2026, et
-la palette est partie avec : une série unique n'a pas de catégories à distinguer.
+**Couleurs.** Huit teintes catégorielles — celles de la palette de référence de
+l'outil de validation — plus un gris pour « Autres », qui n'est pas une série mais un
+reste. Chaque modèle garde la sienne de façon **permanente** (stockée en base),
+jamais selon son rang. Les jours, en dessous, sont une série ordonnée : ils portent
+une seule teinte, n'ayant rien à distinguer.
 
 **Thème.** Clair et sombre sont deux palettes **choisies**, pas une inversion
 automatique. Le thème suit macOS par défaut, et peut être forcé.

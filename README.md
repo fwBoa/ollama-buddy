@@ -24,8 +24,8 @@ a dashboard displays it, and a discreet summary stays in the menu bar at all tim
 
 - **Exact monthly quota, live** — the percentage published by ollama.com, plus the
   amount in dollars, the burn rate and the reset date.
-- **Daily consumption, day by day** — what each of the last thirty days cost, in
-  dollars, with the request count that goes with it.
+- **The cycle, day by day** — what each day of the cycle cost, in dollars, with the
+  request count that goes with it, and the breakdown by model above it.
 - **A permanent summary in the menu bar** — a coloured dot and the percentage
   (with a key), which opens a compact summary.
 - **Real time** — the server pushes changes over SSE, the interface polls nothing.
@@ -199,8 +199,9 @@ clients, including those whose requests the app never sees.
 > was dropped, and none of it is documented.
 >
 > The app adds the days up from the start of the cycle, which the **Next reset**
-> setting supplies, and divides by the plan's cap. The breakdown by model is gone
-> for good, and the page shows the days instead.
+> setting supplies, and divides by the plan's cap. The page shows that day by day
+> and, above it, the breakdown by model as of the last reading that still carried
+> it — dated, because those counters have stopped.
 
 ## Design
 
@@ -208,11 +209,11 @@ clients, including those whose requests the app never sees.
 in `clamp()`, two columns that fold into one below 940px. Components use **container
 queries** — the day list reacts to *its* width, not the window's.
 
-**Colours.** One accent hue, and no categorical palette. There used to be eight
-of them — one per model, held permanently in the database so a model kept its
-colour across sessions. The breakdown by model disappeared from the API on
-7 October 2026, and took the palette with it: a single series has no categories
-to tell apart.
+**Colours.** Eight categorical hues — those of the validation tool's reference
+palette — plus a grey for "Other", which is not a series but a remainder. Each
+model keeps its own **permanently** (stored in the database), never according to
+its rank. The days below are a single ordered series, so they carry one hue: there
+is nothing to tell apart.
 
 **Theme.** Light and dark are two **chosen** palettes, not an automatic inversion.
 The theme follows macOS by default, and can be forced.

@@ -21,6 +21,8 @@
     --serious:   #bc572e;
     --critical:  #d03b3b;
     --accent:    #2271ce;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
     --ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
   }
   @media (prefers-color-scheme: dark) {
@@ -37,6 +39,8 @@
       --serious:  #ec835a;
       --critical: #de4946;
       --accent:   #3987e5;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
     }
   }
   :root[data-theme="dark"] {
@@ -53,6 +57,8 @@
     --serious:  #ec835a;
     --critical: #de4946;
     --accent:   #3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
   }
 
   * { box-sizing: border-box; }
@@ -147,6 +153,8 @@ const FR = {
   ' — cap reached tomorrow': ' — plafond atteint demain',
   ' — cap reached in {n} days': ' — plafond atteint dans\u00A0{n} jours',
   'This cycle': 'Le cycle',
+  'Last days': 'Derniers jours',
+  'Other ({n})': 'Autres ({n})',
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Open the dashboard': 'Ouvrir le tableau de bord',
   'Live': 'En direct',
@@ -176,6 +184,16 @@ const pct = x => (lang === 'fr'
   : (x * 100).toFixed(1) + '%');
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
 /* Les jours arrivent en ISO, coupes en UTC ; le libelle appartient au client. */
+const compact = n => {
+  const fr = lang === 'fr';
+  const num = (v, d) => (fr ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
+  const unit = u => (fr ? ' ' : '') + u;
+  if (n >= 1e6) return num(n / 1e6, 2) + unit('M');
+  if (n >= 1e3) return num(n / 1e3, 1) + unit('k');
+  return String(n);
+};
+const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
+
 const dayLabel = iso => new Date(iso + 'T00:00:00Z')
   .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -235,8 +253,12 @@ function render(d) {
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   }
 
-  /* Les trois derniers jours, en dollars. Remplace les trois premiers modeles :
-     le 07/10/2026 l'API a cesse de publier la repartition par modele. */
+  /* Les trois premiers modeles, puis les trois derniers jours. La repartition
+     par modele ne bouge plus : le 07/10/2026 l'API a cesse de la publier. */
+  const modeles = (d.models || []).slice(0, 3).map(m =>
+    `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
+       <span class="n">${modelLabel(m)}</span><span class="v">${compact(m.total)}</span></div>`
+  ).join('');
   const jours = (d.days || []).slice(-3).reverse().map(j =>
     `<div class="m"><span class="n">${dayLabel(j.day)}</span><span class="v">${usd(j.usd)}</span></div>`
   ).join('');
@@ -267,6 +289,8 @@ function render(d) {
         <span class="big">${usd(d.usd || 0)}</span>
         <span class="sub">${exact(d.requests || 0)} req.</span>
       </div>
+      <div class="models">${modeles || jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>
+      <p class="label" style="margin-top:12px">${T('Last days')}</p>
       <div class="models">${jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
     <div class="actions">
       <button type="button" id="open">${T('Open the dashboard')}</button>

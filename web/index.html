@@ -40,6 +40,8 @@
     --serious:   #bc572e;
     --critical:  #d03b3b;
     --accent:    #2271ce;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
     /* L'accent sert de couleur de TEXTE (liens) : il doit etre clair sur fond
        sombre. Mais il sert aussi de FOND a du texte blanc, ou il doit etre
        sombre. Deux roles opposes — d'ou ce second jeton, assez sombre pour
@@ -69,6 +71,8 @@
       --serious:   #ec835a;
       --critical:  #de4946;
       --accent:    #3987e5;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
     }
   }
   /* Memes valeurs, pour forcer le sombre quand le systeme est en clair.
@@ -92,6 +96,8 @@
     --serious:   #ec835a;
     --critical:  #de4946;
     --accent:    #3987e5;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
   }
 
   * { box-sizing: border-box; }
@@ -279,6 +285,10 @@
   }
   .quota-source b { color: var(--text-secondary); font-weight: 600; }
 
+  .stale-note {
+    margin: 12px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.6;
+  }
+
   /* --- Connexion du compte (BYOK) : la seule porte d'entree vers la cle --- */
   .connect {
     margin-bottom: 22px; padding: 16px 18px;
@@ -356,7 +366,7 @@
   }
   .models { display: flex; flex-direction: column; }
   .model {
-    display: grid; grid-template-columns: minmax(0, auto) minmax(46px, 1fr) auto;
+    display: grid; grid-template-columns: 15px minmax(0, auto) minmax(46px, 1fr) auto;
     align-items: center; gap: 14px; padding: 13px 12px; margin: 0 -12px;
     border-radius: 11px;
     /* Le delai vit ici, pas dans .stagger : declare dans la regle qui porte la
@@ -368,6 +378,9 @@
       transform 260ms var(--ease-out) var(--d),
       background-color 150ms var(--ease-out);
   }
+  /* Les lignes de jour n'ont pas de pastille : leur nom prendrait la colonne
+     de quinze pixels, et se ferait tronquer a une lettre. */
+  .model.day { grid-template-columns: minmax(0, auto) minmax(46px, 1fr) auto; }
   .model:nth-child(2) { --d: 45ms; }
   .model:nth-child(3) { --d: 90ms; }
   .model:nth-child(4) { --d: 135ms; }
@@ -381,6 +394,7 @@
   @media (hover: hover) and (pointer: fine) {
     .model:hover { background: var(--ghost); }
   }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
   .model-name { font-size: 13.5px; font-weight: 500; min-width: 0; }
   .model-name .id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-name .n { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
@@ -543,7 +557,12 @@ const FR = {
 
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Overview': "Vue d'ensemble",
+  'Breakdown by model': 'Répartition par modèle',
   'Daily consumption': 'Consommation par jour',
+  'Other ({n})': 'Autres ({n})',
+  '{model}: {pct} of the total': '{model} : {pct} du total',
+  'Read on {date}. ollama.com no longer publishes this breakdown: these counts stop there.':
+    "Relevé le {date}. ollama.com ne publie plus cette répartition : ces compteurs s'arrêtent là.",
   '{day}: {amount}': '{day} : {amount}',
   'Usage this cycle': 'Consommation du cycle',
   'Requests this cycle': 'Requêtes du cycle',
@@ -832,6 +851,9 @@ function renderQuota(q) {
    Rendu principal
    ===================================================================== */
 
+const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--s9'];
+const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
+
 /* Les jours arrivent en ISO, coupes en UTC. Le libelle appartient au client :
    seul lui sait dans quelle langue et quel fuseau la page se lit. */
 const dayLabel = iso => new Date(iso + 'T00:00:00Z')
@@ -840,7 +862,7 @@ const dayLabel = iso => new Date(iso + 'T00:00:00Z')
 /* Combien de jours la colonne montre. Trente tiendraient dans la page, mais
    les derniers jours sont ce qu'on vient lire : au-dela de quinze, la liste
    devient un mur. */
-const JOURS_MONTRES = 14;
+const JOURS_MONTRES = 7;
 
 function render(data) {
   const app = document.getElementById('app');
@@ -889,9 +911,37 @@ function render(data) {
      donne. Le jour est la seule ventilation qu'une cle ouvre encore.
      Les barres se lisent les unes par rapport aux autres : c'est le jour le
      plus charge qui donne l'echelle. */
+  /* Repartition par modele. Elle vient de la derniere lecture qui l'a portee :
+     le 07/10/2026 l'API a cesse de la publier, et le site la garde pour lui.
+     La date est donc ecrite a cote, sans quoi elle se ferait passer pour du
+     jour. */
+  const modeles = data.models || [];
+  const modelsNote = data.models_at
+    ? fill(T('Read on {date}. ollama.com no longer publishes this breakdown: these counts stop there.'),
+           { date: new Date(data.models_at).toLocaleString(locale(),
+                     { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })
+    : '';
+  const modelRows = modeles.map(m => {
+    const v = SLOTS[m.slot] || SLOTS[8];
+    return `
+      <div class="model" data-model="${m.model}">
+        <i class="swatch" style="background:var(${v})"></i>
+        <div class="model-name">
+          <span class="id">${modelLabel(m)}</span>
+          <span class="n">${exact(m.messages)} ${T(m.messages > 1 ? 'requests' : 'request')}</span>
+        </div>
+        <div class="bar" role="img" aria-label="${fill(T('{model}: {pct} of the total'), { model: modelLabel(m), pct: pct(m.share) })}">
+          <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
+        </div>
+        <div class="model-stats">
+          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)}</span>
+        </div>
+      </div>`;
+  }).join('');
+
   const pic = data.peak || 1;
   const rows = jours.slice(-JOURS_MONTRES).reverse().map(j => `
-      <div class="model" data-day="${j.day}">
+      <div class="model day" data-day="${j.day}">
         <div class="model-name">
           <span class="id">${dayLabel(j.day)}</span>
           <span class="n">${exact(j.requests)} ${T(j.requests > 1 ? 'requests' : 'request')}</span>
@@ -927,8 +977,12 @@ function render(data) {
         ${quota}
       </div>
       <section aria-labelledby="split-h">
-        <h2 id="split-h" class="section-title">${T('Daily consumption')}</h2>
-        <div class="models${staggerNext ? ' stagger' : ''}">${rows}</div>
+        <h2 id="split-h" class="section-title">${T('Breakdown by model')}</h2>
+        <div class="models${staggerNext ? ' stagger' : ''}">${modelRows}</div>
+        <p class="stale-note">${modelsNote}</p>
+
+        <h2 class="section-title">${T('Daily consumption')}</h2>
+        <div class="models">${rows}</div>
       </section>
     </div>
 

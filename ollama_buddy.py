@@ -43,6 +43,10 @@ CONFIG_PATH = DATA_DIR / "config.json"
 OLLAMA_API = "http://127.0.0.1:11434"
 OLLAMA_CLOUD = "https://ollama.com"
 
+# Un modele au-dela de ce slot est regroupe dans "Other" (la 9e serie n'a
+# jamais de teinte inventee).
+MAX_SLOTS = 8
+
 # ollama.com/api/usage est interroge au plus une fois par minute : l'interface
 # se rafraichit toutes les 2 secondes, on ne va pas suivre ce rythme.
 CLOUD_TTL_SECONDS = 60
@@ -178,6 +182,11 @@ def cloud_usage(api_key: str) -> dict:
 # --------------------------------------------------------------------------
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS model_color (
+    model TEXT PRIMARY KEY,
+    slot  INTEGER NOT NULL
+);
+
 -- Echantillons de ollama.com/api/usage. Les compteurs de l'API sont des
 -- cumuls du cycle en cours : c'est leur difference entre deux echantillons qui
 -- donne l'activite d'un intervalle. `model` reste vide : l'API ne publie plus
@@ -208,15 +217,13 @@ def connect() -> sqlite3.Connection:
 
     # Les transcripts Claude Code ne sont plus lus, et le quota ne se saisit
     # plus a la main : le montant colle des semaines plus tot etait affiche
-    # comme le quota du jour. Ces tables n'ont plus de lecteur. Comme
-    # model_color : la repartition par modele a disparu de l'API le
-    # 07/10/2026, donc plus rien ne lui attribue de teinte. Les remises a zero
-    # observees partent aussi : l'observer regardait une chute de la part du
-    # plafond, et plus rien ne retombe.
-    for table in ("quota_readings", "events", "files", "model_color", "quota_resets"):
+    # comme le quota du jour. Ces tables n'ont plus de lecteur. Les remises a
+    # zero observees partent aussi : l'observer regardait une chute de la part
+    # du plafond, et plus rien ne retombe.
+    for table in ("quota_readings", "events", "files", "quota_resets"):
         if table in tables:
             conn.execute(f"DROP TABLE {table}")
-    if tables & {"quota_readings", "events", "files", "model_color", "quota_resets"}:
+    if tables & {"quota_readings", "events", "files", "quota_resets"}:
         conn.commit()
 
     conn.executescript(SCHEMA)
@@ -286,6 +293,60 @@ def cycle_ratio(cap: float, cycle_start: int | None,
         return None
     consume = cloud_cycle_usage(cloud, cycle_start)
     return (consume / cap) if consume is not None else None
+
+
+def assign_model_colors(conn: sqlite3.Connection, names) -> None:
+    """Attribue un slot de couleur stable a chaque modele (jamais selon son rang).
+
+    La teinte est stockee en base : un modele garde la sienne d'une session a
+    l'autre, meme s'il change de place dans le classement.
+    """
+    known = {r[0] for r in conn.execute("SELECT model FROM model_color")}
+    used = {r[0] for r in conn.execute("SELECT slot FROM model_color")}
+    free = [s for s in range(MAX_SLOTS) if s not in used]
+    for model in sorted(set(names)):
+        if model in known or not free:
+            continue
+        conn.execute("INSERT INTO model_color VALUES (?,?)", (model, free.pop(0)))
+        known.add(model)
+    conn.commit()
+
+
+def fold_extra(rows: list[dict]) -> list[dict]:
+    """Regroupe au-dela du dernier slot : jamais de 9e teinte inventee."""
+    over = [r for r in rows if r["slot"] >= MAX_SLOTS]
+    rows = [r for r in rows if r["slot"] < MAX_SLOTS]
+    if not over:
+        return rows
+    rows.append({
+        "model": f"Other ({len(over)})",
+        # Le libelle affiche est compose par le client : seul lui sait dans
+        # quelle langue la page se lit. Le serveur fournit de quoi le faire.
+        "other_count": len(over),
+        "slot": MAX_SLOTS,
+        "total": sum(r["total"] for r in over),
+        "messages": sum(r["messages"] for r in over),
+        "other": True,
+    })
+    return rows
+
+
+def last_model_reading(conn: sqlite3.Connection) -> tuple[int, list[dict]] | None:
+    """Derniere repartition par modele lue, et quand.
+
+    ollama.com ne la publie plus depuis le 07/10/2026 : elle vient des
+    echantillons pris avant cette date, et ne bouge donc plus. Elle reste
+    juste dans ses proportions — les compteurs sont des cumuls du cycle — et
+    c'est sa date qui le dit, affichee a cote.
+    """
+    ts = conn.execute(
+        "SELECT MAX(ts) FROM cloud_samples WHERE model <> ''").fetchone()[0]
+    if not ts:
+        return None
+    rows = conn.execute(
+        "SELECT model, requests FROM cloud_samples WHERE ts = ? AND model <> ''"
+        " ORDER BY requests DESC", (ts,)).fetchall()
+    return ts, [{"model": m, "requests": n} for m, n in rows]
 
 
 def cycle_first_day(cycle_start: int | None) -> str | None:
@@ -537,6 +598,9 @@ def empty_usage() -> dict:
         "usd": 0.0,
         "requests": 0,
         "peak": 0.0,
+        "models": [],
+        "models_total": 0,
+        "models_at": None,
         "generated_at": int(time.time() * 1000),
     }
 
@@ -556,6 +620,26 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
     # le cycle precedent, et son total contredirait celui du quota.
     jours = [j for j in tous if premier and j["day"] >= premier]
 
+    # La repartition par modele, elle, vient de la derniere lecture qui l'a
+    # portee. La cle API ne la donne plus ; le site, lui, l'a toujours.
+    lecture = last_model_reading(conn)
+    modeles = []
+    models_at = None
+    if lecture:
+        models_at, brut = lecture
+        assign_model_colors(conn, [r["model"] for r in brut])
+        slots = {m: s for m, s in conn.execute("SELECT model, slot FROM model_color")}
+        # La part se calcule apres le repli : la ligne « Autres » n'existe
+        # qu'a ce moment-la, et elle n'a pas de part a elle seule.
+        modeles = fold_extra([
+            {"model": r["model"], "slot": slots.get(r["model"], MAX_SLOTS),
+             "total": r["requests"], "messages": r["requests"]}
+            for r in brut
+        ])
+        total = sum(m["total"] for m in modeles)
+        for m in modeles:
+            m["share"] = (m["total"] / total) if total else 0.0
+
     return {
         "unit": "jours",
         "days": jours,
@@ -564,6 +648,9 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
         "requests": sum(j["requests"] for j in jours),
         # Le jour le plus charge donne l'echelle des barres.
         "peak": max((j["usd"] for j in jours), default=0.0),
+        "models": modeles,
+        "models_total": len(modeles),
+        "models_at": models_at,
         "generated_at": int(time.time() * 1000),
     }
 
