@@ -288,39 +288,44 @@ def cycle_ratio(cap: float, cycle_start: int | None,
     return (consume / cap) if consume is not None else None
 
 
+def cycle_first_day(cycle_start: int | None) -> str | None:
+    """Premier jour entier du cycle, en ISO. None sans debut de cycle.
+
+    Les jours que publie l'API sont coupes a minuit UTC ; le cycle, lui,
+    commence a une heure quelconque. On part donc du premier jour entier, et
+    jamais de la journee charniere : elle appartient pour partie au cycle
+    precedent, et la compter fausse tout. Verifie contre le site le
+    07/10/2026, qui annoncait 59,81 $.
+    """
+    if not cycle_start:
+        return None
+    debut = datetime.fromtimestamp(cycle_start / 1000, timezone.utc)
+    jour = debut.date()
+    if (debut.hour, debut.minute, debut.second, debut.microsecond) != (0, 0, 0, 0):
+        jour += timedelta(days=1)
+    return jour.isoformat()
+
+
 def cloud_cycle_usage(cloud: dict | None, cycle_start: int | None) -> float | None:
     """Dollars consommes depuis le debut du cycle, ou None si on ne sait pas.
 
     L'API ne donne plus la part du quota, mais la consommation de chaque jour :
     le cycle est donc la somme des jours depuis son debut.
 
-    La journee charniere est comptee au prorata. Les jours sont decoupes en
-    UTC, alors que la remise a zero tombe a une heure quelconque : sur ce
-    compte, un cycle ouvert le 12/09 a minuit local commence a 22 h UTC la
-    veille. Compter cette journee entiere ajoutait 7,81 $ — 13 % du plafond.
-    Le prorata suppose la consommation uniforme dans la journee ; c'est une
-    approximation, mais elle porte sur une fraction de jour.
+    On part du premier jour entier du cycle, jamais de la journee charniere :
+    les jours sont coupes a minuit UTC, la remise a zero tombe a une heure
+    quelconque. Verifie contre le site le 07/10/2026 — il annoncait 59,81 $.
+    Les jours entiers depuis le 12/09 donnent 59,80 $. La journee charniere
+    comptee au prorata donnait 60,45 $, et comptee entiere 67,37 $.
 
     Sans debut de cycle, il n'y a pas de somme a faire : deviner reviendrait a
     publier un chiffre faux.
     """
     jours = cloud_days(cloud)
-    if jours is None or not cycle_start:
+    premier = cycle_first_day(cycle_start)
+    if jours is None or premier is None:
         return None
-
-    debut = datetime.fromtimestamp(cycle_start / 1000, timezone.utc)
-    total = 0.0
-    for jour in jours:
-        ouverture = datetime.fromisoformat(jour["day"] + "T00:00:00+00:00")
-        fermeture = ouverture + timedelta(days=1)
-        if fermeture <= debut:
-            continue
-        if ouverture >= debut:
-            total += jour["usd"]
-        else:
-            part = (fermeture - debut).total_seconds() / 86400
-            total += jour["usd"] * part
-    return total
+    return sum(j["usd"] for j in jours if j["day"] >= premier)
 
 
 def next_occurrence(anchor: datetime, now: datetime) -> int:
@@ -543,15 +548,20 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
     publier, et aucun autre endpoint ne la donne. Ce qui reste est le detail
     des jours — la seule ventilation que la cle API ouvre encore.
     """
-    jours = cloud_days(cloud) or []
-    totaux = cloud_totals(cloud) or {}
+    tous = cloud_days(cloud) or []
+    _, cycle_start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
+    premier = cycle_first_day(cycle_start)
+
+    # Les jours du cycle, et eux seuls : la fenetre de trente jours deborde sur
+    # le cycle precedent, et son total contredirait celui du quota.
+    jours = [j for j in tous if premier and j["day"] >= premier]
 
     return {
         "unit": "jours",
         "days": jours,
         "days_total": len(jours),
-        "usd": float(totaux.get("usage_usd") or sum(j["usd"] for j in jours)),
-        "requests": int(totaux.get("request_count") or sum(j["requests"] for j in jours)),
+        "usd": sum(j["usd"] for j in jours),
+        "requests": sum(j["requests"] for j in jours),
         # Le jour le plus charge donne l'echelle des barres.
         "peak": max((j["usd"] for j in jours), default=0.0),
         "generated_at": int(time.time() * 1000),

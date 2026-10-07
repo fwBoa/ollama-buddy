@@ -543,15 +543,14 @@ const FR = {
 
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Overview': "Vue d'ensemble",
-  'Average / day': 'Moyenne / jour',
   'Daily consumption': 'Consommation par jour',
-  '{n} requests this month': '{n} requêtes sur le mois en cours',
   '{day}: {amount}': '{day} : {amount}',
-  '<b>{amount}</b> of usage over the last {n} days': '<b>{amount}</b> de consommation sur les {n} derniers jours',
-  ', <b>{n}</b> requests': ', <b>{n}</b> requêtes',
-  'Usage over 30 days': 'Consommation sur 30 jours',
-  'Requests over 30 days': 'Requêtes sur 30 jours',
-  '{amount} over the last {n} days': '{amount} sur les {n} derniers jours',
+  'Usage this cycle': 'Consommation du cycle',
+  'Requests this cycle': 'Requêtes du cycle',
+  'Busiest day': 'Jour le plus chargé',
+  '{amount} of usage this cycle': '{amount} de consommation sur le cycle',
+  '<b>{amount}</b> of usage this cycle': '<b>{amount}</b> de consommation sur le cycle',
+  ' ({from} to {to})': ' ({from} au {to})',
   'Read error: {error}': 'Erreur de lecture : {error}',
   'Error: {error}': 'Erreur : {error}',
   'Live': 'En direct',
@@ -873,18 +872,17 @@ function render(data) {
     return;
   }
 
-  /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
-  let reading = fill(T('<b>{amount}</b> of usage over the last {n} days'),
-                     { amount: usd(data.usd), n: jours.length });
-  if (data.requests) reading += fill(T(', <b>{n}</b> requests'), { n: exact(data.requests) });
-  reading += '.';
-  sub.innerHTML = reading;
-
-  /* Moyenne par jour sur les journees pleines : la derniere est en cours, la
-     compter entiere sous-estimerait la moyenne. Sans au moins deux journees,
-     il n'y a pas de moyenne plutot qu'un chiffre divise par rien. */
-  const pleines = jours.slice(0, -1);
-  const avg = pleines.length ? data.usd / pleines.length : null;
+  /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas.
+     Les bornes du cycle y sont ecrites : depuis le 07/10/2026, c'est la date de
+     remise a zero qui porte tout le calcul, autant qu'elle soit sous les yeux. */
+  const bornes = data.quota?.cycle_start && data.quota?.resets_at
+    ? fill(T(' ({from} to {to})'), {
+        from: new Date(data.quota.cycle_start).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
+        to: new Date(data.quota.resets_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
+      })
+    : '';
+  sub.innerHTML = fill(T('<b>{amount}</b> of usage this cycle'), { amount: usd(data.usd) })
+    + bornes + '.';
 
   /* Consommation par jour. Remplace la repartition par modele : le
      07/10/2026 l'API a cesse de la publier, et aucun autre endpoint ne la
@@ -911,16 +909,16 @@ function render(data) {
 
     <div class="hero-row">
       <div class="hero-figure">
-        <div class="hero-label">${T('Usage over 30 days')}</div>
+        <div class="hero-label">${T('Usage this cycle')}</div>
         <div class="hero-value" id="hero">${usd(data.usd)}</div>
       </div>
       <div class="stat">
-        <span class="k">${T('Requests over 30 days')}</span>
+        <span class="k">${T('Requests this cycle')}</span>
         <span class="v">${fmt(data.requests)}</span>
       </div>
       <div class="stat">
-        <span class="k">${T('Average / day')}</span>
-        <span class="v">${avg === null ? '—' : usd(avg)}</span>
+        <span class="k">${T('Busiest day')}</span>
+        <span class="v">${data.peak ? usd(data.peak) : '—'}</span>
       </div>
     </div>
 
@@ -938,7 +936,7 @@ function render(data) {
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
-    fill(T('{amount} over the last {n} days'), { amount: usd(data.usd), n: jours.length }));
+    fill(T('{amount} of usage this cycle'), { amount: usd(data.usd) }));
 
   /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
      au frame suivant pour que la transition se declenche, et les mises a jour

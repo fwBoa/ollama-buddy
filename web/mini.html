@@ -146,7 +146,7 @@ const FR = {
   ' — cap reached today': " — plafond atteint aujourd'hui",
   ' — cap reached tomorrow': ' — plafond atteint demain',
   ' — cap reached in {n} days': ' — plafond atteint dans\u00A0{n} jours',
-  'Last 30 days': '30 derniers jours',
+  'This cycle': 'Le cycle',
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Open the dashboard': 'Ouvrir le tableau de bord',
   'Live': 'En direct',
@@ -262,7 +262,7 @@ function render(d) {
     ${rate}
     ${live ? `
       <hr>
-      <p class="label">${T('Last 30 days')}</p>
+      <p class="label">${T('This cycle')}</p>
       <div class="row">
         <span class="big">${usd(d.usd || 0)}</span>
         <span class="sub">${exact(d.requests || 0)} req.</span>
