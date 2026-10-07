@@ -5,7 +5,6 @@
 <title>Ollama Buddy — summary</title>
 <link rel="icon" href="ollama.png" type="image/png">
 <style>
-  /* Meme palette que le tableau de bord, en plus compact. */
   :root {
     color-scheme: light;
     --surface:   #fcfcfb;
@@ -22,8 +21,6 @@
     --serious:   #bc572e;
     --critical:  #d03b3b;
     --accent:    #2271ce;
-    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
-    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
     --ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
   }
   @media (prefers-color-scheme: dark) {
@@ -40,8 +37,6 @@
       --serious:  #ec835a;
       --critical: #de4946;
       --accent:   #3987e5;
-      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
     }
   }
   :root[data-theme="dark"] {
@@ -58,8 +53,6 @@
     --serious:  #ec835a;
     --critical: #de4946;
     --accent:   #3987e5;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
   }
 
   * { box-sizing: border-box; }
@@ -149,12 +142,12 @@ const FR = {
   'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.':
     'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.',
   '{amount} / day': '{amount} / jour',
+  ' — cap exceeded': ' — plafond dépassé',
   ' — cap reached today': " — plafond atteint aujourd'hui",
   ' — cap reached tomorrow': ' — plafond atteint demain',
   ' — cap reached in {n} days': ' — plafond atteint dans\u00A0{n} jours',
-  'This month': 'Ce mois',
+  'Last 30 days': '30 derniers jours',
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
-  'Other ({n})': 'Autres ({n})',
   'Open the dashboard': 'Ouvrir le tableau de bord',
   'Live': 'En direct',
   'Reconnecting': 'Reconnexion',
@@ -176,22 +169,15 @@ function resolveLang(pref) {
   return String(navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
 }
 
-const compact = n => {
-  const fr = lang === 'fr';
-  const num = (v, d) => (fr ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
-  const unit = u => (fr ? ' ' : '') + u;
-  if (n >= 1e9) return num(n / 1e9, 2) + unit(fr ? 'Md' : 'B');
-  if (n >= 1e6) return num(n / 1e6, 2) + unit('M');
-  if (n >= 1e3) return num(n / 1e3, 1) + unit('k');
-  return String(n);
-};
 const exact = n => new Intl.NumberFormat(locale()).format(n);
 const usd = n => (lang === 'fr' ? n.toFixed(2).replace('.', ',') + ' $' : '$' + n.toFixed(2));
 const pct = x => (lang === 'fr'
   ? (x * 100).toFixed(1).replace('.', ',') + ' %'
   : (x * 100).toFixed(1) + '%');
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
-const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
+/* Les jours arrivent en ISO, coupes en UTC ; le libelle appartient au client. */
+const dayLabel = iso => new Date(iso + 'T00:00:00Z')
+  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
 
 /* Combien de jours pleins il reste, comme ollama.com les compte. Le libelle
    porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
@@ -249,9 +235,10 @@ function render(d) {
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   }
 
-  const models = (d.models || []).slice(0, 3).map(m =>
-    `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
-       <span class="n">${modelLabel(m)}</span><span class="v">${compact(m.total)}</span></div>`
+  /* Les trois derniers jours, en dollars. Remplace les trois premiers modeles :
+     le 07/10/2026 l'API a cesse de publier la repartition par modele. */
+  const jours = (d.days || []).slice(-3).reverse().map(j =>
+    `<div class="m"><span class="n">${dayLabel(j.day)}</span><span class="v">${usd(j.usd)}</span></div>`
   ).join('');
 
   /* Jours pleins, pluriel compris : « dans 1 jours » se lisait mal. */
@@ -261,8 +248,9 @@ function render(d) {
 
   const rate = q.rate_per_day && q.exhausted_in_days !== null && q.exhausted_in_days !== undefined
     ? `<p class="sub" style="margin:10px 0 0">${fill(T('{amount} / day'), { amount: usd(q.rate_per_day) })}${
-        q.days_left !== null && q.exhausted_in_days < q.days_left
-          ? joursAvant(Math.floor(q.exhausted_in_days)) : ''}</p>`
+        q.ratio >= 1 ? T(' — cap exceeded')
+          : q.days_left !== null && q.exhausted_in_days < q.days_left
+            ? joursAvant(Math.floor(q.exhausted_in_days)) : ''}</p>`
     : '';
 
   /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
@@ -274,12 +262,12 @@ function render(d) {
     ${rate}
     ${live ? `
       <hr>
-      <p class="label">${T('This month')}</p>
+      <p class="label">${T('Last 30 days')}</p>
       <div class="row">
-        <span class="big">${compact(d.grand_total || 0)}</span>
-        <span class="sub">${exact(d.messages || 0)} req.</span>
+        <span class="big">${usd(d.usd || 0)}</span>
+        <span class="sub">${exact(d.requests || 0)} req.</span>
       </div>
-      <div class="models">${models || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
+      <div class="models">${jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
     <div class="actions">
       <button type="button" id="open">${T('Open the dashboard')}</button>
     </div>`;
@@ -344,7 +332,7 @@ function connect() {
   stream.onerror = () => setLive(false);
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
-    const sig = `${d.grand_total}|${d.messages}|${d.models?.length}|${d.quota?.current}|${d.quota?.monthly}`
+    const sig = `${d.usd}|${d.requests}|${d.days?.length}|${d.quota?.current}|${d.quota?.monthly}`
       // source / key_set : sans eux, coller une cle refusee ne redessinerait rien.
       + `|${d.quota?.source}|${d.quota?.key_set}`
       // lang : un changement de langue ne bouge aucun chiffre, mais doit

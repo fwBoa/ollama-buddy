@@ -47,30 +47,19 @@ OLLAMA_CLOUD = "https://ollama.com"
 # se rafraichit toutes les 2 secondes, on ne va pas suivre ce rythme.
 CLOUD_TTL_SECONDS = 60
 
+# La fenetre demandee a ollama.com. Le 07/10/2026, /api/usage a change de
+# contrat : il ne renvoie plus la part du quota ni la repartition par modele,
+# mais une consommation par heure ou par jour, en dollars. Les plages
+# acceptees sont 24h, 7d et 30d ; trente jours couvrent un cycle entier, quel
+# que soit son quantieme.
+CLOUD_RANGE = "30d"
+
 # Les compteurs de l'API sont des cumuls : un point toutes les cinq minutes
 # suffit a reconstruire de l'horaire comme du journalier, sans noyer la base.
 CLOUD_SAMPLE_SECONDS = 300
 
-# Une remise a zero ramene la part du plafond a presque rien, d'un coup. Dans
-# un cycle elle ne fait que monter : ces deux seuils ne peuvent pas se
-# declencher sur une consommation ordinaire. Le plus fort recul observe hors
-# remise a zero, sur six jours d'echantillons, valait 0,004.
-RESET_AFTER_MAX = 0.02
-RESET_DROP_MIN = 0.05
-
-# La remise a zero tombe entre deux echantillons, et c'est leur milieu qui la
-# date. Encore faut-il que l'ecart soit celui de la cadence : apres une longue
-# interruption, l'intervalle couvre des jours et ce milieu ne vaut plus rien.
-# On prefere alors ne rien dater — la remise a zero suivante sera vue.
-RESET_MAX_GAP_MS = CLOUD_SAMPLE_SECONDS * 3 * 1000
-
 
 DAY_MS = 86_400_000
-
-# Un modele au-dela de ce slot est regroupe dans "Other" (la 9e serie n'a
-# jamais de teinte inventee).
-MAX_SLOTS = 8
-
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -157,15 +146,16 @@ def cloud_usage(api_key: str) -> dict:
     """Usage du compte ollama.com, lu avec une cle API.
 
     Ollama n'expose l'usage ni en local ni dans sa documentation : le seul
-    moyen programmable est cet endpoint, qui n'est pas documente et peut donc
-    disparaitre. D'ou une fonction qui ne leve jamais et renvoie toujours un
-    dict — soit les donnees, soit `{"error": ...}` que l'interface affiche.
+    moyen programmable est cet endpoint, qui n'est pas documente — il a deja
+    change de forme une fois, le 07/10/2026. D'ou une fonction qui ne leve
+    jamais et renvoie toujours un dict : soit les donnees, soit
+    `{"error": ...}` que l'interface affiche.
     """
     if not api_key:
         return {"error": "no key"}
 
     req = urllib.request.Request(
-        f"{OLLAMA_CLOUD}/api/usage",
+        f"{OLLAMA_CLOUD}/api/usage?range={CLOUD_RANGE}",
         headers={
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
@@ -188,14 +178,10 @@ def cloud_usage(api_key: str) -> dict:
 # --------------------------------------------------------------------------
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS model_color (
-    model TEXT PRIMARY KEY,
-    slot  INTEGER NOT NULL
-);
-
 -- Echantillons de ollama.com/api/usage. Les compteurs de l'API sont des
--- cumuls du mois en cours : c'est leur difference entre deux echantillons qui
--- donne l'activite d'un intervalle. `model` vide = ligne globale.
+-- cumuls du cycle en cours : c'est leur difference entre deux echantillons qui
+-- donne l'activite d'un intervalle. `model` reste vide : l'API ne publie plus
+-- le detail par modele depuis le 07/10/2026.
 CREATE TABLE IF NOT EXISTS cloud_samples (
     ts       INTEGER NOT NULL,
     model    TEXT    NOT NULL,
@@ -204,14 +190,6 @@ CREATE TABLE IF NOT EXISTS cloud_samples (
     PRIMARY KEY (ts, model)
 );
 CREATE INDEX IF NOT EXISTS idx_cloud_samples_ts ON cloud_samples(ts);
-
--- Remises a zero observees. ollama.com ne publie pas cette date ; elle se
--- trahit par une chute de la part du plafond a presque rien. Chaque
--- observation donne le quantieme, et les suivantes s'en deduisent.
-CREATE TABLE IF NOT EXISTS quota_resets (
-    cycle_start INTEGER PRIMARY KEY,  -- premier echantillon du nouveau cycle
-    last_before INTEGER NOT NULL      -- dernier echantillon de l'ancien
-);
 """
 
 
@@ -228,63 +206,21 @@ def connect() -> sqlite3.Connection:
     tables = {row[0] for row in
               conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-    # Les transcripts Claude Code ne sont plus lus : leurs tables n'ont plus
-    # de lecteur. Le quota non plus ne se saisit plus a la main : un montant colle des semaines plus
-    # tot etait affiche comme le quota du jour. Ses releves n'ont plus de
-    # lecteur, la table part avec eux.
-    for table in ("quota_readings", "events", "files"):
+    # Les transcripts Claude Code ne sont plus lus, et le quota ne se saisit
+    # plus a la main : le montant colle des semaines plus tot etait affiche
+    # comme le quota du jour. Ces tables n'ont plus de lecteur. Comme
+    # model_color : la repartition par modele a disparu de l'API le
+    # 07/10/2026, donc plus rien ne lui attribue de teinte. Les remises a zero
+    # observees partent aussi : l'observer regardait une chute de la part du
+    # plafond, et plus rien ne retombe.
+    for table in ("quota_readings", "events", "files", "model_color", "quota_resets"):
         if table in tables:
             conn.execute(f"DROP TABLE {table}")
-    if tables & {"quota_readings", "events", "files"}:
+    if tables & {"quota_readings", "events", "files", "model_color", "quota_resets"}:
         conn.commit()
 
     conn.executescript(SCHEMA)
     return conn
-
-
-def assign_model_colors(conn: sqlite3.Connection, names) -> None:
-    """Attribue un slot de couleur stable a chaque modele (jamais selon son rang).
-
-    La teinte est stockee en base : un modele garde la sienne d'une session a
-    l'autre, meme s'il change de place dans le classement.
-    """
-    known = {r[0] for r in conn.execute("SELECT model FROM model_color")}
-    used = {r[0] for r in conn.execute("SELECT slot FROM model_color")}
-    free = [s for s in range(MAX_SLOTS) if s not in used]
-    for model in sorted(set(names)):
-        if model in known or not free:
-            continue
-        conn.execute("INSERT INTO model_color VALUES (?,?)", (model, free.pop(0)))
-        known.add(model)
-    conn.commit()
-
-
-def fold_extra(rows: list[dict]) -> list[dict]:
-    """Regroupe au-dela du dernier slot : jamais de 9e teinte inventee.
-
-    Seuls le total et le nombre de requetes sont sommes : l'API ne publie rien
-    d'autre par modele.
-    """
-    over = [r for r in rows if r["slot"] >= MAX_SLOTS]
-    rows = [r for r in rows if r["slot"] < MAX_SLOTS]
-    if not over:
-        return rows
-    rows.append({
-        "model": f"Other ({len(over)})",
-        # Le libelle affiche est compose par le client : seul lui sait dans
-        # quelle langue la page se lit. Le serveur fournit de quoi le faire.
-        "other_count": len(over),
-        "slot": MAX_SLOTS,
-        "total": sum(r["total"] for r in over),
-        "messages": sum(r["messages"] for r in over),
-        "other": True,
-    })
-    return rows
-
-
-# --------------------------------------------------------------------------
-# Agregation
-# --------------------------------------------------------------------------
 
 
 def month_shift(moment: datetime, months: int) -> datetime:
@@ -296,244 +232,224 @@ def month_shift(moment: datetime, months: int) -> datetime:
     return moment.replace(year=year, month=month, day=day)
 
 
-def cloud_month_ratio(cloud: dict | None) -> float | None:
-    """Part du quota mensuel consommee (0-1), telle que la publie l'API."""
-    monthly = ((cloud or {}).get("limits") or {}).get("monthly") or {}
-    usage = monthly.get("usage")
-    return float(usage) if isinstance(usage, (int, float)) else None
+def cloud_days(cloud: dict | None) -> list[dict] | None:
+    """Les jours publies par l'API : date, requetes, dollars, jetons.
 
+    `None` quand la reponse n'est pas celle attendue — une forme inconnue ne
+    doit pas se confondre avec « aucun usage ».
 
-def cloud_month_models(cloud: dict | None) -> list[dict]:
-    """Nombre de requetes par modele sur le mois en cours."""
-    monthly = ((cloud or {}).get("limits") or {}).get("monthly") or {}
+    C'est tout ce que /api/usage donne depuis le 07/10/2026. Il portait avant
+    la part du quota et la repartition par modele ; ni l'une ni l'autre n'a
+    ete reprise ailleurs, et aucun autre endpoint ne les publie.
+    """
+    buckets = (cloud or {}).get("buckets")
+    if not isinstance(buckets, list):
+        return None
     rows = []
-    for entry in monthly.get("models") or []:
-        name = str(entry.get("name") or "").strip()
-        if not name:
+    for bucket in buckets:
+        debut = bucket.get("from")
+        if not isinstance(debut, str):
             continue
-        count = entry.get("request_count")
-        rows.append({"model": name, "requests": int(count or 0)})
-    rows.sort(key=lambda r: (-r["requests"], r["model"]))
+        try:
+            moment = datetime.fromisoformat(debut.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        rows.append({
+            "day": moment.astimezone(timezone.utc).date().isoformat(),
+            "requests": int(bucket.get("request_count") or 0),
+            "usd": float(bucket.get("usage_usd") or 0.0),
+            "tokens": (int(bucket.get("input_tokens") or 0)
+                       + int(bucket.get("output_tokens") or 0)),
+        })
+    rows.sort(key=lambda r: r["day"])
     return rows
 
 
-def measured_cadence(conn: sqlite3.Connection) -> int | None:
-    """Cadence du cycle, lue sur les deux dernieres remises a zero.
+def cloud_totals(cloud: dict | None) -> dict | None:
+    """Totaux de la fenetre demandee, ou None si la reponse n'est pas la bonne.
 
-    Rend un nombre de jours si le cycle est a intervalle fixe, et `None` si
-    c'est un mois calendaire — auquel cas c'est le quantieme qui se rejoue,
-    comme l'abonnement. `None` veut aussi dire « pas de quoi trancher » : les
-    deux reponses sont alors la meme.
-
-    Deux dates suffisent a les distinguer, et il faut les distinguer : un
-    ecart de 31 jours entre le 12/10 et le 12/11 decrit le mois d'octobre.
-    Le rejouer tel quel donnerait le 13/12, alors que novembre compte 30
-    jours et que la remise a zero tombe le 12. Un cycle de quatre semaines,
-    lui, donnerait le 09/11 — le quantieme aurait bouge.
-
-    Seul un intervalle fixe se rejoue donc en jours ; un mois calendaire se
-    rejoue en mois.
+    Leur presence distingue « la reponse a change de forme » de « aucun usage
+    sur la periode », qui ne veulent pas dire la meme chose a l'ecran.
     """
-    rows = conn.execute(
-        "SELECT cycle_start FROM quota_resets ORDER BY cycle_start DESC LIMIT 2"
-    ).fetchall()
-    if len(rows) != 2:
+    totaux = (cloud or {}).get("totals")
+    return totaux if isinstance(totaux, dict) else None
+
+
+def cycle_ratio(cap: float, cycle_start: int | None,
+                cloud: dict | None) -> float | None:
+    """Part du plafond consommee sur le cycle, ou None si elle ne se calcule pas.
+
+    Peut depasser 1 : un depassement est une information, pas une erreur de
+    calcul. C'est l'interface qui borne la jauge.
+    """
+    if cap <= 0:
+        return None
+    consume = cloud_cycle_usage(cloud, cycle_start)
+    return (consume / cap) if consume is not None else None
+
+
+def cloud_cycle_usage(cloud: dict | None, cycle_start: int | None) -> float | None:
+    """Dollars consommes depuis le debut du cycle, ou None si on ne sait pas.
+
+    L'API ne donne plus la part du quota, mais la consommation de chaque jour :
+    le cycle est donc la somme des jours depuis son debut.
+
+    La journee charniere est comptee au prorata. Les jours sont decoupes en
+    UTC, alors que la remise a zero tombe a une heure quelconque : sur ce
+    compte, un cycle ouvert le 12/09 a minuit local commence a 22 h UTC la
+    veille. Compter cette journee entiere ajoutait 7,81 $ — 13 % du plafond.
+    Le prorata suppose la consommation uniforme dans la journee ; c'est une
+    approximation, mais elle porte sur une fraction de jour.
+
+    Sans debut de cycle, il n'y a pas de somme a faire : deviner reviendrait a
+    publier un chiffre faux.
+    """
+    jours = cloud_days(cloud)
+    if jours is None or not cycle_start:
         return None
 
-    dernier = datetime.fromtimestamp(rows[0][0] / 1000, timezone.utc)
-    avant = datetime.fromtimestamp(rows[1][0] / 1000, timezone.utc)
-    ecart = (dernier - avant).total_seconds() / 86400
-    # Un cycle plausible. En dehors, la mesure est douteuse : deux remises a
-    # zero separees par trois jours ne decrivent pas un cycle.
-    if not 20 <= ecart <= 40:
-        return None
+    debut = datetime.fromtimestamp(cycle_start / 1000, timezone.utc)
+    total = 0.0
+    for jour in jours:
+        ouverture = datetime.fromisoformat(jour["day"] + "T00:00:00+00:00")
+        fermeture = ouverture + timedelta(days=1)
+        if fermeture <= debut:
+            continue
+        if ouverture >= debut:
+            total += jour["usd"]
+        else:
+            part = (fermeture - debut).total_seconds() / 86400
+            total += jour["usd"] * part
+    return total
 
-    # Le quantieme se rejoue-t-il ? `month_shift` decrit exactement ca. La
-    # tolerance couvre l'imprecision de la datation — l'instant vrai est
-    # encadre par deux echantillons, donc connu a quelques minutes pres.
-    if abs((dernier - month_shift(avant, 1)).total_seconds()) <= 3600:
-        return None
-    return round(ecart)
 
-
-def next_occurrence(anchor: datetime, now: datetime, jours: int | None) -> int:
+def next_occurrence(anchor: datetime, now: datetime) -> int:
     """Prochaine occurrence de `anchor`, en ms epoch. 0 si aucune.
 
-    Sans cadence mesuree, le quantieme se rejoue de mois en mois, comme
-    l'abonnement. `month_shift` borne alors le jour au dernier du mois : une
-    remise a zero le 31 tombe le 30 en novembre.
+    Le quantieme se rejoue de mois en mois, comme l'abonnement. `month_shift`
+    borne le jour au dernier du mois : une remise a zero le 31 tombe le 30 en
+    novembre.
     """
-    def suivant(moment: datetime, pas: int) -> datetime:
-        return (moment + timedelta(days=pas * jours) if jours
-                else month_shift(moment, pas))
-
     if anchor > now:
         return int(anchor.timestamp() * 1000)
-    # De cycle en cycle jusqu'a depasser aujourd'hui : robuste quand la
-    # derniere observation a plus d'un cycle de retard.
+    # De mois en mois jusqu'a depasser aujourd'hui : robuste quand la date
+    # saisie a plus d'un cycle de retard.
     for pas in range(1, 14):
-        candidate = suivant(anchor, pas)
+        candidate = month_shift(anchor, pas)
         if candidate > now:
             return int(candidate.timestamp() * 1000)
     return 0
-
-
-def observed_reset(conn: sqlite3.Connection) -> tuple[int, int] | None:
-    """Derniere remise a zero vue : (dernier echantillon avant, premier apres).
-
-    L'instant vrai tombe entre les deux, donc a moins de cinq minutes de l'un
-    comme de l'autre.
-    """
-    row = conn.execute(
-        "SELECT last_before, cycle_start FROM quota_resets"
-        " ORDER BY cycle_start DESC LIMIT 1"
-    ).fetchone()
-    return (row[0], row[1]) if row else None
 
 
 def reset_window(conn: sqlite3.Connection, cfg: dict,
                  now: datetime) -> tuple[int, int | None, str | None]:
     """Cycle en cours : (prochaine remise a zero, debut du cycle, origine).
 
-    ollama.com ne publie pas cette date. `activity.period` decrit une fenetre
-    glissante de quatre semaines alignee sur un lundi : son `starting_at`
-    avance d'une semaine chaque semaine, et en tirer un quantieme donne une
-    remise a zero qui se decale d'autant. Elle n'est donc pas utilisee.
+    Une seule source : la date saisie dans les reglages, lue sur le site. Le
+    quantieme se rejoue alors de mois en mois, comme l'abonnement.
 
-    Restent deux sources, dans cet ordre :
+    L'app a su la deduire de l'API, puis l'observer sur ses echantillons. Les
+    deux sont mortes le 07/10/2026 : `activity.period` decrivait une fenetre
+    glissante de quatre semaines — son `starting_at` avancait d'une semaine
+    chaque semaine — et le nouveau /api/usage ne publie plus de cumul qui
+    retombe a zero, donc plus rien a observer.
 
-      1. une remise a zero deja observee sur les echantillons — mesuree ;
-      2. la date saisie dans les reglages — un fait, lu sur le site.
-
-    La mesure passe devant, et c'est un renversement : une date saisie ne se
-    perime pas toute seule, mais rien ne la confirme non plus. Le 07/10 saisi
-    un jour et le site qui annonce cinq jours plus tard ne se reconcilient
-    pas, et l'app affichait la saisie avec l'assurance d'une mesure. Une
-    remise a zero vue, elle, ne peut pas avoir tort. La saisie reste la
-    premiere source d'un cycle : elle amorce, tant que rien n'a ete vu.
-
-    Sans l'une ni l'autre, il n'y a pas de date : le compte a rebours se tait
-    plutot que d'en inventer une. Les deux rendent leur `origine`, pour que
-    l'interface puisse dire d'ou vient la date.
+    Sans date saisie, il n'y en a pas, et l'interface se tait plutot que d'en
+    inventer une. Elle rend son `origine` pour pouvoir le dire.
     """
-    jours = measured_cadence(conn)
-
-    seen = observed_reset(conn)
-    if seen:
-        before, after = seen
-        # Le milieu des deux echantillons plutot que le second : l'instant vrai
-        # est encadre, rien ne dit qu'il est plus pres de l'un que de l'autre.
-        # Le cycle, lui, commence au premier echantillon d'apres.
-        anchor = datetime.fromtimestamp((before + after) / 2000, timezone.utc)
-        resets_at = next_occurrence(anchor, now, jours)
-        if resets_at:
-            return resets_at, after, "observed"
-
     declared = int(cfg.get("quota_reset_at") or 0)
-    if declared:
-        anchor = datetime.fromtimestamp(declared / 1000, timezone.utc)
-        resets_at = next_occurrence(anchor, now, jours)
-        if not resets_at:
-            return 0, None, None
-        # Le debut du cycle n'a pas ete vu : on le suppose un cycle en arriere.
-        fin = datetime.fromtimestamp(resets_at / 1000, timezone.utc)
-        start = fin - timedelta(days=jours) if jours else month_shift(fin, -1)
-        return resets_at, int(start.timestamp() * 1000), "settings"
+    if not declared:
+        return 0, None, None
 
-    return 0, None, None
+    anchor = datetime.fromtimestamp(declared / 1000, timezone.utc)
+    resets_at = next_occurrence(anchor, now)
+    if not resets_at:
+        return 0, None, None
+    # Le debut du cycle n'est pas publie : on le suppose un mois en arriere.
+    fin = datetime.fromtimestamp(resets_at / 1000, timezone.utc)
+    return resets_at, int(month_shift(fin, -1).timestamp() * 1000), "settings"
 
-
-def record_cloud_sample(conn: sqlite3.Connection, cloud: dict | None) -> bool:
+def record_cloud_sample(conn: sqlite3.Connection, cloud: dict | None, cycle_start: int | None,
+                        cap: float) -> bool:
     """Enregistre un point de mesure, au plus un toutes les cinq minutes.
 
-    Les cumuls bruts sont conserves tels quels : n'importe quelle granularite
-    se recalcule ensuite a partir d'eux. C'est aussi le seul endroit qui voit
-    passer la chute d'une remise a zero, donc le seul ou la detecter.
+    La valeur conservee est la *part* du plafond consommee sur le cycle. C'est
+    la meme grandeur qu'avant le 07/10/2026, quand l'API la publiait
+    directement : les echantillons deja en base restent donc comparables, et
+    c'est ce qui permet au rythme de traverser le changement d'API.
     """
-    ratio = cloud_month_ratio(cloud)
-    models = cloud_month_models(cloud)
-    if ratio is None or not models:
+    ratio = cycle_ratio(cap, cycle_start, cloud)
+    if ratio is None:
         return False
 
     ts = int(time.time() * 1000)
-    previous = conn.execute(
-        "SELECT ts, usage FROM cloud_samples WHERE model = '' ORDER BY ts DESC LIMIT 1"
-    ).fetchone()
-    if previous and ts - previous[0] < CLOUD_SAMPLE_SECONDS * 1000:
+    dernier = conn.execute("SELECT MAX(ts) FROM cloud_samples").fetchone()[0]
+    if dernier and ts - dernier < CLOUD_SAMPLE_SECONDS * 1000:
         return False
 
-    if (previous and ratio <= RESET_AFTER_MAX and previous[1] - ratio >= RESET_DROP_MIN
-            and ts - previous[0] <= RESET_MAX_GAP_MS):
-        conn.execute("INSERT OR REPLACE INTO quota_resets VALUES (?,?)", (ts, previous[0]))
-        print(f"[cloud] remise a zero observee : part {previous[1]:.3f} -> {ratio:.3f},"
-              f" entre {previous[0]} et {ts}", file=sys.stderr)
-
-    conn.executemany(
-        "INSERT OR REPLACE INTO cloud_samples VALUES (?,?,?,?)",
-        [(ts, m["model"], m["requests"], ratio) for m in models]
-        + [(ts, "", sum(m["requests"] for m in models), ratio)],
-    )
+    # Une seule ligne, globale : l'API ne publie plus le detail par modele.
+    conn.execute("INSERT OR REPLACE INTO cloud_samples VALUES (?,?,?,?)",
+                 (ts, "", int((cloud_totals(cloud) or {}).get("request_count") or 0), ratio))
     conn.commit()
     return True
 
 
 def cloud_rate(conn: sqlite3.Connection,
-               cycle_start: int | None) -> tuple[float | None, float | None]:
-    """Rythme de consommation du cycle en cours : (part/jour, $/jour).
+               cycle_start: int | None) -> float | None:
+    """Rythme de consommation du cycle en cours, en part du plafond par jour.
 
-    Mesure sur les echantillons reels, donc il integre tous les clients —
-    y compris ceux dont l'app ne voit jamais passer la requete. La fenetre
-    part du debut du cycle, jamais d'un mois en arriere : un echantillon
-    d'avant la remise a zero ferait croire a une chute.
+    Mesure sur les echantillons reels, donc il integre tous les clients — y
+    compris ceux dont l'app ne voit jamais passer la requete. La fenetre part
+    du debut du cycle : un echantillon d'avant la remise a zero ferait croire
+    a une chute.
     """
     if not cycle_start:
-        return None, None
+        return None
     rows = conn.execute(
         """SELECT ts, usage FROM cloud_samples
            WHERE model = '' AND ts >= ? ORDER BY ts""",
         (cycle_start,),
     ).fetchall()
     if len(rows) < 2:
-        return None, None
+        return None
 
     # Une journee pleine au minimum. Sur trente minutes, une rafale suffit a
     # faire croire a 29 $/jour : la projection annoncait 240 $ au reset. Mieux
     # vaut ne rien dire tant que la mesure ne porte pas sur assez de temps.
     span = (rows[-1][0] - rows[0][0]) / DAY_MS
     if span < 1.0:
-        return None, None
-    share_per_day = (rows[-1][1] - rows[0][1]) / span
-    if share_per_day <= 0:
-        return None, None
-    return share_per_day, rows[-1][1]
+        return None
+    part_par_jour = (rows[-1][1] - rows[0][1]) / span
+    if part_par_jour <= 0:
+        return None
+    return part_par_jour
 
 
 def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
                 account: dict | None = None) -> dict:
     """Etat du plafond mensuel, lu sur ollama.com quand une cle est fournie.
 
-    L'API ne donne ni le montant en dollars ni la date de reinitialisation :
-    `limits.monthly.usage` est une *part* du plafond, et la date se lit sur les
-    reglages ou sur une remise a zero deja observee. Le reste (rythme,
-    projection) se mesure sur les echantillons.
+    Depuis le 07/10/2026, l'API ne publie plus la part du quota : elle publie
+    la consommation de chaque jour, en dollars. Le cycle est donc leur somme
+    depuis son debut, et la part est cette somme rapportee au plafond. Le
+    debut du cycle vient des reglages — il porte desormais tout le calcul.
 
-    Sans cle, l'etat est neutre : aucun chiffre de quota n'est publie. Mieux
-    vaut ne rien dire qu'afficher comme mesure un montant colle des semaines
-    plus tot.
+    Sans cle, ou sans debut de cycle, l'etat est neutre : aucun chiffre de
+    quota n'est publie. Mieux vaut ne rien dire qu'afficher un a-peu-pres.
     """
     monthly = monthly_cap(cfg, account)
+    now = datetime.now(timezone.utc)
     now_ms = int(time.time() * 1000)
-    ratio = cloud_month_ratio(cloud)
+    resets_at, cycle_start, reset_source = reset_window(conn, cfg, now)
+    consume = cloud_cycle_usage(cloud, cycle_start)
 
-    if ratio is None:
+    if consume is None or monthly <= 0:
         return quota_unavailable(conn, cfg, cloud, account)
 
-    resets_at, cycle_start, reset_source = reset_window(conn, cfg, datetime.now(timezone.utc))
+    ratio = consume / monthly
     days_left = max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None
-    share_per_day, _ = cloud_rate(conn, cycle_start)
-
-    rate = share_per_day * monthly if share_per_day and monthly else None
-    current = ratio * monthly if monthly else None
+    part_par_jour = cloud_rate(conn, cycle_start)
+    rate = part_par_jour * monthly if part_par_jour else None
 
     return {
         "source": "api",
@@ -545,40 +461,40 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
         # pouvoir montrer « rien de saisi » sans confondre ca avec « zero ».
         "monthly_set": float(cfg.get("monthly_quota") or 0),
         "ratio": ratio,
-        "current": current,
+        # Le montant vient de l'API telle quelle : plus de part multipliee par
+        # le plafond, donc plus d'ecart avec le chiffre du site.
+        "current": consume,
         "resets_at": resets_at,
-        # Ce qui est saisi, a part de la date en vigueur, pour la meme raison :
-        # le champ des reglages ne doit pas se remplir tout seul avec une date
-        # que l'app a mesuree.
+        # Ce qui est saisi, a part de la date en vigueur : le champ des
+        # reglages ne doit pas se remplir tout seul.
         "resets_set": int(cfg.get("quota_reset_at") or 0),
         "resets_source": reset_source,
         "days_left": days_left,
-        # Le debut du cycle, mesure, et rien d'autre : `period.starting_at`
-        # est une fenetre glissante, pas un debut d'abonnement.
+        # L'interface doit distinguer « la reponse est inattendue » de « il
+        # manque la date de remise a zero » : deux causes, deux gestes.
+        "cycle_known": True,
         "cycle_start": (datetime.fromtimestamp(cycle_start / 1000, timezone.utc).isoformat()
                         if cycle_start else None),
         "rate_per_day": rate,
-        "projected_at_reset": (current + rate * days_left
-                               if current is not None and rate and days_left is not None
-                               else None),
-        "exhausted_in_days": (max(0.0, (1.0 - ratio) / share_per_day)
-                              if share_per_day else None),
+        "projected_at_reset": (consume + rate * days_left
+                               if rate and days_left is not None else None),
+        "exhausted_in_days": (max(0.0, (monthly - consume) / rate) if rate else None),
     }
 
 
 def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
                       account: dict | None = None) -> dict:
-    """Etat neutre : aucune part du plafond n'a pu etre lue.
+    """Etat neutre : aucun chiffre de quota n'a pu etre etabli.
 
     Meme jeu de cles que la branche API, mesures a None. Elles sont nommees
     explicitement : mini.html teste `days_left === null`, une cle absente
     donnerait « reset dans NaN j ».
 
     La date de reinitialisation, elle, reste renseignee : elle vient des
-    reglages ou d'une remise a zero deja vue, pas du plafond. C'est un fait,
-    et il ne depend pas de la lecture du jour.
+    reglages, pas de la mesure. C'est un fait, et il ne depend pas de la
+    lecture du jour.
     """
-    resets_at, _, reset_source = reset_window(conn, cfg, datetime.now(timezone.utc))
+    resets_at, cycle_start, reset_source = reset_window(conn, cfg, datetime.now(timezone.utc))
     now_ms = int(time.time() * 1000)
     return {
         "source": "indisponible",
@@ -593,6 +509,9 @@ def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = 
         "resets_set": int(cfg.get("quota_reset_at") or 0),
         "resets_source": reset_source,
         "days_left": (max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None),
+        # Sans debut de cycle, la somme des jours ne veut rien dire : c'est ce
+        # qui manque, pas la reponse d'ollama.com.
+        "cycle_known": cycle_start is not None,
         "cycle_start": None,
         "rate_per_day": None,
         "projected_at_reset": None,
@@ -607,66 +526,36 @@ def empty_usage() -> dict:
     qu'une partie des clients laisserait croire a une mesure globale.
     """
     return {
-        "unit": "requetes",
-        "models_total": 0,
-        "cycle_days": None,
-        "models": [],
-        "grand_total": 0,
-        "messages": 0,
+        "unit": "jours",
+        "days": [],
+        "days_total": 0,
+        "usd": 0.0,
+        "requests": 0,
+        "peak": 0.0,
         "generated_at": int(time.time() * 1000),
     }
 
 
 def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
-    """Repartition par modele, telle que la publie ollama.com.
+    """Consommation jour par jour, telle que la publie ollama.com.
 
-    Le classement est le cumul du mois en cours : il est donc complet des le
-    premier appel, sans attendre d'historique. L'API ne publie aucun passe.
+    Remplace la repartition par modele : le 07/10/2026 l'API a cesse de la
+    publier, et aucun autre endpoint ne la donne. Ce qui reste est le detail
+    des jours — la seule ventilation que la cle API ouvre encore.
     """
-    month = cloud_month_models(cloud)
-    assign_model_colors(conn, [r["model"] for r in month])
-    slots = {m: s for m, s in conn.execute("SELECT model, slot FROM model_color")}
-
-    rows = [
-        {
-            "model": r["model"],
-            "slot": slots.get(r["model"], MAX_SLOTS),
-            "total": r["requests"],
-            "messages": r["requests"],
-        }
-        for r in month
-    ]
-    rows = fold_extra(rows)
-    grand_total = sum(r["total"] for r in rows)
-    for r in rows:
-        r["share"] = (r["total"] / grand_total) if grand_total else 0.0
-
-    # La moyenne par jour divise un cumul du cycle par les jours ecoules dans
-    # ce cycle. Il se lit comme partout ailleurs : la date des reglages, ou une
-    # remise a zero observee. Surtout pas `activity.period.starting_at`, qui
-    # decrit une fenetre glissante de quatre semaines — il gonflait la moyenne
-    # d'un quart. Sans date connue, il n'y a pas de moyenne : `cycle_days` est
-    # nul, et l'interface se tait plutot que de diviser par un.
-    _, cycle_start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
-    cycle_days = None
-    if cycle_start:
-        debut = datetime.fromtimestamp(cycle_start / 1000, timezone.utc)
-        cycle_days = max(1, (datetime.now(timezone.utc) - debut).days + 1)
+    jours = cloud_days(cloud) or []
+    totaux = cloud_totals(cloud) or {}
 
     return {
-        "unit": "requetes",
-        "models_total": len(month),
-        "cycle_days": cycle_days,
-        "models": rows,
-        "grand_total": grand_total,
-        "messages": grand_total,
+        "unit": "jours",
+        "days": jours,
+        "days_total": len(jours),
+        "usd": float(totaux.get("usage_usd") or sum(j["usd"] for j in jours)),
+        "requests": int(totaux.get("request_count") or sum(j["requests"] for j in jours)),
+        # Le jour le plus charge donne l'echelle des barres.
+        "peak": max((j["usd"] for j in jours), default=0.0),
         "generated_at": int(time.time() * 1000),
     }
-
-
-# --------------------------------------------------------------------------
-# Serveur HTTP
-# --------------------------------------------------------------------------
 
 
 class State:
@@ -704,7 +593,7 @@ class State:
         with self.lock:
             self.cloud_data, self.cloud_ts = None, 0.0
 
-    def cloud(self) -> dict | None:
+    def cloud(self, account: dict | None = None) -> dict | None:
         """Usage ollama.com, mis en cache une minute. None si aucune cle."""
         api_key = str(self.cfg.get("ollama_api_key") or "")
         if not api_key:
@@ -718,7 +607,12 @@ class State:
             self.cloud_data, self.cloud_ts = data, time.time()
             if "error" not in data:
                 try:
-                    record_cloud_sample(self.conn, data)
+                    # L'echantillon est une part du plafond : il lui faut le
+                    # debut du cycle et le plafond, tous deux pris maintenant.
+                    _, cycle_start, _ = reset_window(self.conn, self.cfg,
+                                                     datetime.now(timezone.utc))
+                    record_cloud_sample(self.conn, data, cycle_start,
+                                        monthly_cap(self.cfg, account))
                 except sqlite3.Error as exc:   # un echantillon rate n'est pas fatal
                     print(f"[cloud] echantillon non enregistre ({exc})", file=sys.stderr)
         return data
@@ -729,10 +623,10 @@ class State:
         Sans cle il n'y a rien a montrer : on renvoie alors la forme vide,
         meme cle, mesures a None.
         """
-        cloud = self.cloud()
-        # Le compte est lu une fois : l'offre sert au plafond, et part aussi
-        # telle quelle dans le payload pour le badge.
+        # Le compte est lu une fois : l'offre sert au plafond — donc a
+        # l'echantillon — et part aussi telle quelle dans le payload.
         account = ollama_account()
+        cloud = self.cloud(account)
         live = bool(cloud) and "error" not in (cloud or {})
         with self.lock:
             data = build_cloud_usage(self.conn, self.cfg, cloud) if live else empty_usage()
@@ -928,8 +822,9 @@ class Handler(BaseHTTPRequestHandler):
         with self.state.lock:
             # L'offre est repassee : vider le plafond doit rendre celui du plan
             # tout de suite, sans attendre le prochain envoi.
-            quota = build_quota(self.state.conn, cfg, self.state.cloud(),
-                                ollama_account())
+            account = ollama_account()
+            quota = build_quota(self.state.conn, cfg, self.state.cloud(account),
+                                account)
         self.state.broadcast()
         self._json({"ok": True, "quota": quota})
 
@@ -965,7 +860,7 @@ def main() -> int:
         while True:
             time.sleep(interval)
             try:
-                cloud = state.cloud()
+                cloud = state.cloud(ollama_account())
             except Exception as exc:  # noqa: BLE001 - ne jamais tuer la boucle
                 print(f"[veille] {exc}", file=sys.stderr)
                 continue

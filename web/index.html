@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ollama Buddy — Ollama Cloud model usage</title>
+<title>Ollama Buddy — Ollama Cloud usage</title>
 <link rel="icon" href="ollama.png" type="image/png">
 <script>
   /* Pose avant le premier rendu, sinon le contenu saute quand la classe
@@ -45,8 +45,6 @@
        sombre. Deux roles opposes — d'ou ce second jeton, assez sombre pour
        porter du blanc dans les deux themes (5,7:1). */
     --accent-solid: #1f66bb;
-    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
-    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
 
     /* Courbes d'easing fortes : les valeurs CSS natives manquent de mordant. */
     --ease-out:   cubic-bezier(0.23, 1, 0.32, 1);
@@ -71,8 +69,6 @@
       --serious:   #ec835a;
       --critical:  #de4946;
       --accent:    #3987e5;
-      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
     }
   }
   /* Memes valeurs, pour forcer le sombre quand le systeme est en clair.
@@ -96,8 +92,6 @@
     --serious:   #ec835a;
     --critical:  #de4946;
     --accent:    #3987e5;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
   }
 
   * { box-sizing: border-box; }
@@ -355,14 +349,14 @@
     font-size: 12px; color: var(--text-muted); line-height: 1.6;
   }
 
-  /* --- Repartition par modele --- */
+  /* --- Consommation par jour --- */
   .section-title {
     font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--text-muted); margin: 46px 0 16px;
   }
   .models { display: flex; flex-direction: column; }
   .model {
-    display: grid; grid-template-columns: 15px minmax(0, auto) minmax(46px, 1fr) auto;
+    display: grid; grid-template-columns: minmax(0, auto) minmax(46px, 1fr) auto;
     align-items: center; gap: 14px; padding: 13px 12px; margin: 0 -12px;
     border-radius: 11px;
     /* Le delai vit ici, pas dans .stagger : declare dans la regle qui porte la
@@ -387,7 +381,6 @@
   @media (hover: hover) and (pointer: fine) {
     .model:hover { background: var(--ghost); }
   }
-  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
   .model-name { font-size: 13.5px; font-weight: 500; min-width: 0; }
   .model-name .id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-name .n { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
@@ -464,7 +457,6 @@
 <script>
 "use strict";
 
-const SLOTS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8','--s9'];
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 /* =====================================================================
@@ -477,7 +469,7 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
    d'afficher un trou. Un texte neuf non traduit reste lisible.
    ===================================================================== */
 const FR = {
-  'Ollama Buddy — Ollama Cloud model usage': 'Ollama Buddy — consommation des modèles Ollama Cloud',
+  'Ollama Buddy — Ollama Cloud usage': 'Ollama Buddy — consommation Ollama Cloud',
   'Skip to content': 'Aller au contenu',
   'Connecting…': 'Connexion…',
   'Refresh usage': 'Rafraîchir la consommation',
@@ -503,6 +495,7 @@ const FR = {
   ' · reset tomorrow': ' · demain',
   ' · reset in {n} days': ' ·\u00A0dans {n} jours',
   'At this rate: <b>+{amount} / day</b>': 'À ce rythme : <b>+{amount} / jour</b>',
+  'cap exceeded': 'plafond dépassé',
   'cap reached {when}, before the reset': 'plafond atteint {when}, avant la réinitialisation',
   'cap reached {when}': 'plafond atteint {when}',
   'Connect your account to read the quota live: the exact percentage, and the breakdown by model for <b>all</b> your tools, including those whose requests the app never sees.':
@@ -519,6 +512,10 @@ const FR = {
   'Save': 'Enregistrer',
   'Create one at {link}. It never leaves your machine and serves only to <em>read</em> your usage.':
     "Crée-la sur {link}. Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.",
+  '<b class="bad">No cap to set the spend against.</b> The app does not know your plan, so it cannot tell what share of it you have used. Enter one in <b>Monthly cap</b> below.':
+    "<b class=\"bad\">Aucun plafond auquel rapporter la dépense.</b> L'app ne connaît pas ton offre, donc elle ne peut pas dire quelle part tu en as consommée. Renseigne <b>Plafond mensuel</b> ci-dessous.",
+  '<b class="bad">No cycle to add up.</b> ollama.com no longer publishes the quota, so the app adds up your daily usage since the cycle began — and it needs to know when that was. Set <b>Next reset</b> below.':
+    "<b class=\"bad\">Aucun cycle à additionner.</b> ollama.com ne publie plus le quota ; l'app additionne donc ta consommation jour par jour depuis le début du cycle — et il lui faut savoir quand il a commencé. Renseigne <b>Prochaine réinitialisation</b> ci-dessous.",
   'Settings': 'Paramètres',
   'Monthly cap': 'Plafond mensuel',
   'Next reset': 'Prochaine réinitialisation',
@@ -533,31 +530,28 @@ const FR = {
   '{current} of {monthly}': '{current} sur {monthly}',
   ' — {current} of {monthly}': ' — {current} sur {monthly}',
   'projected at reset: {amount}': 'projeté au reset : {amount}',
-  "<b>ollama.com</b> publishes the consumed percentage; the amount in dollars is that percentage applied to the plan's cap. It therefore lands on the sum shown on the site.":
-    "<b>ollama.com</b> publie le pourcentage consommé ; le montant en dollars est ce pourcentage appliqué au plafond du plan. Il tombe donc sur la somme affichée sur le site.",
-  'Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.':
-    "Cycle ouvert le <b>{date}</b> — l'app a mesuré cette remise à zéro elle-même : ollama.com ne publie pas la date.",
-  'Reset date: the one set in Settings — the app has not seen a reset yet.':
-    "Date de réinitialisation : celle saisie dans les réglages — l'app n'a pas encore vu de remise à zéro.",
-  'Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.':
-    "Date de réinitialisation inconnue — ollama.com ne la publie pas. L'app la notera la première fois qu'elle en verra une.",
+  "<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.":
+    "<b>ollama.com</b> publie la consommation de chaque jour, en dollars. Le cycle est la somme de ces jours depuis son début, et le pourcentage est cette somme rapportée au plafond du plan.",
+  'Reset date: the one set in Settings. It is what tells the app where the cycle begins.':
+    "Date de réinitialisation : celle saisie dans les réglages. C'est elle qui dit où commence le cycle.",
+  'Reset date unknown — ollama.com does not publish it, and the app has no other way to learn it: your daily usage is all the API still gives.':
+    "Date de réinitialisation inconnue — ollama.com ne la publie pas, et l'app n'a plus aucun moyen de la déduire : la consommation quotidienne est tout ce que l'API donne encore.",
   'Monthly cap — leave empty to follow your Ollama plan.':
     "Plafond mensuel — laisse vide pour suivre ton offre Ollama.",
-  'Next reset — leave empty, and the app dates it from the first reset it observes.':
-    "Prochaine réinitialisation — laisse vide, et l'app la dattera de la première remise à zéro qu'elle observera.",
+  'Next reset — leave empty and the app will have no cycle to add up.':
+    "Prochaine réinitialisation — laisse vide et l'app n'aura aucun cycle à additionner.",
 
-  'Other ({n})': 'Autres ({n})',
   'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
-  '<b>{total}</b> requests this month': '<b>{total}</b> requêtes sur le mois en cours',
-  ', led by <b>{model}</b> at {pct}': ', portées à {pct} par <b>{model}</b>',
-  ', all on <b>{model}</b>': ', toutes sur <b>{model}</b>',
   'Overview': "Vue d'ensemble",
-  'Requests this month': 'Requêtes ce mois',
-  'Active models': 'Modèles actifs',
   'Average / day': 'Moyenne / jour',
-  'Breakdown by model': 'Répartition par modèle',
+  'Daily consumption': 'Consommation par jour',
   '{n} requests this month': '{n} requêtes sur le mois en cours',
-  '{model}: {pct} of the total': '{model} : {pct} du total',
+  '{day}: {amount}': '{day} : {amount}',
+  '<b>{amount}</b> of usage over the last {n} days': '<b>{amount}</b> de consommation sur les {n} derniers jours',
+  ', <b>{n}</b> requests': ', <b>{n}</b> requêtes',
+  'Usage over 30 days': 'Consommation sur 30 jours',
+  'Requests over 30 days': 'Requêtes sur 30 jours',
+  '{amount} over the last {n} days': '{amount} sur les {n} derniers jours',
   'Read error: {error}': 'Erreur de lecture : {error}',
   'Error: {error}': 'Erreur : {error}',
   'Live': 'En direct',
@@ -676,12 +670,9 @@ function renderQuota(q) {
      ce qui trompait : l'app la deduisait d'une fenetre glissante, et le
      quantieme se decalait d'une semaine chaque semaine. Elle se tait
      desormais quand elle ne sait pas. */
-  const resetNote = q.resets_source === 'observed' && q.cycle_start
-    ? fill(T('Cycle opened on <b>{date}</b> — the app measured that reset itself: ollama.com does not publish the date.'),
-           { date: new Date(q.cycle_start).toLocaleDateString(locale()) })
-    : q.resets_source === 'settings'
-      ? T('Reset date: the one set in Settings — the app has not seen a reset yet.')
-      : T('Reset date unknown — ollama.com does not publish it. The app will record it the first time it sees one.');
+  const resetNote = q.resets_source === 'settings'
+    ? T('Reset date: the one set in Settings. It is what tells the app where the cycle begins.')
+    : T('Reset date unknown — ollama.com does not publish it, and the app has no other way to learn it: your daily usage is all the API still gives.');
 
   /* Les projections vivent ici, avec le rythme dont elles decoulent. Le pied
      de la jauge, lui, porte ce qui est constate : la consommation et le temps
@@ -693,7 +684,12 @@ function renderQuota(q) {
     if (q.projected_at_reset) {
       bits.push(fill(T('projected at reset: {amount}'), { amount: usd(q.projected_at_reset) }));
     }
-    if (q.exhausted_in_days !== null && q.exhausted_in_days !== undefined) {
+    /* Un plafond deja depasse ne se projette pas : il se constate. Le dire
+       « atteint aujourd'hui » alors qu'il l'est depuis des jours serait faux
+       du sens inverse. */
+    if (ratio >= 1) {
+      bits.push(`<span class="alert">${T('cap exceeded')}</span>`);
+    } else if (q.exhausted_in_days !== null && q.exhausted_in_days !== undefined) {
       const beforeReset = q.days_left !== null && q.exhausted_in_days < q.days_left;
       const when = whenText(q.exhausted_in_days);
       bits.push(beforeReset
@@ -716,8 +712,20 @@ function renderQuota(q) {
       : keyError
         ? fill(T(`<b class="bad">Cannot read</b> ({error}) — ollama.com did not
            answer as expected. Another attempt on the next refresh.`), { error: keyError })
-        : T(`<b class="bad">Unexpected response</b> from ollama.com. Usage could not
-           be read.`);
+        : !q.monthly
+          /* Une offre que l'app ne connait pas n'a pas de plafond : sans lui,
+             la somme des jours ne se rapporte a rien. */
+          ? T(`<b class="bad">No cap to set the spend against.</b> The app does not know
+             your plan, so it cannot tell what share of it you have used. Enter one in
+             <b>Monthly cap</b> below.`)
+        : q.cycle_known === false
+          /* Le 07/10/2026, l'API a cesse de publier la part du quota : l'app
+             additionne maintenant les jours, et il lui faut un debut. */
+          ? T(`<b class="bad">No cycle to add up.</b> ollama.com no longer publishes
+             the quota, so the app adds up your daily usage since the cycle began —
+             and it needs to know when that was. Set <b>Next reset</b> below.`)
+          : T(`<b class="bad">Unexpected response</b> from ollama.com. Usage could not
+             be read.`);
 
   /* --- Carte de connexion : le seul endroit où l'app demande une clé.
          Le champ reste vide même quand une clé est enregistrée : le secret
@@ -767,7 +775,7 @@ function renderQuota(q) {
       </div>
       <p class="hint" id="cap-hint">
         ${T('Monthly cap — leave empty to follow your Ollama plan.')}<br>
-        ${T('Next reset — leave empty, and the app dates it from the first reset it observes.')}
+        ${T('Next reset — leave empty and the app will have no cycle to add up.')}
       </p>
       ${live ? `<div class="settings-row">
         <label>${T('ollama.com API key')}
@@ -815,7 +823,7 @@ function renderQuota(q) {
       </div>
       ${rateLine}
       <p class="quota-source">
-        ${resetNote} ${T("<b>ollama.com</b> publishes the consumed percentage; the amount in dollars is that percentage applied to the plan's cap. It therefore lands on the sum shown on the site.")}
+        ${resetNote} ${T("<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.")}
       </p>
       ${settings}
     </section>`;
@@ -825,15 +833,19 @@ function renderQuota(q) {
    Rendu principal
    ===================================================================== */
 
-/* Le regroupement au-dela du huitieme modele est decide par le serveur, mais
-   son libelle appartient au client : le serveur ne sait pas dans quelle langue
-   la page s'affiche. Il envoie donc de quoi le composer. */
-const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
+/* Les jours arrivent en ISO, coupes en UTC. Le libelle appartient au client :
+   seul lui sait dans quelle langue et quel fuseau la page se lit. */
+const dayLabel = iso => new Date(iso + 'T00:00:00Z')
+  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+
+/* Combien de jours la colonne montre. Trente tiendraient dans la page, mais
+   les derniers jours sont ce qu'on vient lire : au-dela de quinze, la liste
+   devient un mur. */
+const JOURS_MONTRES = 14;
 
 function render(data) {
   const app = document.getElementById('app');
-  const models = data.models;
-  const total = data.grand_total;
+  const jours = data.days || [];
 
   const sub = document.getElementById('sub');
 
@@ -853,7 +865,7 @@ function render(data) {
 
   const quota = renderQuota(data.quota);
 
-  if (!models.length) {
+  if (!jours.length) {
     sub.textContent = T('Ollama Cloud usage');
     app.innerHTML = `
       <p class="state">${T('No usage in this cycle.')}</p>
@@ -862,57 +874,53 @@ function render(data) {
   }
 
   /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas. */
-  const top = models[0];
-  let reading = fill(T('<b>{total}</b> requests this month'), { total: fmt(total) });
-  if (models.length > 1) {
-    reading += fill(T(', led by <b>{model}</b> at {pct}'), { model: modelLabel(top), pct: pct(top.share) });
-  } else {
-    reading += fill(T(', all on <b>{model}</b>'), { model: modelLabel(top) });
-  }
+  let reading = fill(T('<b>{amount}</b> of usage over the last {n} days'),
+                     { amount: usd(data.usd), n: jours.length });
+  if (data.requests) reading += fill(T(', <b>{n}</b> requests'), { n: exact(data.requests) });
   reading += '.';
   sub.innerHTML = reading;
 
-  /* La fenetre utile est le cycle d'abonnement, pas le mois civil : sinon
-     « moyenne / jour » diviserait un cumul de plusieurs semaines par un jour.
-     Quand le debut du cycle n'est pas connu, il n'y a pas de moyenne — plutot
-     qu'un chiffre divise par rien. Arrondi, parce que sous 1000 compact()
-     afficherait la valeur brute, decimales comprises. */
-  const avg = data.cycle_days ? Math.round(total / data.cycle_days) : null;
+  /* Moyenne par jour sur les journees pleines : la derniere est en cours, la
+     compter entiere sous-estimerait la moyenne. Sans au moins deux journees,
+     il n'y a pas de moyenne plutot qu'un chiffre divise par rien. */
+  const pleines = jours.slice(0, -1);
+  const avg = pleines.length ? data.usd / pleines.length : null;
 
-  /* Repartition par modele */
-  const rows = models.map(m => {
-    const v = SLOTS[m.slot] || SLOTS[8];
-    return `
-      <div class="model" data-model="${m.model}">
-        <i class="swatch" style="background:var(${v})"></i>
+  /* Consommation par jour. Remplace la repartition par modele : le
+     07/10/2026 l'API a cesse de la publier, et aucun autre endpoint ne la
+     donne. Le jour est la seule ventilation qu'une cle ouvre encore.
+     Les barres se lisent les unes par rapport aux autres : c'est le jour le
+     plus charge qui donne l'echelle. */
+  const pic = data.peak || 1;
+  const rows = jours.slice(-JOURS_MONTRES).reverse().map(j => `
+      <div class="model" data-day="${j.day}">
         <div class="model-name">
-          <span class="id">${modelLabel(m)}</span>
-          <span class="n">${exact(m.messages)} ${T(m.messages > 1 ? 'requests' : 'request')}</span>
+          <span class="id">${dayLabel(j.day)}</span>
+          <span class="n">${exact(j.requests)} ${T(j.requests > 1 ? 'requests' : 'request')}</span>
         </div>
-        <div class="bar" role="img" aria-label="${fill(T('{model}: {pct} of the total'), { model: modelLabel(m), pct: pct(m.share) })}">
-          <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
+        <div class="bar" role="img" aria-label="${fill(T('{day}: {amount}'), { day: dayLabel(j.day), amount: usd(j.usd) })}">
+          <span style="--c:var(--accent); transform:scaleX(${(j.usd / pic).toFixed(4)})"></span>
         </div>
         <div class="model-stats">
-          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)}</span>
+          <span class="tok">${usd(j.usd)}</span>
         </div>
-      </div>`;
-  }).join('');
+      </div>`).join('');
 
   app.innerHTML = `
     <h2 class="visually-hidden">${T('Overview')}</h2>
 
     <div class="hero-row">
       <div class="hero-figure">
-        <div class="hero-label">${T('Requests this month')}</div>
-        <div class="hero-value" id="hero">${compact(total).v}${compact(total).u ? `<span class="hero-unit">${compact(total).u}</span>` : ''}</div>
+        <div class="hero-label">${T('Usage over 30 days')}</div>
+        <div class="hero-value" id="hero">${usd(data.usd)}</div>
       </div>
       <div class="stat">
-        <span class="k">${T('Active models')}</span>
-        <span class="v">${data.models_total ?? models.length}</span>
+        <span class="k">${T('Requests over 30 days')}</span>
+        <span class="v">${fmt(data.requests)}</span>
       </div>
       <div class="stat">
         <span class="k">${T('Average / day')}</span>
-        <span class="v">${avg === null ? '—' : fmt(avg)}</span>
+        <span class="v">${avg === null ? '—' : usd(avg)}</span>
       </div>
     </div>
 
@@ -921,7 +929,7 @@ function render(data) {
         ${quota}
       </div>
       <section aria-labelledby="split-h">
-        <h2 id="split-h" class="section-title">${T('Breakdown by model')}</h2>
+        <h2 id="split-h" class="section-title">${T('Daily consumption')}</h2>
         <div class="models${staggerNext ? ' stagger' : ''}">${rows}</div>
       </section>
     </div>
@@ -930,7 +938,7 @@ function render(data) {
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
-    fill(T('{n} requests this month'), { n: exact(total) }));
+    fill(T('{amount} over the last {n} days'), { amount: usd(data.usd), n: jours.length }));
 
   /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
      au frame suivant pour que la transition se declenche, et les mises a jour
@@ -979,7 +987,7 @@ function applyLang(value) {
   lang = resolveLang(langPref);
 
   document.documentElement.lang = lang;
-  document.title = T('Ollama Buddy — Ollama Cloud model usage');
+  document.title = T('Ollama Buddy — Ollama Cloud usage');
 
   // Le texte d'attente, tant que le premier envoi du serveur n'est pas arrive.
   // Il disparait avec #app des le premier rendu : la recherche renvoie alors
@@ -1051,9 +1059,8 @@ function applyData(data) {
   /* Rien de neuf ? On ne redessine pas : sinon les animations d'entree
      rejoueraient a chaque battement du flux. */
   const signature = [
-    data.grand_total, data.messages, data.error, data.cycle_days,
-    data.models?.length, data.models_total,
-    data.models?.map(m => `${m.model}:${m.total}`).join(','),
+    data.usd, data.requests, data.days?.length, data.error,
+    data.days?.map(j => `${j.day}:${j.usd}`).join(','),
     data.quota?.current, data.quota?.monthly, data.quota?.rate_per_day,
     data.quota?.resets_at, data.theme, data.lang,
     /* source / key_set / key_error sont indispensables a la signature :
@@ -1074,7 +1081,7 @@ function applyData(data) {
     planEl.hidden = false;
   }
 
-  if (data.error && !data.models) {
+  if (data.error && !data.days) {
     document.getElementById('app').innerHTML =
       `<p class="state" role="alert">${fill(T('Error: {error}'), { error: data.error })}</p>`;
     return;

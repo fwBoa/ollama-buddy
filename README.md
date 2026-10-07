@@ -1,7 +1,7 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Your Ollama Cloud usage on your Mac — quota, models, live</em></p>
+  <p><em>Your Ollama Cloud usage on your Mac — quota, dollars, live</em></p>
 
   ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)
   ![No dependencies](https://img.shields.io/badge/dependencies-none-199e70)
@@ -12,7 +12,7 @@
   [Features](#features) • [Install](#install) • [Usage](#usage) • [The monthly quota](#the-monthly-quota) • [Design](#design) • [Français](README.fr.md)
 </div>
 
-<img src="docs/dashboard.png" alt="The Ollama Buddy dashboard: the monthly quota with its meter, this month's requests, the breakdown by model" width="100%">
+<img src="docs/dashboard.png" alt="The Ollama Buddy dashboard: the monthly quota with its meter, the spend over thirty days, and the day-by-day consumption" width="100%">
 
 ---
 
@@ -24,8 +24,8 @@ a dashboard displays it, and a discreet summary stays in the menu bar at all tim
 
 - **Exact monthly quota, live** — the percentage published by ollama.com, plus the
   amount in dollars, the burn rate and the reset date.
-- **Breakdown by model, across every client** — the terminal, the Ollama app,
-  web search and the rest, with the same figures ollama.com shows.
+- **Daily consumption, day by day** — what each of the last thirty days cost, in
+  dollars, with the request count that goes with it.
 - **A permanent summary in the menu bar** — a coloured dot and the percentage
   (with a key), which opens a compact summary.
 - **Real time** — the server pushes changes over SSE, the interface polls nothing.
@@ -125,7 +125,7 @@ orange at 70%, red at 90%. With no key, the icon shows only a llama followed by 
 dash: no figure is published.
 
 A click opens a summary: quota, reset date, this month's consumption and the top
-three models — with a key. Without one, it settles for the invitation to enter a
+three days — with a key. Without one, it settles for the invitation to enter a
 key, and a button to the dashboard.
 
 The summary is live too: it updates for as long as it stays open.
@@ -151,7 +151,8 @@ What the key unlocks:
 | | |
 |---|---|
 | The month's percentage | `limits.monthly.usage`, exact and refreshed on its own |
-| Requests per model | `limits.monthly.models`, **across every client** |
+| Each day's spend, in dollars | `totals.usage_usd` and one bucket per day, since 7 October 2026 |
+| The requests behind it | `request_count`, and the token counts |
 | The rate in $/day | measured from samples taken every five minutes, once a full day has accumulated |
 
 What it does not give you, and how the app copes:
@@ -190,24 +191,28 @@ a setting.
 A single source: `ollama.com/api/usage`, with your key. It covers **all** your
 clients, including those whose requests the app never sees.
 
-`web search` and `web fetch` appear as models — that is how Ollama counts them.
-Beyond eight models, the rest is grouped under "Other".
+> [!IMPORTANT]
+> On **7 October 2026**, ollama.com replaced the `usage` endpoint. It no longer
+> publishes the share of the quota (`limits.monthly.usage`) nor the breakdown by
+> model (`limits.monthly.models`); it now returns a spend in dollars, hour by hour
+> or day by day, over 24 hours, 7 days or 30 days. No other endpoint carries what
+> was dropped, and none of it is documented.
+>
+> The app adds the days up from the start of the cycle, which the **Next reset**
+> setting supplies, and divides by the plan's cap. The breakdown by model is gone
+> for good, and the page shows the days instead.
 
 ## Design
 
 **Layout.** Fluid rather than fixed: maximum width 1560px, gutters and heading sizes
 in `clamp()`, two columns that fold into one below 940px. Components use **container
-queries** — the model list reacts to *its* width, not the window's.
+queries** — the day list reacts to *its* width, not the window's.
 
-**Colours.** Eight categorical hues — those of the validation tool's reference
-palette — plus a grey for "Other", which is not a series but a remainder. The
-validator confirms, in both themes: lightness band, chroma floor, and separation for
-colour vision deficiencies (ΔE ≥ 8 in OKLab). In the dark theme, all eight also clear
-the 3:1 contrast threshold; **in the light theme, three of them — aqua, yellow,
-magenta — stay below it**, and that is documented as such. The remedy is not colour:
-each model carries its name, its request count and its percentage **written beside
-it**. Information is never carried by hue alone. Each model keeps its own
-**permanently** (stored in the database), never according to its rank.
+**Colours.** One accent hue, and no categorical palette. There used to be eight
+of them — one per model, held permanently in the database so a model kept its
+colour across sessions. The breakdown by model disappeared from the API on
+7 October 2026, and took the palette with it: a single series has no categories
+to tell apart.
 
 **Theme.** Light and dark are two **chosen** palettes, not an automatic inversion.
 The theme follows macOS by default, and can be forced.

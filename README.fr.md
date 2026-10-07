@@ -1,7 +1,7 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Ta consommation Ollama Cloud sur ton Mac — quota, modèles, en temps réel</em></p>
+  <p><em>Ta consommation Ollama Cloud sur ton Mac — quota, dollars, en temps réel</em></p>
 
   ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)
   ![Aucune dépendance](https://img.shields.io/badge/d%C3%A9pendances-aucune-199e70)
@@ -12,7 +12,7 @@
   [Fonctionnalités](#fonctionnalités) • [Installation](#installation) • [Utilisation](#utilisation) • [Le quota](#le-quota-mensuel) • [Conception](#conception) • [English](README.md)
 </div>
 
-<img src="docs/dashboard.png" alt="Le tableau de bord d'Ollama Buddy : quota mensuel avec sa jauge, requêtes du mois, répartition par modèle" width="100%">
+<img src="docs/dashboard.png" alt="Le tableau de bord d'Ollama Buddy : quota mensuel avec sa jauge, la dépense sur trente jours, et la consommation jour par jour" width="100%">
 
 ---
 
@@ -27,8 +27,8 @@ de bord l'affiche, et un aperçu discret reste en permanence dans la barre de me
 
 - **Quota mensuel exact, en direct** — le pourcentage publié par ollama.com, plus le
   montant en dollars, le rythme de dépense et la date de réinitialisation.
-- **Répartition par modèle, tous clients confondus** — le terminal, l'app Ollama,
-  la recherche web et le reste, avec les mêmes chiffres qu'ollama.com.
+- **La consommation jour par jour** — ce qu'a coûté chacune des trente dernières
+  journées, en dollars, avec le nombre de requêtes qui va avec.
 - **Aperçu permanent dans la barre de menus** — un point de couleur et le pourcentage
   (avec une clé), qui ouvre un résumé compact.
 - **Temps réel** — le serveur pousse les changements en SSE, l'interface n'interroge
@@ -131,7 +131,7 @@ enregistrée** — bleu, orange à 70 %, rouge à 90 %. Sans clé, l'icône n'af
 qu'un lama suivi d'un tiret : aucun chiffre n'est publié.
 
 Un clic ouvre un résumé : quota, date de réinitialisation, consommation du mois et
-trois principaux modèles — avec une clé. Sans clé, il se contente de l'invitation à en
+trois derniers jours — avec une clé. Sans clé, il se contente de l'invitation à en
 saisir une, et d'un bouton vers le tableau de bord.
 
 L'aperçu est lui aussi en direct : il se met à jour tant qu'il reste ouvert.
@@ -157,7 +157,8 @@ Ce que la clé débloque :
 | | |
 |---|---|
 | Le pourcentage du mois | `limits.monthly.usage`, exact et rafraîchi tout seul |
-| Les requêtes par modèle | `limits.monthly.models`, **tous clients confondus** |
+| La dépense de chaque jour, en dollars | `totals.usage_usd` et un compartiment par jour, depuis le 7 octobre 2026 |
+| Les requêtes qui les portent | `request_count`, et les compteurs de jetons |
 | Le rythme en $/jour | mesuré sur des échantillons pris toutes les cinq minutes, une fois une journée pleine accumulée |
 
 Ce qu'elle ne donne pas, et comment l'app s'en sort :
@@ -197,26 +198,28 @@ un paramètre.
 Une seule source : `ollama.com/api/usage`, avec ta clé. Elle couvre **tous** tes
 clients, y compris ceux dont l'app ne voit jamais passer la requête.
 
-`web search` et `web fetch` apparaissent comme des modèles — Ollama les compte ainsi.
-Au-delà de huit modèles, le reste est regroupé sous « Autres ».
+> [!IMPORTANT]
+> Le **7 octobre 2026**, ollama.com a remplacé l'endpoint `usage`. Il ne publie plus
+> la part du quota (`limits.monthly.usage`) ni la répartition par modèle
+> (`limits.monthly.models`) ; il renvoie désormais une dépense en dollars, heure par
+> heure ou jour par jour, sur 24 heures, 7 jours ou 30 jours. Aucun autre endpoint ne
+> porte ce qui a disparu, et rien de tout cela n'est documenté.
+>
+> L'app additionne les jours depuis le début du cycle — que fournit le réglage
+> **Prochaine réinitialisation** — et divise par le plafond du plan. La répartition
+> par modèle, elle, est perdue, et la page montre les jours à la place.
 
 ## Conception
 
 **Mise en page.** Fluide plutôt que figée : largeur maximale 1560 px, gouttières et
 tailles de titre en `clamp()`, deux colonnes qui se replient en une seule sous 940 px.
-Les composants utilisent des **container queries** — la liste des modèles réagit à *sa*
+Les composants utilisent des **container queries** — la liste des jours réagit à *sa*
 largeur, pas à celle de la fenêtre.
 
-**Couleurs.** Huit teintes catégorielles — celles de la palette de référence de
-l'outil de validation — plus un gris pour « Autres », qui n'est pas une série mais un
-reste. Le validateur confirme, dans les deux thèmes : bande de clarté, plancher de
-chroma, et séparation pour les daltonismes (ΔE ≥ 8 en OKLab). En thème sombre, les
-huit passent aussi le seuil de contraste de 3:1 ; **en thème clair, trois d'entre
-elles — aqua, jaune, magenta — restent en dessous**, et c'est documenté comme tel.
-La parade n'est pas la couleur : chaque modèle porte son nom, son nombre de requêtes
-et son pourcentage **écrits à côté**. L'information n'est jamais portée par la teinte
-seule. Chaque modèle garde la sienne de façon **permanente** (stockée en base),
-jamais selon son rang.
+**Couleurs.** Une seule teinte d'accent, et plus de palette catégorielle. Il y en
+avait huit — une par modèle, tenue en base pour qu'un modèle garde la sienne d'une
+session à l'autre. La répartition par modèle a disparu de l'API le 7 octobre 2026, et
+la palette est partie avec : une série unique n'a pas de catégories à distinguer.
 
 **Thème.** Clair et sombre sont deux palettes **choisies**, pas une inversion
 automatique. Le thème suit macOS par défaut, et peut être forcé.
