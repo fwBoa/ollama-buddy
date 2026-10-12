@@ -6,10 +6,51 @@
 
 import Cocoa
 import WebKit
+import Security
+import UserNotifications
 
 private let basePort = 11499
 private let portAttempts = 4
 private let appName = "Ollama Buddy"
+
+// Mode helper : aucune interface, aucun secret dans les arguments ou les logs.
+private func runKeychain(_ operation: String, account: String) -> Int32 {
+    let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                               kSecAttrService as String: "local.ollamabuddy.cloud",
+                               kSecAttrAccount as String: account]
+    var status: OSStatus
+    switch operation {
+    case "get":
+        var search = query
+        search[kSecReturnData as String] = true
+        search[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        status = SecItemCopyMatching(search as CFDictionary, &result)
+        if status == errSecItemNotFound { return 0 }
+        if status == errSecSuccess, let data = result as? Data {
+            FileHandle.standardOutput.write(data)
+        }
+    case "set":
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        guard !data.isEmpty && data.count <= 4096 else { return 1 }
+        status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            status = SecItemAdd(item as CFDictionary, nil)
+        }
+    case "delete":
+        status = SecItemDelete(query as CFDictionary)
+        if status == errSecItemNotFound { return 0 }
+    default: return 1
+    }
+    return status == errSecSuccess ? 0 : 1
+}
+
+private func alertLevel(_ ratio: Double, previous: Int = 0) -> Int {
+    let level = ratio >= 1 ? 100 : ratio >= 0.9 ? 90 : ratio >= 0.7 ? 70 : 0
+    return level > previous ? level : 0
+}
 
 /// Traductions. Comme dans les pages web, la recherche se fait par la chaine
 /// anglaise : une cle absente laisse l'anglais, donc un texte neuf reste
@@ -85,7 +126,7 @@ final class PopoverPanel: NSPanel {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
-                         WKUIDelegate, WKScriptMessageHandler {
+                         WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
 
     private var window: NSWindow!
     private var webView: WKWebView!
@@ -101,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private var miniLoadedAt: Date?
     private var miniBroken = false
     private var clickMonitor: Any?
+    private var notificationBusy = false
+    private var notificationsEnabled = false
 
     // MARK: - Cycle de vie
 
@@ -111,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         buildMenu()
         buildWindow()
         buildStatusItem()
+        UNUserNotificationCenter.current().delegate = self
         start()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { _ in
             self.refreshStatus()
@@ -309,6 +353,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     func userContentController(_ controller: WKUserContentController,
                                didReceive message: WKScriptMessage) {
+        if message.name == "app", message.frameInfo.isMainFrame,
+           message.frameInfo.securityOrigin.host == "127.0.0.1",
+           message.frameInfo.securityOrigin.port == port,
+           let action = message.body as? String, action == "notificationsChanged" {
+            refreshStatus()
+            return
+        }
         guard message.name == "popoverSize",
               message.frameInfo.isMainFrame,
               message.frameInfo.securityOrigin.host == "127.0.0.1",
@@ -483,8 +534,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 // menus ici, sans qu'aucun des deux n'ait a prevenir l'autre.
                 if needsMenu { self.buildMenu() }
                 self.updateStatusTitle(ratio: ratio, note: note)
+                self.checkNotification(json: json, quota: quota)
             }
         }.resume()
+    }
+
+    private func checkNotification(json: [String: Any], quota: [String: Any]) {
+        notificationsEnabled = json["notifications"] as? Bool == true
+        guard notificationsEnabled, !notificationBusy else { return }
+        let ratio = quota["ratio"] as? Double ?? 0
+        let reset = quota["resets_at"] as? NSNumber ?? 0
+        let generation = (json["alerts_generation"] as? NSNumber)?.intValue ?? 0
+        let cycle = "\(reset.int64Value)-\(generation)"
+        let defaults = UserDefaults.standard
+        let previousCycle = defaults.string(forKey: "alertCycle")
+        let previous = previousCycle == cycle ? defaults.integer(forKey: "alertLevel") : 0
+        let level = alertLevel(ratio, previous: previous)
+        let french = Lang.current == "fr"
+        let center = UNUserNotificationCenter.current()
+        notificationBusy = true
+        // Appele uniquement apres l'activation explicite du reglage.
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            DispatchQueue.main.async {
+                self.webView.evaluateJavaScript("window.setNativeNotificationStatus?.('\(granted ? "granted" : "denied")')")
+                guard granted, self.notificationsEnabled, level > previous else {
+                    self.notificationBusy = false
+                    return
+                }
+                let content = UNMutableNotificationContent()
+                content.title = "Ollama Buddy"
+                content.body = french
+                    ? "Ton quota mensuel estimé a atteint \(level) %."
+                    : "Your estimated monthly quota has reached \(level)%."
+                content.sound = .default
+                let request = UNNotificationRequest(identifier: "quota-\(cycle)-\(level)",
+                                                    content: content, trigger: nil)
+                center.add(request) { error in
+                    DispatchQueue.main.async {
+                        if error == nil {
+                            defaults.set(cycle, forKey: "alertCycle")
+                            defaults.set(level, forKey: "alertLevel")
+                        }
+                        self.notificationBusy = false
+                    }
+                }
+            }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               willPresent notification: UNNotification,
+                               withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               didReceive response: UNNotificationResponse,
+                               withCompletionHandler completionHandler: @escaping () -> Void) {
+        DispatchQueue.main.async { self.showWindow() }
+        completionHandler()
     }
 
     private func showWindow() {
@@ -513,7 +621,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let ok: Bool
             if let http = response as? HTTPURLResponse, http.statusCode == 200,
                let data = data, let text = String(data: data, encoding: .utf8) {
-                ok = text.contains("ollama-buddy")
+                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                ok = text.contains("ollama-buddy") && json?["keychain"] as? Bool == true
+                    && json?["native"] as? Bool == true
             } else {
                 ok = false
             }
@@ -538,6 +648,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         process.arguments = [script.path, "--no-browser", "--port", String(port)]
         var env = ProcessInfo.processInfo.environment
         env["OLLAMA_BUDDY_DATA"] = dataDir.path
+        env["OLLAMA_BUDDY_KEYCHAIN_HELPER"] = Bundle.main.executableURL?.path
+        env["OLLAMA_BUDDY_NATIVE"] = "1"
         process.environment = env
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -739,6 +851,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 }
 
+if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--keychain" {
+    exit(runKeychain(CommandLine.arguments[2], account: CommandLine.arguments[3]))
+}
+if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--test-alerts" {
+    precondition(alertLevel(0.69) == 0 && alertLevel(0.7) == 70)
+    precondition(alertLevel(0.9) == 90 && alertLevel(1.1) == 100)
+    precondition(alertLevel(0.85, previous: 70) == 0)
+    precondition(alertLevel(0.95, previous: 70) == 90)
+    precondition(alertLevel(0.95, previous: 90) == 0)
+    precondition(alertLevel(0.5, previous: 90) == 0)
+    exit(0)
+}
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

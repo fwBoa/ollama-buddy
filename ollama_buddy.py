@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import hashlib
 import json
 import math
 import mimetypes
 import os
 import queue
 import sqlite3
+import subprocess
 import sys
 import threading
 import tempfile
@@ -43,10 +45,6 @@ CONFIG_PATH = DATA_DIR / "config.json"
 
 OLLAMA_API = "http://127.0.0.1:11434"
 OLLAMA_CLOUD = "https://ollama.com"
-
-# Un modele au-dela de ce slot est regroupe dans "Other" (la 9e serie n'a
-# jamais de teinte inventee).
-MAX_SLOTS = 8
 
 # ollama.com/api/usage est interroge au plus une fois par minute : l'interface
 # se rafraichit toutes les 2 secondes, on ne va pas suivre ce rythme.
@@ -86,6 +84,8 @@ DEFAULT_CONFIG = {
     # Intervalle de veille. Le cache interne limite les appels a ollama.com a
     # une par minute, quelle que soit cette valeur.
     "watch_seconds": 2,
+    "notifications": False,
+    "alerts_generation": 0,
 }
 
 
@@ -125,7 +125,34 @@ def validate_config(values: dict) -> dict:
         raise ValueError("cle invalide")
     cfg["ollama_api_key"] = key.strip()
     cfg["watch_seconds"] = max(1.0, cfg["watch_seconds"])
+    if not isinstance(cfg["notifications"], bool):
+        raise ValueError("notifications invalides")
+    if not isinstance(cfg["alerts_generation"], int) or cfg["alerts_generation"] < 0:
+        raise ValueError("generation invalide")
     return cfg
+
+
+def keychain_available() -> bool:
+    return bool(os.environ.get("OLLAMA_BUDDY_KEYCHAIN_HELPER"))
+
+
+def native_app() -> bool:
+    return os.environ.get("OLLAMA_BUDDY_NATIVE") == "1"
+
+
+def keychain(operation: str, key: str = "") -> str:
+    """Le helper signe utilise Security.framework ; le secret passe par stdin."""
+    helper = os.environ["OLLAMA_BUDDY_KEYCHAIN_HELPER"]
+    account = hashlib.sha256(str(DATA_DIR.resolve()).encode()).hexdigest()
+    try:
+        result = subprocess.run([helper, "--keychain", operation, account],
+                                input=key.encode(), stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, timeout=30, check=False)
+        if result.returncode != 0:
+            raise OSError("Trousseau indisponible")
+        return result.stdout.decode("utf-8")
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        raise OSError("Trousseau indisponible") from None
 
 
 def load_config() -> dict:
@@ -135,6 +162,18 @@ def load_config() -> dict:
             cfg = validate_config(json.loads(CONFIG_PATH.read_text("utf-8")))
         except (ValueError, OSError):
             print("[config] illisible ou invalide, valeurs par defaut", file=sys.stderr)
+    if keychain_available():
+        legacy_key = cfg["ollama_api_key"]
+        try:
+            if cfg["ollama_api_key"]:
+                keychain("set", cfg["ollama_api_key"])
+                save_config(cfg)  # retire le secret seulement apres le transfert
+            else:
+                cfg["ollama_api_key"] = keychain("get")
+            cfg = validate_config(cfg)
+        except (ValueError, OSError):
+            cfg["ollama_api_key"] = legacy_key
+            cfg["_key_storage_error"] = "keychain unavailable"
     return cfg
 
 
@@ -145,7 +184,10 @@ def save_config(cfg: dict) -> None:
     fd, name = tempfile.mkstemp(prefix=".config-", dir=DATA_DIR)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(json.dumps(cfg, indent=2, allow_nan=False) + "\n")
+            stored = {k: v for k, v in cfg.items() if not k.startswith("_")}
+            if keychain_available():
+                stored["ollama_api_key"] = ""
+            stream.write(json.dumps(stored, indent=2, allow_nan=False) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, CONFIG_PATH)
@@ -256,6 +298,13 @@ CREATE TABLE IF NOT EXISTS cloud_samples (
     PRIMARY KEY (ts, model)
 );
 CREATE INDEX IF NOT EXISTS idx_cloud_samples_ts ON cloud_samples(ts);
+CREATE TABLE IF NOT EXISTS daily_usage (
+    day TEXT PRIMARY KEY,
+    usd REAL NOT NULL,
+    requests INTEGER NOT NULL,
+    tokens INTEGER NOT NULL,
+    read_at INTEGER NOT NULL
+);
 """
 
 
@@ -331,9 +380,51 @@ def cloud_days(cloud: dict | None) -> list[dict] | None:
                       + usage_number(bucket, "output_tokens", integer=True, optional=True))
         except (KeyError, ValueError, TypeError, OverflowError):
             return None
-        rows.append({"day": day, "requests": requests, "usd": usd, "tokens": tokens})
+        full_start = moment.astimezone(timezone.utc).strftime("%H:%M:%S.%f") == "00:00:00.000000"
+        rows.append({"day": day, "requests": requests, "usd": usd, "tokens": tokens,
+                     "full_start": full_start})
     rows.sort(key=lambda r: r["day"])
     return rows
+
+
+def record_days(conn: sqlite3.Connection, cloud: dict) -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    days = cloud_days(cloud)
+    if days is None:
+        return
+    if not days and (cloud_totals(cloud) or {}).get("usage_usd") == 0:
+        days = [{"day": (datetime.now(timezone.utc).date() - timedelta(days=n)).isoformat(),
+                 "usd": 0, "requests": 0, "tokens": 0, "full_start": True} for n in range(30)]
+    ts = int(time.time() * 1000)
+    for day in days:
+        # Le premier compartiment glissant peut etre partiel : ne jamais
+        # remplacer une journee complete par la fin de cette journee.
+        if day["day"] > today or not day["full_start"]:
+            continue
+        conn.execute("""INSERT INTO daily_usage VALUES (?,?,?,?,?)
+            ON CONFLICT(day) DO UPDATE SET usd=excluded.usd,
+            requests=excluded.requests, tokens=excluded.tokens, read_at=excluded.read_at""",
+                     (day["day"], day["usd"], day["requests"], day["tokens"], ts))
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=400)).isoformat()
+    conn.execute("DELETE FROM daily_usage WHERE day < ?", (cutoff,))
+    conn.commit()
+
+
+def history_cloud(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
+    rows = conn.execute("SELECT day, usd, requests, tokens FROM daily_usage ORDER BY day").fetchall()
+    buckets = [{"from": day + "T00:00:00Z", "usage_usd": usd, "request_count": requests,
+                "input_tokens": tokens, "output_tokens": 0} for day, usd, requests, tokens in rows]
+    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
+    first = cycle_first_day(start)
+    complete = False
+    if first:
+        today = datetime.now(timezone.utc).date()
+        beginning = datetime.fromisoformat(first).date()
+        known = {row[0] for row in rows}
+        complete = all((beginning + timedelta(days=n)).isoformat() in known
+                       for n in range(max(0, (today - beginning).days + 1)))
+    return {"buckets": buckets, "totals": {"usage_usd": sum(r[1] for r in rows),
+            "request_count": sum(r[2] for r in rows)}, "history_complete": complete}
 
 
 def usage_number(data: dict, key: str, integer: bool = False, optional: bool = False):
@@ -376,60 +467,6 @@ def cycle_ratio(cap: float, cycle_start: int | None,
     return (consume / cap) if consume is not None else None
 
 
-def assign_model_colors(conn: sqlite3.Connection, names) -> None:
-    """Attribue un slot de couleur stable a chaque modele (jamais selon son rang).
-
-    La teinte est stockee en base : un modele garde la sienne d'une session a
-    l'autre, meme s'il change de place dans le classement.
-    """
-    known = {r[0] for r in conn.execute("SELECT model FROM model_color")}
-    used = {r[0] for r in conn.execute("SELECT slot FROM model_color")}
-    free = [s for s in range(MAX_SLOTS) if s not in used]
-    for model in sorted(set(names)):
-        if model in known or not free:
-            continue
-        conn.execute("INSERT INTO model_color VALUES (?,?)", (model, free.pop(0)))
-        known.add(model)
-    conn.commit()
-
-
-def fold_extra(rows: list[dict]) -> list[dict]:
-    """Regroupe au-dela du dernier slot : jamais de 9e teinte inventee."""
-    over = [r for r in rows if r["slot"] >= MAX_SLOTS]
-    rows = [r for r in rows if r["slot"] < MAX_SLOTS]
-    if not over:
-        return rows
-    rows.append({
-        "model": f"Other ({len(over)})",
-        # Le libelle affiche est compose par le client : seul lui sait dans
-        # quelle langue la page se lit. Le serveur fournit de quoi le faire.
-        "other_count": len(over),
-        "slot": MAX_SLOTS,
-        "total": sum(r["total"] for r in over),
-        "messages": sum(r["messages"] for r in over),
-        "other": True,
-    })
-    return rows
-
-
-def last_model_reading(conn: sqlite3.Connection) -> tuple[int, list[dict]] | None:
-    """Derniere repartition par modele lue, et quand.
-
-    ollama.com ne la publie plus depuis le 07/10/2026 : elle vient des
-    echantillons pris avant cette date, et ne bouge donc plus. Elle reste
-    juste dans ses proportions — les compteurs sont des cumuls du cycle — et
-    c'est sa date qui le dit, affichee a cote.
-    """
-    ts = conn.execute(
-        "SELECT MAX(ts) FROM cloud_samples WHERE model <> ''").fetchone()[0]
-    if not ts:
-        return None
-    rows = conn.execute(
-        "SELECT model, requests FROM cloud_samples WHERE ts = ? AND model <> ''"
-        " ORDER BY requests DESC", (ts,)).fetchall()
-    return ts, [{"model": m, "requests": n} for m, n in rows]
-
-
 def cycle_first_day(cycle_start: int | None) -> str | None:
     """Premier jour entier du cycle, en ISO. None sans debut de cycle.
 
@@ -466,6 +503,8 @@ def cloud_cycle_usage(cloud: dict | None, cycle_start: int | None) -> float | No
     jours = cloud_days(cloud)
     premier = cycle_first_day(cycle_start)
     if jours is None or premier is None or cloud_totals(cloud) is None:
+        return None
+    if cloud.get("history_complete") is False:
         return None
     today = datetime.now(timezone.utc).date().isoformat()
     if not jours and float(cloud_totals(cloud)["usage_usd"]) > 0:
@@ -652,8 +691,9 @@ def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = 
     days = cloud_days(cloud)
     return {
         "source": "indisponible",
-        "error": ("incomplete history" if days and cycle_start
-                  and cycle_first_day(cycle_start) < days[0]["day"]
+        "error": ("incomplete history" if cycle_start and (
+                  (cloud or {}).get("history_complete") is False or
+                  (days and cycle_first_day(cycle_start) < days[0]["day"]))
                   else None),
         "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
         "key_error": cloud.get("error") if isinstance(cloud, dict) else None,
@@ -692,58 +732,26 @@ def empty_usage() -> dict:
         "models_total": 0,
         "models_at": None,
         "generated_at": int(time.time() * 1000),
+        "usage_available": False,
+        "period": "recent",
     }
 
 
 def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
-    """Consommation jour par jour, telle que la publie ollama.com.
-
-    Remplace la repartition par modele : le 07/10/2026 l'API a cesse de la
-    publier, et aucun autre endpoint ne la donne. Ce qui reste est le detail
-    des jours — la seule ventilation que la cle API ouvre encore.
-    """
-    tous = cloud_days(cloud) or []
-    _, cycle_start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
-    premier = cycle_first_day(cycle_start)
-
-    # Les jours du cycle, et eux seuls : la fenetre de trente jours deborde sur
-    # le cycle precedent, et son total contredirait celui du quota.
+    """La depense reste lisible sans plafond ou cycle complet."""
+    days = cloud_days(cloud) or []
+    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
+    first = cycle_first_day(start)
+    cycle = cloud_cycle_usage(cloud, start) is not None
+    cutoff = first if cycle else (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     today = datetime.now(timezone.utc).date().isoformat()
-    jours = [j for j in tous if premier and premier <= j["day"] <= today]
-
-    # La repartition par modele, elle, vient de la derniere lecture qui l'a
-    # portee. La cle API ne la donne plus ; le site, lui, l'a toujours.
-    lecture = last_model_reading(conn)
-    modeles = []
-    models_at = None
-    if lecture:
-        models_at, brut = lecture
-        assign_model_colors(conn, [r["model"] for r in brut])
-        slots = {m: s for m, s in conn.execute("SELECT model, slot FROM model_color")}
-        # La part se calcule apres le repli : la ligne « Autres » n'existe
-        # qu'a ce moment-la, et elle n'a pas de part a elle seule.
-        modeles = fold_extra([
-            {"model": r["model"], "slot": slots.get(r["model"], MAX_SLOTS),
-             "total": r["requests"], "messages": r["requests"]}
-            for r in brut
-        ])
-        total = sum(m["total"] for m in modeles)
-        for m in modeles:
-            m["share"] = (m["total"] / total) if total else 0.0
-
-    return {
-        "unit": "jours",
-        "days": jours,
-        "days_total": len(jours),
-        "usd": sum(j["usd"] for j in jours),
-        "requests": sum(j["requests"] for j in jours),
-        # Le jour le plus charge donne l'echelle des barres.
-        "peak": max((j["usd"] for j in jours), default=0.0),
-        "models": modeles,
-        "models_total": len(modeles),
-        "models_at": models_at,
-        "generated_at": int(time.time() * 1000),
-    }
+    days = [day for day in days if cutoff <= day["day"] <= today]
+    return {"unit": "jours", "days": days, "days_total": len(days),
+            "usd": sum(day["usd"] for day in days),
+            "requests": sum(day["requests"] for day in days),
+            "peak": max((day["usd"] for day in days), default=0),
+            "usage_available": True, "period": "cycle" if cycle else "recent",
+            "generated_at": int(time.time() * 1000)}
 
 
 class State:
@@ -815,7 +823,9 @@ class State:
                     # debut du cycle et le plafond, tous deux pris maintenant.
                     _, cycle_start, _ = reset_window(self.conn, self.cfg,
                                                      datetime.now(timezone.utc))
-                    record_cloud_sample(self.conn, data, cycle_start,
+                    record_days(self.conn, data)
+                    history = history_cloud(self.conn, self.cfg, data)
+                    record_cloud_sample(self.conn, history, cycle_start,
                                         monthly_cap(self.cfg, account))
                 except sqlite3.Error as exc:   # un echantillon rate n'est pas fatal
                     print(f"[cloud] echantillon non enregistre ({exc})", file=sys.stderr)
@@ -833,8 +843,15 @@ class State:
             account = self.account()
             cloud = self.cloud(account)
             live = cloud_days(cloud) is not None and cloud_totals(cloud) is not None
-            data = build_cloud_usage(self.conn, self.cfg, cloud) if live else empty_usage()
-            data["quota"] = build_quota(self.conn, self.cfg, cloud, account)
+            history = history_cloud(self.conn, self.cfg, cloud) if live else cloud
+            data = build_cloud_usage(self.conn, self.cfg, history) if live else empty_usage()
+            data["quota"] = build_quota(self.conn, self.cfg, history, account)
+            protected = keychain_available() and not self.cfg.get("_key_storage_error")
+            data["quota"]["key_storage"] = "keychain" if protected else "file"
+            data["quota"]["key_storage_error"] = self.cfg.get("_key_storage_error")
+            data["notifications"] = self.cfg.get("notifications", False)
+            data["notifications_supported"] = native_app()
+            data["alerts_generation"] = self.cfg.get("alerts_generation", 0)
             # L'interface n'utilise que le plan : pas d'email ni de reponse
             # distante brute dans le navigateur.
             data["account"] = {"plan": account.get("plan")} if account else None
@@ -846,15 +863,34 @@ class State:
     def update_config(self, changes: dict) -> dict:
         with self.lock:
             cfg = validate_config({**self.cfg, **changes})
-            save_config(cfg)  # une erreur laisse l'etat courant intact
-            if any(cfg[key] != self.cfg[key] for key in
-                   ("monthly_quota", "quota_reset_at", "ollama_api_key")):
+            if keychain_available() and self.cfg.get("_key_storage_error") and "ollama_api_key" not in changes:
+                if cfg["ollama_api_key"]:
+                    keychain("set", cfg["ollama_api_key"])
+                else:
+                    cfg["ollama_api_key"] = keychain("get")
+                    cfg = validate_config(cfg)
+            key_changed = cfg["ollama_api_key"] != self.cfg["ollama_api_key"]
+            calculation_changed = any(cfg[key] != self.cfg[key] for key in
+                                      ("monthly_quota", "quota_reset_at", "ollama_api_key"))
+            if calculation_changed:
+                cfg["alerts_generation"] = self.cfg.get("alerts_generation", 0) + 1
+            if key_changed and keychain_available():
+                keychain("set" if cfg["ollama_api_key"] else "delete", cfg["ollama_api_key"])
+            try:
+                save_config(cfg)
+            except OSError:
+                if key_changed and keychain_available():
+                    old = self.cfg["ollama_api_key"]
+                    keychain("set" if old else "delete", old)
+                raise
+            if calculation_changed:
                 # Les parts d'un autre plafond/cycle/compte ne doivent pas
                 # servir a calculer le rythme du nouveau reglage.
                 self.conn.execute("DELETE FROM cloud_samples WHERE model = ''")
                 if cfg["ollama_api_key"] != self.cfg["ollama_api_key"]:
                     self.conn.execute("DELETE FROM cloud_samples WHERE model <> ''")
                     self.conn.execute("DELETE FROM model_color")
+                    self.conn.execute("DELETE FROM daily_usage")
                     self.invalidate_cloud()
                 self.conn.commit()
             self.cfg = cfg
@@ -867,6 +903,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # silence par defaut
         pass
+
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError):
+            pass  # fermeture d'onglet pendant la lecture HTTP
 
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -959,7 +1001,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         if url.path == "/health":
-            self._json({"ok": True, "app": "ollama-buddy"})
+            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app()})
             return
 
         if url.path == "/api/stream":
@@ -1027,7 +1069,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/quota":
             self.update_quota()
             return
-        if url.path in ("/api/theme", "/api/lang"):
+        if url.path in ("/api/theme", "/api/lang", "/api/notifications"):
             self.update_prefs()
             return
         self._json({"error": "not found"}, 404)
@@ -1036,7 +1078,11 @@ class Handler(BaseHTTPRequestHandler):
         body = self.read_json()
         if body is None:
             return
-        allowed = {"theme"} if urlparse(self.path).path == "/api/theme" else {"lang"}
+        field = urlparse(self.path).path.rsplit("/", 1)[-1]
+        allowed = {field}
+        if field == "notifications" and body.get(field) is True and not native_app():
+            self._json({"error": "notifications disponibles dans l'app native"}, 400)
+            return
         self.save_changes(body, allowed)
 
     def update_quota(self) -> None:
@@ -1061,7 +1107,7 @@ class Handler(BaseHTTPRequestHandler):
         if "ollama_api_key" in body or "monthly_quota" in body or "quota_reset_at" in body:
             self._json({"ok": True, "quota": self.state.payload()["quota"]})
         else:
-            self._json({"ok": True, "theme": cfg["theme"], "lang": cfg["lang"]})
+            self._json({"ok": True, "theme": cfg["theme"], "lang": cfg["lang"], "notifications": cfg["notifications"]})
 
 
 # --------------------------------------------------------------------------

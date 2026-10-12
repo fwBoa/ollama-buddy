@@ -54,7 +54,7 @@ for arch in arm64 x86_64; do
     swiftc -O -target "$arch-apple-macosx12.0" \
         -o "$slice" \
         "$ROOT/app/main.swift" \
-        -framework Cocoa -framework WebKit
+        -framework Cocoa -framework WebKit -framework Security -framework UserNotifications
     SLICES+=("$slice")
 done
 lipo -create "${SLICES[@]}" -output "$CONTENTS/MacOS/OllamaBuddy"

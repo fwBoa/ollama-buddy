@@ -1,5 +1,6 @@
 """Synthetic backend for browser tests; never reads a real account or key."""
 import json
+import os
 from pathlib import Path
 import sys
 from datetime import datetime, timedelta, timezone
@@ -7,6 +8,14 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ollama_buddy as buddy
 
+os.environ['OLLAMA_BUDDY_KEYCHAIN_HELPER'] = 'synthetic-helper'
+os.environ['OLLAMA_BUDDY_NATIVE'] = '1'
+secret = {'value': 'fixture-secret'}
+def fake_keychain(operation, value=''):
+    if operation == 'set': secret['value'] = value
+    if operation == 'delete': secret['value'] = ''
+    return secret['value'] if operation == 'get' else ''
+buddy.keychain = fake_keychain
 now = datetime.now(timezone.utc)
 anchor = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 buckets = [{"from": (now - timedelta(days=offset)).date().isoformat() + "T00:00:00Z",

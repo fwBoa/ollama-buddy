@@ -331,6 +331,8 @@
   }
   @media (hover: hover) and (pointer: fine) { .btn.primary:hover { background: var(--accent-solid); filter: brightness(1.08); } }
   .btn[disabled] { opacity: .55; cursor: default; }
+  details.projection { margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
+  details.projection summary { cursor: pointer; padding: 8px 0; }
   details.quota-settings { margin-top: 16px; }
   details.quota-settings summary {
     cursor: pointer; font-size: 12.5px; color: var(--text-muted); padding: 8px 0;
@@ -451,14 +453,6 @@
             title="Ask ollama.com for usage again without waiting for the cache to expire">
       <span aria-hidden="true">↻</span>
     </button>
-    <button type="button" class="icon-btn" id="theme" aria-label="Change theme"
-            title="Theme: automatic">
-      <span aria-hidden="true" id="theme-icon">◐</span>
-    </button>
-    <button type="button" class="icon-btn" id="lang" aria-label="Change language"
-            title="Language: automatic">
-      <span aria-hidden="true" id="lang-icon">EN</span>
-    </button>
   </header>
 
   <main id="main">
@@ -502,7 +496,24 @@ const FR = {
 
   'Monthly quota': 'Quota mensuel estimé',
   'Estimated monthly quota': 'Quota mensuel estimé',
-  'Next reset (UTC)': 'Prochaine réinitialisation (UTC)',
+  'Available spending': 'Dépense disponible',
+  'Requests in this period': 'Requêtes sur cette période',
+  'No spending in the available period.': 'Aucune dépense sur la période disponible.',
+  'Spending shown from {from} to {to} (UTC).': 'Dépense affichée du {from} au {to} (UTC).',
+  'Estimated outlook': 'Projection estimative',
+  'Theme': 'Thème',
+  'Use a known reset date or your subscription anniversary in UTC. This day repeats monthly. Leave empty to disable the cycle estimate.': 'Utilise une date de réinitialisation connue ou l’anniversaire de souscription en UTC. Ce jour se répète chaque mois. Vide, le champ désactive l’estimation du cycle.',
+  'Changing or removing the key clears saved usage. Revoke old keys on ollama.com.': 'Changer ou retirer la clé efface les relevés enregistrés. Révoque les anciennes clés sur ollama.com.',
+  'Light': 'Clair',
+  'Dark': 'Sombre',
+  'Notifications at 70%, 90% and 100%': 'Notifications à 70 %, 90 % et 100 %',
+  'Available in the native macOS app.': 'Disponible dans l’app macOS native.',
+  'macOS will ask for permission. One alert per threshold and cycle.': 'macOS demandera ton autorisation. Une alerte par seuil et par cycle.',
+  'Notifications are blocked in macOS System Settings.': 'Les notifications sont bloquées dans les Réglages Système de macOS.',
+  'The key is protected by macOS Keychain and sent only to ollama.com.': 'La clé est protégée par le Trousseau macOS et envoyée uniquement à ollama.com.',
+  'The key is saved locally in a private file and sent only to ollama.com.': 'La clé est enregistrée dans un fichier local privé et envoyée uniquement à ollama.com.',
+  'Unlock macOS Keychain or enter the key again to finish migration.': 'Déverrouille le Trousseau macOS ou saisis de nouveau la clé pour terminer la migration.',
+  'Monthly reset reference (UTC)': 'Réinitialisation de référence (UTC)',
   'Models are unavailable for this account.': 'Aucun relevé par modèle disponible pour ce compte.',
   'The API history does not cover the full cycle. A quota cannot be calculated from a partial history.': "L’historique de l’API ne couvre pas tout le cycle. Un historique partiel ne permet pas de calculer le quota.",
   'Request failed: {error}': 'Échec de la demande : {error}',
@@ -677,6 +688,24 @@ function resetLabel(quota) {
    montant colle a la main, presente comme le quota du jour alors qu'il
    pouvait dater de plusieurs semaines.
    ===================================================================== */
+function keyStorageHint(q) {
+  return T(q.key_storage === 'keychain'
+    ? 'The key is protected by macOS Keychain and sent only to ollama.com.'
+    : 'The key is saved locally in a private file and sent only to ollama.com.');
+}
+let nativeNotificationStatus = 'unknown';
+function notificationHint() {
+  if (!lastData?.notifications_supported) return T('Available in the native macOS app.');
+  return T(nativeNotificationStatus === 'denied'
+    ? 'Notifications are blocked in macOS System Settings.'
+    : 'macOS will ask for permission. One alert per threshold and cycle.');
+}
+window.setNativeNotificationStatus = status => {
+  nativeNotificationStatus = status;
+  const hint = document.getElementById('notifications-hint');
+  if (hint) hint.textContent = notificationHint();
+};
+
 function renderQuota(q) {
   q = q || {};
   const live = q.source === 'api';
@@ -719,13 +748,15 @@ function renderQuota(q) {
         ? `<span class="alert">${fill(T('cap reached {when}, before the reset'), { when })}</span>`
         : fill(T('cap reached {when}'), { when }));
     }
-    rateLine = `<p class="quota-rate">${bits.join(' · ')}</p>`;
+    rateLine = `<details class="projection"><summary>${T('Estimated outlook')}</summary><p class="quota-rate">${bits.join(' · ')}</p></details>`;
   }
 
   /* Le motif exact compte : « key rejected » (401), panne reseau et reponse
      inattendue n'appellent pas la meme action de la part de l'utilisateur. */
   const KEY_LINK = '<a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>';
-  const lead = !keySet
+  const lead = q.key_storage_error
+    ? T('Unlock macOS Keychain or enter the key again to finish migration.')
+    : !keySet
     ? T(`Connect your account to read daily spending for <b>all</b> your tools. Set the monthly cap and reset date to estimate your quota.`)
     : keyError === 'key rejected'
       ? fill(T(`<b class="bad">Key rejected</b> — Ollama turned it down. Create another one at
@@ -764,7 +795,7 @@ function renderQuota(q) {
         <button class="btn primary" id="save-key" type="button">${T('Save')}</button>
       </div>
       <p class="hint" id="key-hint">
-        ${fill(T('Create one at {link}. It is stored locally and sent only to ollama.com to <em>read</em> your usage.'), { link: KEY_LINK })}
+        ${KEY_LINK}. ${keyStorageHint(q)}
       </p>
     </div>`;
 
@@ -776,6 +807,13 @@ function renderQuota(q) {
     <details class="quota-settings">
       <summary>${T('Settings')}</summary>
       <div class="settings-row">
+        <label>${T('Theme')}
+          <select id="theme-select">
+            <option value="auto"${theme === 'auto' ? ' selected' : ''}>${T('Automatic')}</option>
+            <option value="light"${theme === 'light' ? ' selected' : ''}>${T('Light')}</option>
+            <option value="dark"${theme === 'dark' ? ' selected' : ''}>${T('Dark')}</option>
+          </select>
+        </label>
         <label>${T('Language')}
           <select id="lang-select" aria-label="${T('Language')}">
             <option value="auto"${langPref === 'auto' ? ' selected' : ''}>${T('Automatic')}</option>
@@ -790,7 +828,7 @@ function renderQuota(q) {
                  value="${monthlySet > 0 ? monthlySet : ''}"
                  placeholder="${monthly > 0 ? monthly : ''}">
         </label>
-        <label>${T('Next reset (UTC)')}
+        <label>${T('Monthly reset reference (UTC)')}
           <input id="reset-at" type="datetime-local"
                  value="${q.resets_set ? new Date(q.resets_set).toISOString().slice(0, 16) : ''}">
         </label>
@@ -798,9 +836,14 @@ function renderQuota(q) {
       </div>
       <p class="hint" id="cap-hint">
         ${T('Monthly cap — leave empty to follow your Ollama plan.')}<br>
-        ${T('Next reset — leave empty and the app will have no cycle to add up.')}
+        ${T('Use a known reset date or your subscription anniversary in UTC. This day repeats monthly. Leave empty to disable the cycle estimate.')}
       </p>
-      ${live ? `<div class="settings-row">
+      <div class="settings-row">
+        <label><input id="notifications" type="checkbox"${lastData?.notifications ? ' checked' : ''}${lastData?.notifications_supported ? '' : ' disabled'}>
+          ${T('Notifications at 70%, 90% and 100%')}</label>
+      </div>
+      <p class="hint" id="notifications-hint" role="status">${notificationHint()}</p>
+      ${keySet ? `<div class="settings-row">
         <label>${T('ollama.com API key')}
           <input id="api-key" type="password" autocomplete="off" spellcheck="false"
                  placeholder="${T('paste another key')}" aria-describedby="key-hint-2">
@@ -809,7 +852,8 @@ function renderQuota(q) {
         <button class="btn" id="remove-key" type="button">${T('Remove')}</button>
       </div>
       <p class="hint" id="key-hint-2">
-        ${T('Replacing the key changes the account read by this app and clears its saved usage. It does not revoke the old key on ollama.com. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.')}
+        ${q.key_storage_error ? T('Unlock macOS Keychain or enter the key again to finish migration.') + '<br>' : ''}
+        ${keyStorageHint(q)}<br>${T('Changing or removing the key clears saved usage. Revoke old keys on ollama.com.')}
       </p>` : ''}
     </details>`;
 
@@ -821,7 +865,7 @@ function renderQuota(q) {
     return `
       <section class="quota" aria-labelledby="quota-h">
         <h2 id="quota-h" class="visually-hidden">${T('Estimated monthly quota')}</h2>
-        ${connect}
+        ${keySet ? `<p class="quota-source">${lead}</p>` : connect}
         ${settings}
       </section>`;
   }
@@ -881,7 +925,7 @@ function renderContent(data) {
      de connexion, et rien d'autre ne s'affiche. C'est le seul etat ou l'app
      n'a rien a dire. On teste la source, pas l'unite : un payload vide publie
      deja son unite. */
-  if (data.quota?.source !== 'api') {
+  if (!data.usage_available) {
     sub.textContent = '';
     sub.hidden = true;
     app.innerHTML = renderQuota(data.quota);
@@ -890,11 +934,13 @@ function renderContent(data) {
   sub.hidden = false;
 
   const quota = renderQuota(data.quota);
+  const cycle = data.period === 'cycle';
+  const spendingLabel = cycle ? T('Usage this cycle') : T('Available spending');
 
   if (!jours.length) {
     sub.textContent = T('Ollama Cloud usage');
     app.innerHTML = `
-      <p class="state">${T('No usage in this cycle.')}</p>
+      <p class="state">${T('No spending in the available period.')}</p>
       ${quota}`;
     return;
   }
@@ -902,47 +948,12 @@ function renderContent(data) {
   /* Titre auto-informatif : le chiffre ET sa lecture, sans avoir a lire plus bas.
      Les bornes du cycle y sont ecrites : depuis le 07/10/2026, c'est la date de
      remise a zero qui porte tout le calcul, autant qu'elle soit sous les yeux. */
-  const bornes = data.quota?.cycle_start && data.quota?.resets_at
-    ? fill(T(' ({from} to {to})'), {
-        from: new Date(data.quota.cycle_start).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
-        to: new Date(data.quota.resets_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
-      })
-    : '';
-  sub.innerHTML = fill(T('<b>{amount}</b> of usage this cycle'), { amount: usd(data.usd) })
-    + bornes + '.';
-
-  /* Consommation par jour. Remplace la repartition par modele : le
-     07/10/2026 l'API a cesse de la publier, et aucun autre endpoint ne la
-     donne. Le jour est la seule ventilation qu'une cle ouvre encore.
-     Les barres se lisent les unes par rapport aux autres : c'est le jour le
-     plus charge qui donne l'echelle. */
-  /* Repartition par modele. Elle vient de la derniere lecture qui l'a portee :
-     le 07/10/2026 l'API a cesse de la publier, et le site la garde pour lui.
-     La date est donc ecrite a cote, sans quoi elle se ferait passer pour du
-     jour. */
-  const modeles = data.models || [];
-  const modelsNote = data.models_at
-    ? fill(T('Read on {date}. ollama.com no longer publishes this breakdown: these counts stop there.'),
-           { date: new Date(data.models_at).toLocaleString(locale(),
-                     { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })
-    : '';
-  const modelRows = modeles.map(m => {
-    const v = SLOTS[m.slot] || SLOTS[8];
-    return `
-      <div class="model" data-model="${escapeHTML(m.model)}">
-        <i class="swatch" style="background:var(${v})"></i>
-        <div class="model-name">
-          <span class="id">${escapeHTML(modelLabel(m))}</span>
-          <span class="n">${exact(m.messages)} ${T(m.messages > 1 ? 'requests' : 'request')}</span>
-        </div>
-        <div class="bar" role="img" aria-label="${fill(T('{model}: {pct} of the total'), { model: escapeHTML(modelLabel(m)), pct: pct(m.share) })}">
-          <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
-        </div>
-        <div class="model-stats">
-          <span class="tok">${fmt(m.total)}</span><span class="pct">${pct(m.share)}</span>
-        </div>
-      </div>`;
-  }).join('');
+  const from = jours[0].day;
+  const to = jours[jours.length - 1].day;
+  sub.textContent = fill(T('Spending shown from {from} to {to} (UTC).'), {
+    from: new Date(from + 'T00:00:00Z').toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+    to: new Date(to + 'T00:00:00Z').toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+  });
 
   const pic = data.peak || 1;
   const rows = jours.slice(-JOURS_MONTRES).reverse().map(j => `
@@ -964,11 +975,11 @@ function renderContent(data) {
 
     <div class="hero-row">
       <div class="hero-figure">
-        <div class="hero-label">${T('Usage this cycle')}</div>
+        <div class="hero-label">${spendingLabel}</div>
         <div class="hero-value" id="hero">${usd(data.usd)}</div>
       </div>
       <div class="stat">
-        <span class="k">${T('Requests this cycle')}</span>
+        <span class="k">${cycle ? T('Requests this cycle') : T('Requests in this period')}</span>
         <span class="v">${fmt(data.requests)}</span>
       </div>
       <div class="stat">
@@ -982,11 +993,7 @@ function renderContent(data) {
         ${quota}
       </div>
       <section aria-labelledby="split-h">
-        <h2 id="split-h" class="section-title">${T('Breakdown by model')}</h2>
-        <div class="models${staggerNext ? ' stagger' : ''}">${modelRows}</div>
-        <p class="stale-note">${modelsNote || T('Models are unavailable for this account.')}</p>
-
-        <h2 class="section-title">${T('Daily consumption')}</h2>
+        <h2 id="split-h" class="section-title">${T('Daily consumption')}</h2>
         <div class="models">${rows}</div>
       </section>
     </div>
@@ -995,7 +1002,7 @@ function renderContent(data) {
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
-    fill(T('{amount} of usage this cycle'), { amount: usd(data.usd) }));
+    `${spendingLabel}: ${usd(data.usd)}`);
 
   /* L'entree en cascade ne joue qu'une fois par periode : on retire la classe
      au frame suivant pour que la transition se declenche, et les mises a jour
@@ -1016,7 +1023,7 @@ function render(data) {
   const active = document.activeElement;
   const editing = active && app.contains(active) && active.matches('input, select');
   const fields = editing ? [...app.querySelectorAll('input, select')]
-    .map(el => ({ id: el.id, value: el.value })) : [];
+    .map(el => ({ id: el.id, value: el.value, checked: el.checked })) : [];
   const selection = editing && active.type === 'password'
     ? [active.selectionStart, active.selectionEnd] : null;
   renderContent(data);
@@ -1024,7 +1031,7 @@ function render(data) {
   if (details && opened) details.open = true;
   for (const field of fields) {
     const el = document.getElementById(field.id);
-    if (el) el.value = field.value;
+    if (el) { el.value = field.value; if (el.type === 'checkbox') el.checked = field.checked; }
   }
   if (editing) {
     const el = document.getElementById(active.id);
@@ -1122,6 +1129,9 @@ async function savePreference(path, payload) {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    if (path === '/api/notifications') {
+      window.webkit?.messageHandlers?.app?.postMessage('notificationsChanged');
+    }
   } catch (err) {
     errorEl.textContent = fill(T('Request failed: {error}'), { error: err.message });
     errorEl.hidden = false;
@@ -1130,15 +1140,12 @@ async function savePreference(path, payload) {
   }
 }
 
-document.getElementById('theme').addEventListener('click', async () => {
-  const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
-  applyTheme(next);
-  if (lastData) lastData = { ...lastData, theme: next };
-  await savePreference('/api/theme', { theme: next });
-});
-
-document.getElementById('lang').addEventListener('click', () => {
-  changeLang(LANGS[(LANGS.indexOf(langPref) + 1) % LANGS.length]);
+document.addEventListener('change', e => {
+  if (e.target.id !== 'theme-select') return;
+  const value = e.target.value;
+  applyTheme(value);
+  if (lastData) lastData = { ...lastData, theme: value };
+  savePreference('/api/theme', { theme: value });
 });
 
 /* =====================================================================
@@ -1154,7 +1161,8 @@ function applyData(data) {
      rejoueraient a chaque battement du flux. */
   const signature = JSON.stringify({
     usd: data.usd, requests: data.requests, peak: data.peak,
-    days: data.days, models: data.models, models_at: data.models_at,
+    days: data.days, usage_available: data.usage_available, period: data.period,
+    notifications: data.notifications, notifications_supported: data.notifications_supported,
     quota: { ...data.quota, days_left: Math.floor(data.quota?.days_left ?? -1) },
     theme: data.theme, lang: data.lang, account: data.account, error: data.error,
   });
@@ -1325,6 +1333,13 @@ document.addEventListener('change', e => {
   const when = new Date(e.target.value + 'Z');
   if (Number.isNaN(when.getTime())) return;
   postQuota({ quota_reset_at: when.getTime() }).catch(() => {});
+});
+
+document.addEventListener('change', e => {
+  if (e.target.id !== 'notifications') return;
+  const notifications = e.target.checked;
+  if (lastData) lastData = { ...lastData, notifications };
+  savePreference('/api/notifications', { notifications });
 });
 
 /* Le select des reglages : il double le bouton de l'en-tete. Meme chemin. */

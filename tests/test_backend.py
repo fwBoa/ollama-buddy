@@ -10,7 +10,7 @@ import threading
 import time
 import unittest
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch
 
 import ollama_buddy as buddy
@@ -170,6 +170,114 @@ class StateTests(StateFixture):
         self.assertEqual(self.state.conn.execute("SELECT * FROM cloud_samples").fetchall(), [])
         self.assertEqual(self.state.conn.execute("SELECT * FROM model_color").fetchall(), [])
 
+    def test_spending_without_reset_or_cap_and_persistent_31_day_cycle(self):
+        now = utc(2026, 10, 31, 12)
+        with patch.object(buddy, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = now
+            self.state.cfg["ollama_api_key"] = "test-key"
+            first = usage([((utc(2026, 10, 1) + timedelta(days=n)).date().isoformat(), 1) for n in range(30)])
+            with patch.object(buddy, "cloud_usage", return_value=first):
+                payload = self.state.payload()
+            self.assertTrue(payload["usage_available"])
+            self.assertIsNone(payload["quota"]["ratio"])
+            self.assertEqual(payload["period"], "recent")
+            self.state.update_config({"quota_reset_at": epoch(utc(2026, 10, 1))})
+            self.state.invalidate_cloud()
+            second = usage([((utc(2026, 10, 2) + timedelta(days=n)).date().isoformat(), 1) for n in range(30)])
+            with patch.object(buddy, "cloud_usage", return_value=second):
+                payload = self.state.payload()
+            self.assertEqual(payload["usd"], 31)
+            self.assertEqual(payload["days_total"], 31)
+            self.assertEqual(payload["quota"]["current"], 31)
+            self.assertEqual(payload["period"], "cycle")
+            self.state.update_config({"monthly_quota": 100})
+            self.assertEqual(self.state.payload()["quota"]["ratio"], .31)
+            # Le fichier SQLite survit au redemarrage, contrairement au cache HTTP.
+            restarted = buddy.State(dict(self.state.cfg))
+            try:
+                with patch.object(buddy, "cloud_usage", return_value=second):
+                    self.assertEqual(restarted.payload()["quota"]["current"], 31)
+            finally:
+                restarted.conn.close()
+            self.state.update_config({"ollama_api_key": "another-account"})
+            self.assertEqual(self.state.conn.execute("SELECT * FROM daily_usage").fetchall(), [])
+
+    def test_history_gap_and_partial_bucket_do_not_become_complete_usage(self):
+        with patch.object(buddy, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = utc(2026, 10, 31, 12)
+            self.state.cfg.update(ollama_api_key="test-key", quota_reset_at=epoch(utc(2026, 10, 1)))
+            data = usage([((utc(2026, 10, 1) + timedelta(days=n)).date().isoformat(), 1)
+                          for n in range(31) if n != 15])
+            with patch.object(buddy, "cloud_usage", return_value=data):
+                payload = self.state.payload()
+            self.assertTrue(payload["usage_available"])
+            self.assertIsNone(payload["quota"]["ratio"])
+            self.assertEqual(payload["quota"]["error"], "incomplete history")
+            original = usage([("2026-10-01", 10)])
+            buddy.record_days(self.state.conn, original)
+            partial = usage([("2026-10-01", 2)])
+            partial["buckets"][0]["from"] = "2026-10-01T12:00:00Z"
+            buddy.record_days(self.state.conn, partial)
+            self.assertEqual(self.state.conn.execute("SELECT usd FROM daily_usage WHERE day='2026-10-01'").fetchone()[0], 10)
+
+
+class KeychainTests(StateFixture):
+    def setUp(self):
+        super().setUp()
+        self.environment = patch.dict(os.environ, {"OLLAMA_BUDDY_KEYCHAIN_HELPER": "/synthetic/helper"})
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.secret = ""
+        def store(operation, value=""):
+            if operation == "set": self.secret = value
+            if operation == "delete": self.secret = ""
+            return self.secret if operation == "get" else ""
+        self.storage = patch.object(buddy, "keychain", side_effect=store)
+        self.storage.start()
+        self.addCleanup(self.storage.stop)
+
+    def test_migrate_legacy_key_and_remove_it(self):
+        buddy.CONFIG_PATH.write_text(json.dumps({**buddy.DEFAULT_CONFIG, "ollama_api_key": "legacy-key"}))
+        cfg = buddy.load_config()
+        self.assertEqual(cfg["ollama_api_key"], "legacy-key")
+        self.assertEqual(self.secret, "legacy-key")
+        self.assertNotIn("legacy-key", buddy.CONFIG_PATH.read_text())
+        self.state.cfg = cfg
+        self.state.update_config({"ollama_api_key": "replacement-key"})
+        self.assertEqual(self.secret, "replacement-key")
+        self.assertNotIn("replacement-key", buddy.CONFIG_PATH.read_text())
+        self.state.update_config({"ollama_api_key": ""})
+        self.assertEqual(self.secret, "")
+
+    def test_locked_migration_preserves_legacy_and_retries_before_preferences(self):
+        buddy.CONFIG_PATH.write_text(json.dumps({**buddy.DEFAULT_CONFIG, "ollama_api_key": "legacy-key"}))
+        with patch.object(buddy, "keychain", side_effect=OSError("locked")):
+            self.state.cfg = buddy.load_config()
+            self.assertEqual(self.state.cfg["_key_storage_error"], "keychain unavailable")
+            with self.assertRaises(OSError):
+                self.state.update_config({"theme": "dark"})
+        self.assertIn("legacy-key", buddy.CONFIG_PATH.read_text())
+        self.state.update_config({"theme": "dark"})
+        self.assertEqual(self.secret, "legacy-key")
+        self.assertNotIn("legacy-key", buddy.CONFIG_PATH.read_text())
+
+    def test_failed_config_write_rolls_back_keychain(self):
+        self.state.update_config({"ollama_api_key": "original-key"})
+        with patch.object(buddy, "save_config", side_effect=OSError("disk error")):
+            with self.assertRaises(OSError):
+                self.state.update_config({"ollama_api_key": "new-key"})
+        self.assertEqual(self.secret, "original-key")
+        self.assertEqual(self.state.cfg["ollama_api_key"], "original-key")
+
+    def test_helper_never_puts_secret_in_arguments(self):
+        self.storage.stop()
+        with patch.object(buddy.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = b""
+            buddy.keychain("set", "test-secret")
+            self.assertNotIn("test-secret", " ".join(run.call_args[0][0]))
+            self.assertEqual(run.call_args.kwargs["input"], b"test-secret")
+
 
 class HTTPTests(StateFixture):
     def setUp(self):
@@ -213,6 +321,13 @@ class HTTPTests(StateFixture):
         self.assertEqual(self.state.cfg["monthly_quota"], 60)
         self.assertEqual(self.request("POST", "/api/refresh")[0], 200)
         self.assertEqual(self.request("GET", "/api/refresh")[0], 405)
+        self.assertEqual(self.post({"notifications": True}, path="/api/notifications")[0], 400)
+        with patch.dict(os.environ, {"OLLAMA_BUDDY_KEYCHAIN_HELPER": "/synthetic/helper"}):
+            self.assertEqual(self.post({"notifications": True}, path="/api/notifications")[0], 400)
+        with patch.dict(os.environ, {"OLLAMA_BUDDY_NATIVE": "1"}):
+            self.assertEqual(self.post({"notifications": True}, path="/api/notifications")[0], 200)
+        self.assertTrue(self.state.cfg["notifications"])
+        self.assertEqual(self.post({"notifications": "true"}, path="/api/notifications")[0], 400)
 
     def test_bad_bodies_and_unknown_routes_return_errors(self):
         for body, expected in (("[]", 400), ("null", 400), ('{"monthly_quota":NaN}', 400), ("x" * 17000, 413)):

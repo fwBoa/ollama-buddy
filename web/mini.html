@@ -142,6 +142,7 @@ const FR = {
   ' · reset in {n} days': ' ·\u00A0dans {n} jours',
   'Monthly quota': 'Quota mensuel estimé',
   'Estimated monthly quota': 'Quota mensuel estimé',
+  'Available spending': 'Dépense disponible',
   'Models · read on {date}': 'Modèles · relevé du {date}',
   '{pct} of the monthly quota': '{pct} du quota mensuel',
   ': {current} of {monthly}': ' : {current} sur {monthly}',
@@ -264,10 +265,6 @@ function render(d) {
 
   /* Les trois premiers modeles, puis les trois derniers jours. La repartition
      par modele ne bouge plus : le 07/10/2026 l'API a cesse de la publier. */
-  const modeles = (d.models || []).slice(0, 3).map(m =>
-    `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
-       <span class="n">${escapeHTML(modelLabel(m))}</span><span class="v">${compact(m.total)}</span></div>`
-  ).join('');
   const jours = (d.days || []).slice(-3).reverse().map(j =>
     `<div class="m"><span class="n">${dayLabel(j.day)}</span><span class="v">${usd(j.usd)}</span></div>`
   ).join('');
@@ -286,21 +283,18 @@ function render(d) {
 
   /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
      alors l'invitation a en saisir une. */
-  const live = q.source === 'api';
+  const live = d.usage_available;
 
   body.innerHTML = `
     ${quotaBlock}
     ${rate}
     ${live ? `
       <hr>
-      <p class="label">${T('This cycle')}</p>
+      <p class="label">${d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p>
       <div class="row">
         <span class="big">${usd(d.usd || 0)}</span>
         <span class="sub">${exact(d.requests || 0)} req.</span>
       </div>
-      ${modeles ? `<p class="label" style="margin-top:12px">${fill(T('Models · read on {date}'), {
-        date: new Date(d.models_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }),
-      })}</p><div class="models">${modeles}</div>` : ''}
       <p class="label" style="margin-top:12px">${T('Last days')}</p>
       <div class="models">${jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
     <div class="actions">
@@ -368,8 +362,8 @@ function connect() {
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
     const sig = JSON.stringify({
-      usd: d.usd, requests: d.requests, days: d.days, models: d.models,
-      models_at: d.models_at, theme: d.theme, lang: d.lang,
+      usd: d.usd, requests: d.requests, days: d.days, usage_available: d.usage_available,
+      period: d.period, theme: d.theme, lang: d.lang,
       quota: { ...d.quota, days_left: Math.floor(d.quota?.days_left ?? -1) },
     });
     if (sig === lastSig) return;
