@@ -17,9 +17,10 @@ def fake_keychain(operation, value=''):
     return secret['value'] if operation == 'get' else ''
 buddy.keychain = fake_keychain
 now = datetime.now(timezone.utc)
-anchor = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+anchor = (now - timedelta(days=11)).replace(hour=0, minute=0, second=0, microsecond=0)
 buckets = [{"from": (now - timedelta(days=offset)).date().isoformat() + "T00:00:00Z",
-            "usage_usd": 1.2, "request_count": 3, "input_tokens": 4, "output_tokens": 5}
+            "usage_usd": round([.18, .72, 1.46, 0, .38, 2.14, .94][offset % 7], 2),
+            "request_count": [1, 4, 7, 0, 2, 9, 5][offset % 7], "input_tokens": 4, "output_tokens": 5}
            for offset in range(30, -1, -1)]
 data = {"buckets": buckets, "totals": {
     "usage_usd": sum(day["usage_usd"] for day in buckets),

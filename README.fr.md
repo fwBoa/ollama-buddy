@@ -11,8 +11,12 @@ API. Un serveur Python fournit un tableau de bord dans une fenêtre macOS native
 avec un résumé dans la barre de menus. Le serveur peut aussi fonctionner seul,
 dans un navigateur.
 
-- Dépense du cycle en dollars, requêtes et sept derniers jours. La dépense
-  quotidienne reste visible lorsque le quota ne peut pas être calculé.
+- Vue d’ensemble avec dépense, requêtes, quota et quatre derniers jours.
+- Vue **Activité** avec graphique interactif sur 7 ou 30 jours calendaires et
+  tableau de tous les relevés de la période disponible. Les jours manquants
+  sont distingués des jours à dépense nulle.
+- Paramètres dédiés : connexion, cycle mensuel, alertes et apparence. Les saisies
+  en cours sont conservées pendant les mises à jour en direct.
 - Quota mensuel estimé, compte à rebours et projections après une journée complète
   d’échantillons.
 - Notifications natives optionnelles à 70 %, 90 % et 100 % du quota estimé.
@@ -20,10 +24,9 @@ dans un navigateur.
 - Clé de l’app native dans le Trousseau macOS, avec migration de l’ancien fichier.
 - Bibliothèque standard Python 3.9+ à l’exécution, sans framework frontend.
 
-La capture ci-dessous précède les dernières modifications du cycle et de
-l’historique par modèle ; les libellés et chiffres de l’app actuelle diffèrent.
+Nouvelle interface, sur des données fictives :
 
-<img src="docs/dashboard.png" alt="Une version antérieure du tableau de bord Ollama Buddy" width="100%">
+<img src="docs/dashboard.png" alt="Vue d’ensemble de la nouvelle interface Ollama Buddy, sur données fictives" width="100%">
 
 ## Installation
 
@@ -71,7 +74,7 @@ actif. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
    si tu la connais. Utilise une date affichée par Ollama, ou l’anniversaire de ta
    souscription converti en UTC. Cette référence peut être passée ; l’app rejoue
    son quantième chaque mois.
-4. Vérifie **Plafond mensuel**. Une valeur saisie remplace le plafond de l’offre
+4. Vérifie **Plafond en USD**. Une valeur saisie remplace le plafond de l’offre
    lue dans l’app Ollama locale. Vide, le champ utilise les valeurs intégrées :
    Pro 60 $, Max 300 $, Team 1 000 $. Une offre inconnue n’a pas de plafond déduit.
    Vérifie ton propre contrat, notamment pour une ancienne offre.
@@ -83,6 +86,13 @@ Ils peuvent évoluer ; le plafond manuel reste disponible.
 Le bouton en haut à droite actualise les données. Les listes de thème et de
 langue vivent dans les paramètres et suivent le système par défaut.
 Les deux préférences sont enregistrées sur le serveur.
+
+La date de réinitialisation affiche aussi l’heure UTC et son équivalent local.
+Par exemple, 12 h UTC correspond à 14 h à Paris en octobre. Le calcul attend
+l’heure configurée : un rechargement déjà effectué chez Ollama peut donc
+précéder l’estimation locale si cette référence est incorrecte. La date indiquée
+par Ollama fait foi ; le solde de crédits du site n’est pas lu par cette API.
+Déconnecter le compte demande une confirmation et efface ses relevés locaux.
 
 | Raccourci | Action |
 |---|---|

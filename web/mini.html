@@ -7,117 +7,54 @@
 <style>
   :root {
     color-scheme: light;
-    --surface:   #fcfcfb;
-    --text-1:    #0b0b0b;
-    --text-2:    #52514e;
-    --text-3:    #6e6c67;
-    --grid:      #e1e0d9;
-    --border:    rgba(11,11,11,0.10);
-    --ghost:     rgba(11,11,11,0.05);
-    /* Calibres par theme, comme dans le tableau de bord : un ambre ou un
-       orange clair ne tient pas sur le fond clair. */
-    --good:      #006300;
-    --warning:   #c57f00;
-    --serious:   #bc572e;
-    --critical:  #d03b3b;
-    --accent:    #2271ce;
-    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
-    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --s9:#898781;
-    --ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
+    --page:#f7f8f5; --surface:#fdfdfa; --rail:#edefe8; --text:#202a24;
+    --muted:#5e6b62; --line:#dce2d9; --soft:#e8eee6; --accent:#2c6349;
+    --accent-soft:#e4eee4; --on-accent:#fafcf8; --good:#2c6349;
+    --serious:#975122; --critical:#b73f3f; --warning:#975122;
+    --ease:cubic-bezier(.22,1,.36,1);
   }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) {
-      --surface:  #1c1c1a;
-      --text-1:   #ffffff;
-      --text-2:   #c3c2b7;
-      --text-3:   #898781;
-      --grid:     #2c2c2a;
-      --border:   rgba(255,255,255,0.10);
-      --ghost:    rgba(255,255,255,0.06);
-      --good:     #0ca30c;
-      --warning:  #fab219;
-      --serious:  #ec835a;
-      --critical: #de4946;
-      --accent:   #3987e5;
-      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+  @media(prefers-color-scheme:dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme:dark;
+      --page:#171e1a; --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
+      --muted:#a6b3a7; --line:#364039; --soft:#2a352d; --accent:#a7cfaf;
+      --accent-soft:#2a3d30; --on-accent:#18251c; --good:#a7cfaf;
+      --serious:#edb478; --critical:#ff9e9a; --warning:#edb478;
     }
   }
   :root[data-theme="dark"] {
-    color-scheme: dark;
-    --surface:  #1c1c1a;
-    --text-1:   #ffffff;
-    --text-2:   #c3c2b7;
-    --text-3:   #898781;
-    --grid:     #2c2c2a;
-    --border:   rgba(255,255,255,0.10);
-    --ghost:    rgba(255,255,255,0.06);
-    --good:     #0ca30c;
-    --warning:  #fab219;
-    --serious:  #ec835a;
-    --critical: #de4946;
-    --accent:   #3987e5;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --s9:#898781;
+    color-scheme:dark;
+    --page:#171e1a; --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
+    --muted:#a6b3a7; --line:#364039; --soft:#2a352d; --accent:#a7cfaf;
+    --accent-soft:#2a3d30; --on-accent:#18251c; --good:#a7cfaf;
+    --serious:#edb478; --critical:#ff9e9a; --warning:#edb478;
   }
 
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 16px 18px 14px;
-    background: var(--surface); color: var(--text-1);
-    font: 13px/1.45 system-ui, -apple-system, "SF Pro Text", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    width: 300px; overflow: hidden;
-  }
-  :focus { outline: none; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 5px; }
-
-  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-  .head h1 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  .live { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600;
-          text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
-  .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
-  .live.stale i { background: var(--warning); }
-
-  .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
-           color: var(--text-3); margin: 0 0 7px; }
-  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  .big { font-size: 27px; font-weight: 600; line-height: 1; letter-spacing: -0.02em;
-         font-variant-numeric: tabular-nums; }
-  .sub { font-size: 11.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
-
-  .meter { height: 8px; border-radius: 999px; overflow: hidden; margin: 9px 0 7px;
-           background: color-mix(in oklab, var(--fill) 20%, var(--surface)); }
-  .meter > span { display: block; height: 100%; width: 100%; border-radius: 999px;
-                  background: var(--fill); transform-origin: left center; transform: scaleX(0);
-                  transition: transform 280ms var(--ease-out); }
-
-  hr { border: 0; border-top: 1px solid var(--grid); margin: 14px 0; }
-
-  .models { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-  .m { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-  .m i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
-  .m .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-  .m .v { font-variant-numeric: tabular-nums; font-weight: 500; }
-
-  .actions { display: flex; gap: 8px; margin-top: 15px; }
-  button {
-    font: inherit; font-size: 12px; font-weight: 500; flex: 1;
-    color: var(--text-1); background: var(--ghost);
-    border: 1px solid var(--border); border-radius: 7px;
-    padding: 7px 10px; min-height: 30px; cursor: pointer;
-    transition: transform 120ms var(--ease-out), background 160ms var(--ease-out);
-  }
-  button:active { transform: scale(0.97); }
-  @media (hover: hover) and (pointer: fine) { button:hover { background: var(--grid); } }
-
-  .empty { color: var(--text-3); font-size: 12px; padding: 6px 0; }
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      transition-duration: 0.01ms !important;
-      animation-duration: 0.01ms !important;
-    }
-  }
+  * { box-sizing:border-box; } [hidden] { display:none !important; }
+  body { margin:0; padding:18px; width:300px; overflow:hidden; background:var(--surface); color:var(--text); font:12px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,p { margin:0; } button { font:inherit; cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+  .head { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:10px; }
+  .head h1 { font-size:13px; font-weight:650; letter-spacing:-.02em; }
+  .live { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); }
+  .live i { width:5px; height:5px; border-radius:50%; background:var(--good); }
+  .live.stale i { background:var(--warning); }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .label { font-size:11px; color:var(--muted); }
+  .quota-number { font-size:26px; letter-spacing:-.04em; font-variant-numeric:tabular-nums; font-weight:550; }
+  .sub { font-size:11px; color:var(--muted); line-height:1.6; }
+  .meter { background:var(--soft); height:6px; overflow:hidden; border-radius:3px; margin:10px 0; }
+  .meter span { display:block; width:100%; height:100%; transform-origin:left; background:var(--fill); }
+  .spending { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:16px 0; margin-top:16px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .big { display:block; margin-top:5px; font-size:20px; font-weight:550; letter-spacing:-.025em; font-variant-numeric:tabular-nums; }
+  .models { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+  .m { display:flex; justify-content:space-between; gap:10px; font-size:11px; }
+  .n { color:var(--muted); } .v { font-variant-numeric:tabular-nums; }
+  .actions { margin-top:18px; }
+  button { width:100%; border:1px solid var(--line); background:var(--rail); color:var(--text); padding:9px 10px; border-radius:6px; font-size:12px; font-weight:550; }
+  button:hover { background:var(--soft); } button:active { background:var(--accent-soft); }
+  .empty { color:var(--muted); font-size:12px; line-height:1.65; margin:10px 0; }
+  @media(prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 </head>
 <body>
@@ -135,6 +72,15 @@
    pas de bouton de langue : le reglage se fait dans le tableau de bord, et il
    suit ici comme le theme. */
 const FR = {
+  'Today (UTC)': 'Aujourd’hui (UTC)',
+  'Remaining': 'Disponible',
+  'Cap not configured': 'Plafond non configuré',
+  'No cycle configured': 'Aucun cycle configuré',
+  'History incomplete': 'Historique incomplet',
+  'Quota unavailable': 'Quota indisponible',
+  'Connect your account': 'Connecte ton compte',
+  'Estimated monthly quota': 'Quota mensuel estimé',
+
   'Ollama Buddy — summary': 'Ollama Buddy — aperçu',
   'Reading…': 'Lecture…',
   'Reset on {date} (UTC)': 'Réinitialisation le {date} (UTC)',
@@ -210,7 +156,7 @@ const dayLabel = iso => new Date(iso + 'T00:00:00Z')
 function resetLabel(q) {
   if (!q.resets_at || q.days_left === null || q.days_left === undefined) return '';
   const quand = new Date(q.resets_at)
-    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle:'h23', timeZone: 'UTC' });
   const jours = Math.floor(q.days_left);
   return fill(T('Reset on {date} (UTC)'), { date: quand })
     + (jours === 0 ? ''
@@ -220,93 +166,27 @@ function resetLabel(q) {
 
 function render(d) {
   const q = d.quota || {};
-  const body = document.getElementById('body');
-
   if (d.theme) applyTheme(d.theme);
   if (d.lang) applyLang(d.lang);
-
-  /* Le quota ne vient que d'ollama.com. Sans cle, on n'affiche aucun chiffre
-     plutot qu'un montant saisi a la main — il pouvait dater de semaines.
-     Le compte a rebours, lui, se tait quand la date n'est pas connue : les
-     reglages, ou une remise a zero deja vue, sont les seules sources. */
-  const resetLine = resetLabel(q);
-
-  let quotaBlock = '';
-  if (q.source === 'api' && typeof q.ratio === 'number') {
-    const ratio = q.ratio;
-    const has = q.current !== null && q.current !== undefined;
-    quotaBlock = `
-      <div class="row">
-        <span class="label" style="margin:0">${T('Estimated monthly quota')}</span>
-        <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)}</span>
-      </div>
-      <div class="meter" style="--fill:${severity(ratio)}" role="img"
-           aria-label="${T('{pct} of the monthly quota').replace('{pct}', pct(ratio))}${
-             has ? fill(T(': {current} of {monthly}'), { current: usd(q.current), monthly: usd(q.monthly) }) : ''}">
-        <span style="transform:scaleX(${Math.min(ratio, 1).toFixed(4)})"></span>
-      </div>
-      <div class="row">
-        <span class="sub">${has ? fill(T('{current} of {monthly}'), { current: usd(q.current), monthly: usd(q.monthly) }) : ''}</span>
-        <span class="sub">${resetLine}</span>
-      </div>`;
-  } else {
-    /* Rien d'autre ici : sans cle, ollama.com ne repond rien, et l'app n'a
-       donc aucun chiffre de quota a montrer — juste l'invitation a en saisir
-       une depuis le tableau de bord. */
-    quotaBlock = `<p class="label">${T('Estimated monthly quota')}</p>
-      <p class="sub">${q.key_set
-        ? q.error === 'incomplete history'
-          ? T('Incomplete cycle history — open the dashboard for details.')
-          : !q.key_error && (q.cycle_known === false || !q.monthly)
-            ? T('Open Settings to enter the reset date and monthly cap.')
-            : T('Cannot read — check your API key in the dashboard.')
+  const ready = q.source === 'api' && typeof q.ratio === 'number';
+  const days = d.days || [];
+  const today = days.find(day=>day.day === new Date().toISOString().slice(0,10));
+  const quotaBlock = ready ? `
+    <p class="label">${T('Estimated monthly quota')}</p>
+    <div class="row"><span class="quota-number">${pct(q.ratio)}</span><span class="sub">${T('Remaining')} ${usd(Math.max(0,q.monthly-(q.current || 0)))}</span></div>
+    <div class="meter" role="img" style="--fill:${severity(q.ratio)}" aria-label="${fill(T('{pct} of the monthly quota'),{pct:pct(q.ratio)})}"><span style="transform:scaleX(${Math.max(0,Math.min(q.ratio,1)).toFixed(4)})"></span></div>
+    <p class="sub">${resetLabel(q)}</p>` : `
+    <p class="label">${T('Estimated monthly quota')}</p><p class="empty">${q.key_set
+      ? q.error === 'incomplete history' ? T('History incomplete') : q.key_error || q.key_storage_error ? T('Quota unavailable') : !q.monthly ? T('Cap not configured') : T('No cycle configured')
+      : T('Connect your account')}</p><p class="sub">${q.key_set
+        ? q.error === 'incomplete history' ? T('Incomplete cycle history — open the dashboard for details.')
+          : !q.key_error && (q.cycle_known === false || !q.monthly) ? T('Open Settings to enter the reset date and monthly cap.') : T('Cannot read — check your API key in the dashboard.')
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
-  }
-
-  /* Les trois premiers modeles, puis les trois derniers jours. La repartition
-     par modele ne bouge plus : le 07/10/2026 l'API a cesse de la publier. */
-  const jours = (d.days || []).slice(-3).reverse().map(j =>
-    `<div class="m"><span class="n">${dayLabel(j.day)}</span><span class="v">${usd(j.usd)}</span></div>`
-  ).join('');
-
-  /* Jours pleins, pluriel compris : « dans 1 jours » se lisait mal. */
-  const joursAvant = n => (n === 0 ? T(' — cap reached today')
-    : n === 1 ? T(' — cap reached tomorrow')
-    : fill(T(' — cap reached in {n} days'), { n }));
-
-  const rate = q.rate_per_day && q.exhausted_in_days !== null && q.exhausted_in_days !== undefined
-    ? `<p class="sub" style="margin:10px 0 0">${fill(T('{amount} / day'), { amount: usd(q.rate_per_day) })}${
-        q.ratio >= 1 ? T(' — cap exceeded')
-          : q.days_left !== null && q.exhausted_in_days < q.days_left
-            ? joursAvant(Math.floor(q.exhausted_in_days)) : ''}</p>`
-    : '';
-
-  /* Sans cle, il n'y a aucune source : l'apercu se reduit au quota, qui porte
-     alors l'invitation a en saisir une. */
-  const live = d.usage_available;
-
-  body.innerHTML = `
-    ${quotaBlock}
-    ${rate}
-    ${live ? `
-      <hr>
-      <p class="label">${d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p>
-      <div class="row">
-        <span class="big">${usd(d.usd || 0)}</span>
-        <span class="sub">${exact(d.requests || 0)} req.</span>
-      </div>
-      <p class="label" style="margin-top:12px">${T('Last days')}</p>
-      <div class="models">${jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
-    <div class="actions">
-      <button type="button" id="open">${T('Open the dashboard')}</button>
-    </div>`;
-
-  document.getElementById('open').addEventListener('click', () => {
-    location.href = 'ollama-buddy://open';
-  });
-
-  // Apres innerHTML, pas avant : mesurer plus tot renvoyait la hauteur de
-  // l'ancien contenu (une bande de 103 px).
+  document.getElementById('body').innerHTML = `${quotaBlock}
+    ${d.usage_available ? `<div class="spending"><div><p class="label">${d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p><span class="big">${usd(d.usd || 0)}</span></div><div><p class="label">${T('Today (UTC)')}</p><span class="big">${today ? usd(today.usd) : '…'}</span></div></div>
+      <div class="models">${days.slice(-3).reverse().map(day=>`<div class="m"><span class="n">${dayLabel(day.day)}</span><span class="v">${usd(day.usd)}</span></div>`).join('')}</div>` : ''}
+    <div class="actions"><button type="button" id="open">${T('Open the dashboard')} ↗</button></div>`;
+  document.getElementById('open').addEventListener('click',()=>{ location.href='ollama-buddy://open'; });
   hasRendered = true;
   reportSize();
 }

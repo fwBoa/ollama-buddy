@@ -10,8 +10,11 @@ Ollama Buddy reads your account's daily cloud spending with your own API key. A
 Python server serves a dashboard in a native macOS window, with a compact summary
 in the menu bar. Running the server directly also works in a browser.
 
-- Cycle spending in dollars, requests and the seven most recent days. Available
-  daily spending stays visible when the quota cannot be calculated.
+- Overview with spending, requests, estimated quota and the four most recent days.
+- **Activity** view with an interactive 7/30 calendar-day chart and every daily
+  record in the available period. Missing records are distinct from zero spending.
+- Dedicated settings for connection, monthly cycle, alerts and appearance.
+  Unfinished input survives live updates.
 - Estimated monthly quota, reset countdown and projections once a full day of
   samples has accumulated.
 - Optional native notifications at 70%, 90% and 100% of the estimated quota.
@@ -19,10 +22,9 @@ in the menu bar. Running the server directly also works in a browser.
 - Native API-key storage in macOS Keychain, with migration from the previous file.
 - Python 3.9+ standard library at runtime; no frontend framework or build step.
 
-The screenshot below predates the latest cycle and model-history changes; labels
-and figures in the current app differ.
+Redesigned dashboard shown with synthetic data:
 
-<img src="docs/dashboard.png" alt="An earlier Ollama Buddy dashboard" width="100%">
+<img src="docs/dashboard.png" alt="Redesigned Ollama Buddy overview with synthetic data" width="100%">
 
 ## Install
 
@@ -69,7 +71,7 @@ kept separate so the native app can use Keychain storage.
 3. In **Settings**, enter **Monthly reset reference (UTC)**, including the time if known. Use
    a reset date displayed by Ollama, or the subscription anniversary converted to UTC.
    This reference can be in the past; the app replays its day of the month.
-4. Check **Monthly cap**. An explicit value overrides the local Ollama plan.
+4. Check **Cap in USD**. An explicit value overrides the local Ollama plan.
    Leaving it empty uses the built-in plan defaults: Pro $60, Max $300, Team $1,000.
    Unknown plans have no inferred cap. Confirm your own plan, especially legacy plans.
 
@@ -78,6 +80,13 @@ checked on 12 October 2026. They can change; the manual cap remains available.
 
 The top-right button refreshes cloud data. Theme and language selectors live
 in Settings and default to the system preferences. Both are saved on the server.
+
+Reset dates include the configured UTC time and its local equivalent. For
+example, noon UTC is 2 pm in Paris in October. The estimate waits for that
+configured time: an actual refill on Ollama may therefore precede the local
+estimate when the reference is wrong. Ollama’s displayed refill date is the
+authority; this API does not expose the website’s credit balance. Disconnecting
+requires confirmation and clears the account’s locally saved usage.
 
 | Shortcut | Action |
 |---|---|

@@ -52,14 +52,95 @@ async function main() {
     assert.equal(JSON.stringify(payload).includes('fixture-secret'), false);
     assert.equal(JSON.stringify(payload).includes('never-expose@example.test'), false);
     console.log('PASS historical models removed, CSP and secret minimisation');
+    await dashboard.setViewportSize({ width: 1120, height: 880 });
+    await dashboard.locator('[data-chart-range="30"]').click();
+    assert.equal(await dashboard.locator('.chart-day').count(), payload.days.length);
+    const firstDay = payload.days[0];
+    await dashboard.locator(`[data-select-day="${firstDay.day}"]`).click();
+    assert.match(await dashboard.locator('#chart-detail').innerText(), /requests?/);
+    assert.equal(await dashboard.locator(`[data-select-day="${firstDay.day}"]`).getAttribute('aria-pressed'), 'true');
+    await dashboard.locator('.nav [data-view="activity"]').click();
+    assert.equal(await dashboard.locator('.ledger tbody tr').count(), payload.days.length);
+    await dashboard.locator('.nav [data-view="overview"]').click();
+    await dashboard.locator('[data-chart-range="7"]').click();
+    for (const width of [360, 680, 880, 1120]) {
+      await dashboard.setViewportSize({ width, height: 880 });
+      assert.equal(await dashboard.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}`);
+    }
+    await dashboard.setViewportSize({ width: 1120, height: 880 });
+    // Keyboard activation, independent of pointer interactions.
+    await dashboard.locator('.nav [data-view="settings"]').focus();
+    await dashboard.keyboard.press('Enter');
+    await dashboard.locator('#monthly').waitFor({ state: 'visible' });
+    await dashboard.locator('.nav [data-view="overview"]').click();
+    if (process.env.OLLAMA_BUDDY_QA) {
+      await dashboard.screenshot({ path: '/private/tmp/ollama-buddy-overview.png', fullPage: true });
+      const previewContext = await browser.newContext({ locale: 'fr-FR', timezoneId: 'Europe/Paris', viewport: {width:1120,height:880} });
+      const preview = await previewContext.newPage();
+      await preview.goto(fixture.url);
+      await preview.locator('.quota .meter').waitFor();
+      await preview.screenshot({path:'/private/tmp/ollama-buddy-preview.png',fullPage:true});
+      await previewContext.close();
+      await mini.setViewportSize({ width: 300, height: 520 });
+      await mini.locator('body').screenshot({ path: '/private/tmp/ollama-buddy-mini.png' });
+    }
+    console.log('PASS chart selection, full activity, keyboard navigation and responsive layout');
+    const gapDay = payload.days[payload.days.length - 3].day;
+    await dashboard.evaluate(day => applyData({ ...lastData, days: lastData.days.filter(d => d.day !== day),
+      quota: { ...lastData.quota, source: 'unavailable', error: 'incomplete history', ratio: null } }), gapDay);
+    assert.match(await dashboard.locator('.quota').innerText(), /History incomplete/);
+    await dashboard.locator(`[data-select-day="${gapDay}"]`).click();
+    assert.match(await dashboard.locator('#chart-detail').innerText(), /No record for this day/);
+    assert.equal(await dashboard.locator('.chart-day.missing').count(), 1);
+    await dashboard.evaluate(data => applyData(data), payload);
+    await dashboard.evaluate(() => applyData({ ...lastData, days: [], usd: 0, requests: 0, peak: 0 }));
+    assert.match(await dashboard.locator('#app').innerText(), /No daily records yet/);
+    await dashboard.evaluate(data => applyData({ ...data, usage_available: false,
+      quota: { ...data.quota, source: 'unavailable', key_set: false } }), payload);
+    await dashboard.locator('#api-key').waitFor({ state: 'visible' });
+    assert.equal(await dashboard.locator('#hero').count(), 0);
+    await dashboard.evaluate(data => applyData({ ...data, usage_available: false,
+      quota: { ...data.quota, source: 'unavailable', key_error: '<img src=x onerror="window.injected=true">' } }), payload);
+    assert.equal(await dashboard.locator('.connect img').count(), 0);
+    assert.equal(await dashboard.evaluate(() => window.injected), undefined);
+    await dashboard.evaluate(data => applyData({ ...data, quota: { ...data.quota, ratio: 1.1 } }), payload);
+    assert.match(await dashboard.locator('.quota').innerText(), /Cap reached/);
+    await dashboard.evaluate(data => applyData(data), payload);
+    // A stream update also keeps keyboard focus on the inspected bar.
+    await dashboard.locator(`[data-select-day="${payload.days.at(-1).day}"]`).focus();
+    await dashboard.evaluate(() => applyData({ ...lastData, requests: lastData.requests + 1 }));
+    assert.equal(await dashboard.evaluate(() => document.activeElement.dataset.selectDay), payload.days.at(-1).day);
+    await dashboard.evaluate(data => applyData(data), payload);
+    console.log('PASS missing records, empty history, onboarding, escaped errors and exceeded quota');
 
-    await dashboard.locator('.quota-settings summary').first().click();
+
+    await dashboard.locator('.nav [data-view="settings"]').click();
     await dashboard.locator('#theme-select').selectOption('light');
     await mini.waitForFunction(() => document.documentElement.dataset.theme === 'light');
     await dashboard.locator('#lang-select').selectOption('fr');
     await dashboard.waitForFunction(() => document.documentElement.lang === 'fr');
     await mini.waitForFunction(() => document.documentElement.lang === 'fr');
     console.log('PASS theme and language synchronisation');
+    // A draft survives leaving the field, moving to another view and receiving a push.
+    await dashboard.locator('#monthly').fill('81.5');
+    await dashboard.locator('#monthly').press('Tab');
+    await dashboard.locator('.nav [data-view="overview"]').click();
+    await dashboard.evaluate(() => applyData({ ...lastData, requests: lastData.requests + 1 }));
+    await dashboard.locator('.nav [data-view="settings"]').click();
+    assert.equal(await dashboard.locator('#monthly').inputValue(), '81.5');
+    await dashboard.locator('#monthly').fill('');
+    await dashboard.evaluate(() => drafts.delete('monthly'));
+    if (process.env.OLLAMA_BUDDY_QA) {
+      await dashboard.locator('#theme-select').selectOption('dark');
+      await dashboard.locator('.nav [data-view="overview"]').click();
+      await dashboard.screenshot({ path: '/private/tmp/ollama-buddy-dark.png', fullPage: true });
+      await dashboard.setViewportSize({ width: 360, height: 800 });
+      await dashboard.screenshot({ path: '/private/tmp/ollama-buddy-mobile.png', fullPage: true });
+      await dashboard.setViewportSize({ width: 1120, height: 880 });
+      await dashboard.locator('.nav [data-view="settings"]').click();
+      await dashboard.locator('#theme-select').selectOption('light');
+    }
+
     await dashboard.locator('#notifications').check();
     await dashboard.waitForFunction(() => lastData.notifications === true);
     const preferences = JSON.parse(fs.readFileSync(path.join(temporary, 'config.json'), 'utf8'));
@@ -71,13 +152,12 @@ async function main() {
     await dashboard.waitForFunction(() => lastData.notifications === false);
     console.log('PASS optional notifications, denied permission hint and keychain-only config');
 
-    if (!await dashboard.locator('.quota-settings').first().evaluate(el => el.open))
-      await dashboard.locator('.quota-settings summary').first().click();
+    await dashboard.locator('.nav [data-view="settings"]').click();
     await dashboard.locator('#monthly').fill('75');
     await context.request.post(fixture.url + '/api/theme', { data: { theme: 'dark' } });
     await dashboard.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     assert.equal(await dashboard.locator('#monthly').inputValue(), '75');
-    assert.equal(await dashboard.locator('.quota-settings').first().evaluate(el => el.open), true);
+    assert.equal(await dashboard.locator('.nav [data-view="settings"]').getAttribute('aria-current'), 'page');
     await dashboard.locator('#save-monthly').click();
     await dashboard.waitForFunction(() => lastData.quota.monthly === 75);
     console.log('PASS live updates preserve active input and settings');
@@ -88,26 +168,32 @@ async function main() {
     const expected = Date.parse(utcInput + 'Z');
     await dashboard.waitForFunction(value => lastData.quota.resets_set === value, expected);
     assert.equal(await dashboard.locator('#reset-at').inputValue(), utcInput);
+    assert.match(await dashboard.locator('#reset-hint-local').innerText(), /Prochaine réinitialisation ici/);
+    assert.match(await dashboard.locator('#reset-hint').innerText(), /UTC, pas en heure locale/);
     const todayLabel = await dashboard.evaluate(day => dayLabel(day), fixture.today);
     assert.match(todayLabel, new RegExp(String(Number(fixture.today.slice(-2)))));
     await dashboard.locator('#reset-at').fill('');
     await dashboard.locator('#monthly').focus();
     await dashboard.waitForFunction(() => lastData.quota.resets_set === 0);
+    await dashboard.locator('.nav [data-view="overview"]').click();
     assert.match(await dashboard.locator('#app').innerText(), /Aucun cycle/);
     assert.equal(await dashboard.locator('.quota .meter').count(), 0);
     assert.match(await dashboard.locator('#app').innerText(), /Dépense disponible/);
-    assert.equal(await dashboard.locator('.model.day').count(), 7);
+    assert.equal(await dashboard.locator('.model.day').count(), 4);
     await mini.waitForFunction(() => document.getElementById('body').textContent.includes('Dépense disponible'));
     console.log('PASS UTC date roundtrip, clearing the cycle and spending without quota');
 
     await context.request.post(fixture.url + '/api/quota', { data: { quota_reset_at: expected } });
     await dashboard.locator('.quota .meter').waitFor();
+    await dashboard.locator('.nav [data-view="settings"]').click();
     await dashboard.locator('#remove-key').click();
+    assert.equal(await dashboard.evaluate(() => lastData.quota.key_set), true);
+    await dashboard.locator('#confirm-disconnect').click();
     await dashboard.waitForFunction(() => lastData.quota.key_set === false);
     assert.equal(await dashboard.locator('.quota .meter').count(), 0);
     await dashboard.locator('#api-key').fill('replacement-key');
     await dashboard.locator('#save-key').click();
-    await dashboard.locator('.quota .meter').waitFor();
+    await dashboard.waitForFunction(() => lastData.quota.key_set === true);
     assert.equal(await dashboard.locator('#api-key').inputValue(), '');
     assert.equal(await dashboard.locator('[data-model]').count(), 0);
     console.log('PASS key removal, reconnection and account history isolation');
@@ -137,7 +223,7 @@ async function main() {
       await dashboard.locator('#theme-select').selectOption('light');
       await dashboard.waitForFunction(() => document.documentElement.dataset.theme === 'light');
       await dashboard.screenshot({ path: '/private/tmp/ollama-buddy-dashboard.png', fullPage: true });
-      await mini.screenshot({ path: '/private/tmp/ollama-buddy-mini.png', fullPage: true });
+      await mini.locator('body').screenshot({ path: '/private/tmp/ollama-buddy-mini.png' });
     }
     assert.deepEqual(pageErrors, []);
     assert.deepEqual(errors, []);
