@@ -3,7 +3,7 @@
   <h1>Ollama Buddy</h1>
   <p><em>Your Ollama Cloud spending on your Mac — cycle, quota estimate, live updates</em></p>
 
-  [Français](README.fr.md) · [Install](#install) · [Monthly cycle](#monthly-cycle) · [Security](#security)
+  [Français](README.fr.md) · [Interface](#interface) · [Install](#install) · [Monthly cycle](#monthly-cycle) · [Security](#security)
 </div>
 
 Ollama Buddy reads your account's daily cloud spending with your own API key. A
@@ -22,9 +22,45 @@ in the menu bar. Running the server directly also works in a browser.
 - Native API-key storage in macOS Keychain, with migration from the previous file.
 - Python 3.9+ standard library at runtime; no frontend framework or build step.
 
-Redesigned dashboard shown with synthetic data:
+## Interface
 
-<img src="docs/dashboard.png" alt="Redesigned Ollama Buddy overview with synthetic data" width="100%">
+Redesign screenshots use synthetic data and the same server and pages as the app.
+
+**Overview**: cycle spending, requests, estimated quota and recent days.
+Select a chart bar to inspect a day's record.
+
+<img src="docs/dashboard.png" alt="Overview with an interactive daily chart and estimated monthly quota" width="100%">
+
+<details>
+<summary>Explore activity, settings, dark mode and the menu bar</summary>
+
+### Activity
+
+Switch between 7 and 30 calendar days and inspect every record in the available
+period. Missing records are distinct from days with zero spending.
+
+<img src="docs/activity.png" alt="Activity view with a 30-day chart and a table of available daily records" width="100%">
+
+### Settings
+
+Configure the connection, monthly cycle, alerts and appearance. The reset
+reference is entered in UTC; its local equivalent is shown to prevent timezone
+confusion.
+
+<img src="docs/settings.png" alt="Settings for connection, cap, UTC reset reference, alerts, theme and language" width="100%">
+
+### Dark mode
+
+<img src="docs/dashboard-dark.png" alt="Overview in the dark theme" width="100%">
+
+### Menu bar
+
+Check the estimated quota, cycle spending and recent days, then open the full
+dashboard from the panel.
+
+<img src="docs/menu-bar.png" alt="Menu bar panel showing estimated quota and daily spending" width="300">
+
+</details>
 
 ## Install
 
@@ -203,6 +239,7 @@ the HTTP API. The native bundle is not sandboxed or notarised.
 | `config.example.json` | Configuration shape; zero cap follows the plan |
 | `tests/test_backend.py` | Cycle, validation, cache, storage and HTTP regression tests |
 | `tests/test_frontend.cjs` | Browser regression tests with synthetic data; requires Playwright |
+| `tests/capture_ui.cjs` | English/French README screenshots using synthetic data |
 
 The native app stores `config.json` and `usage.db` in
 `~/Library/Application Support/OllamaBuddy/`. Direct launches use the project
@@ -228,8 +265,18 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 The browser suite is run with `node tests/test_frontend.cjs` when Playwright and
-its Chromium browser are available. It uses a temporary data directory and mocked
+its Chromium browser are available. It uses a temporary data directory, mocked
 Ollama responses and a simulated Keychain, without touching real credentials.
+
+Regenerate the English and French README screenshots with the same dependencies:
+
+```bash
+node tests/capture_ui.cjs
+```
+
+Screenshots also use synthetic data without accessing your account or Keychain.
+The script only replaces the demonstration PNGs in `docs/`.
+
 After building, the native threshold/deduplication checks can be run with:
 
 ```bash
@@ -239,4 +286,4 @@ After building, the native threshold/deduplication checks can be run with:
 Real Keychain access and notification permission are completed by macOS on native
 launch/opt-in. Rebuild the bundle after source edits to use the latest version.
 
-MIT licence. This is an independent app, not an official Ollama client.
+[MIT licence](LICENSE). This is an independent app, not an official Ollama client.
