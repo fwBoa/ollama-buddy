@@ -274,6 +274,18 @@ class KeychainTests(StateFixture):
         self.assertEqual(self.secret, "original-key")
         self.assertEqual(self.state.cfg["ollama_api_key"], "original-key")
 
+    def test_same_key_reentry_retries_failed_migration(self):
+        buddy.CONFIG_PATH.write_text(json.dumps({**buddy.DEFAULT_CONFIG, "ollama_api_key": "legacy-key"}))
+        with patch.object(buddy, "keychain", side_effect=OSError("locked")):
+            self.state.cfg = buddy.load_config()
+            with self.assertRaises(OSError):
+                self.state.update_config({"ollama_api_key": "legacy-key"})
+            self.assertIn("legacy-key", buddy.CONFIG_PATH.read_text())
+        self.state.update_config({"ollama_api_key": "legacy-key"})
+        self.assertEqual(self.secret, "legacy-key")
+        self.assertNotIn("legacy-key", buddy.CONFIG_PATH.read_text())
+        self.assertNotIn("_key_storage_error", self.state.cfg)
+
     def test_helper_never_puts_secret_in_arguments(self):
         self.storage.stop()
         with patch.object(buddy.subprocess, "run") as run:

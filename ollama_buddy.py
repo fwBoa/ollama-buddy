@@ -870,16 +870,17 @@ class State:
                     cfg["ollama_api_key"] = keychain("get")
                     cfg = validate_config(cfg)
             key_changed = cfg["ollama_api_key"] != self.cfg["ollama_api_key"]
+            key_write_requested = key_changed or "ollama_api_key" in changes
             calculation_changed = any(cfg[key] != self.cfg[key] for key in
                                       ("monthly_quota", "quota_reset_at", "ollama_api_key"))
             if calculation_changed:
                 cfg["alerts_generation"] = self.cfg.get("alerts_generation", 0) + 1
-            if key_changed and keychain_available():
+            if key_write_requested and keychain_available():
                 keychain("set" if cfg["ollama_api_key"] else "delete", cfg["ollama_api_key"])
             try:
                 save_config(cfg)
             except OSError:
-                if key_changed and keychain_available():
+                if key_write_requested and keychain_available():
                     old = self.cfg["ollama_api_key"]
                     keychain("set" if old else "delete", old)
                 raise
