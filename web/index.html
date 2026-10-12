@@ -219,6 +219,9 @@
    d'afficher un trou. Un texte neuf non traduit reste lisible.
    ===================================================================== */
 const FR = {
+  "Reset day": "Jour de réinitialisation",
+  "Daily spending is available. The quota estimate starts with the first complete UTC day because Ollama cannot split usage at the reset time.": "La dépense quotidienne reste disponible. L’estimation du quota commence au premier jour UTC complet, car Ollama ne permet pas de couper l’usage à l’heure de réinitialisation.",
+
   "Configured reset": "Réinitialisation configurée",
   "Next reset here: {date}": "Prochaine réinitialisation ici : {date}",
   "Reset time is entered in UTC, not local time.": "L’heure de référence est saisie en UTC, pas en heure locale.",
@@ -609,7 +612,8 @@ function renderQuota(q = {}) {
       <p class="hint">${resetLabel(q)}<br>${localResetHint(q)}</p>
       ${q.rate_per_day ? `<details class="projection"><summary>${T('Estimated outlook')}</summary><p>${fill(T('At this rate: <b>+{amount} / day</b>'),{amount:usd(q.rate_per_day)})}${q.projected_at_reset ? '<br>'+fill(T('projected at reset: {amount}'),{amount:usd(q.projected_at_reset)}) : ''}${q.ratio < 1 && q.exhausted_in_days != null && q.days_left != null && q.exhausted_in_days < q.days_left ? `<br><span class="alert">${fill(T('cap reached {when}, before the reset'),{when:whenText(q.exhausted_in_days)})}</span>` : ''}</p></details>` : ''}`;
   } else {
-    const issue = q.error === 'incomplete history' ? ['History incomplete','Some days are missing. Available spending is shown, but a monthly quota cannot be estimated.']
+    const issue = q.error === 'partial reset day' ? ['Reset day','Daily spending is available. The quota estimate starts with the first complete UTC day because Ollama cannot split usage at the reset time.']
+      : q.error === 'incomplete history' ? ['History incomplete','Some days are missing. Available spending is shown, but a monthly quota cannot be estimated.']
       : q.key_error || q.key_storage_error ? ['Account unavailable','Check the connection in Settings or refresh to try again.']
       : !q.monthly ? ['Cap not configured','Enter a monthly cap to calculate the share consumed.']
       : ['No cycle configured','Set a reset reference to estimate your monthly quota. Daily spending remains available.'];
@@ -644,7 +648,7 @@ function renderChart(days) {
 
 function renderContent(data) {
   const app = document.getElementById('app');
-  const days = data.days || [];
+  const days = data.daily_days || data.days || [];
   const sub = document.getElementById('sub');
   document.getElementById('view-title').textContent = T(VIEW_TITLES[currentView]);
   document.querySelectorAll('.nav [data-view]').forEach(el=>{
@@ -657,11 +661,16 @@ function renderContent(data) {
   if (currentView === 'settings') { app.innerHTML = renderSettings(data); return; }
   if (!data.usage_available) { app.innerHTML = renderConnection(data.quota); return; }
   const cycle = data.period === 'cycle';
-  const metrics = `<div class="metrics"><div class="metric"><span class="k">${cycle ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${usd(data.usd || 0)}</span></div><div class="metric"><span class="k">${T('Requests')}</span><span class="v">${fmt(data.requests || 0)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(data.peak || 0)}</span></div></div>`;
+  const resetDay = data.quota?.error === 'partial reset day';
+  const today = days.find(day => day.day === new Date().toISOString().slice(0,10));
+  const spending = resetDay ? today?.usd : (data.usd || 0);
+  const requests = resetDay ? today?.requests : (data.requests || 0);
+  const peak = Math.max(0,...days.map(day=>day.usd));
+  const metrics = `<div class="metrics"><div class="metric"><span class="k">${resetDay ? T('Today (UTC)') : cycle ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T('Requests')}</span><span class="v">${requests == null ? '…' : fmt(requests)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(peak)}</span></div></div>`;
   const source = `<details class="source-note"><summary>${T('How this is calculated')}</summary><p>${T('Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')} ${T("<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.")}</p></details>`;
   app.innerHTML = `${data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : ''}
-    ${currentView === 'activity' ? `${metrics}${renderChart(days)}<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,data.peak)}${source}` : `
-    <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days)}<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),data.peak)}</section></section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
+    ${currentView === 'activity' ? `${metrics}${renderChart(days)}<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}${source}` : `
+    <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days)}<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),peak)}</section></section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
 }
 
 // A push must preserve unfinished settings, even after focus left a field.
@@ -818,7 +827,7 @@ function applyData(data) {
      rejoueraient a chaque battement du flux. */
   const signature = JSON.stringify({
     usd: data.usd, requests: data.requests, peak: data.peak,
-    days: data.days, usage_available: data.usage_available, period: data.period,
+    days: data.days, daily_days: data.daily_days, usage_available: data.usage_available, period: data.period,
     notifications: data.notifications, notifications_supported: data.notifications_supported,
     quota: { ...data.quota, days_left: Math.floor(data.quota?.days_left ?? -1) },
     theme: data.theme, lang: data.lang, account: data.account, error: data.error,

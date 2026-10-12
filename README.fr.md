@@ -197,6 +197,13 @@ Les anciens compteurs par modèle sont des archives et ne sont plus affichés.
 L’app se concentre sur les dépenses quotidiennes. Remplacer la clé **ne la révoque
 pas chez Ollama** : la révocation se fait dans les paramètres du site Ollama.
 
+Les graphiques et tableaux affichent les relevés disponibles des 30 derniers
+jours UTC, indépendamment du cycle mensuel estimé. Lorsque la réinitialisation
+a lieu après minuit UTC, les dépenses et requêtes du jour restent visibles et
+s’actualisent. Le quota est indiqué comme indisponible jusqu’au premier jour UTC
+complet, plutôt que d’afficher artificiellement 0 %. Ollama ne permet pas de
+séparer le relevé quotidien à l’heure de réinitialisation.
+
 ## Notifications
 
 Active **Notifications à 70 %, 90 % et 100 %** dans les paramètres de l’app native.

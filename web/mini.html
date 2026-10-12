@@ -72,6 +72,10 @@
    pas de bouton de langue : le reglage se fait dans le tableau de bord, et il
    suit ici comme le theme. */
 const FR = {
+  'Requests': 'Requêtes',
+  'Reset day': 'Jour de réinitialisation',
+  'Daily spending remains available. The quota estimate excludes the partial reset day.': 'La dépense quotidienne reste disponible. L’estimation du quota exclut la journée partielle de réinitialisation.',
+
   'Today (UTC)': 'Aujourd’hui (UTC)',
   'Remaining': 'Disponible',
   'Cap not configured': 'Plafond non configuré',
@@ -169,7 +173,7 @@ function render(d) {
   if (d.theme) applyTheme(d.theme);
   if (d.lang) applyLang(d.lang);
   const ready = q.source === 'api' && typeof q.ratio === 'number';
-  const days = d.days || [];
+  const days = d.daily_days || d.days || [];
   const today = days.find(day=>day.day === new Date().toISOString().slice(0,10));
   const quotaBlock = ready ? `
     <p class="label">${T('Estimated monthly quota')}</p>
@@ -177,13 +181,13 @@ function render(d) {
     <div class="meter" role="img" style="--fill:${severity(q.ratio)}" aria-label="${fill(T('{pct} of the monthly quota'),{pct:pct(q.ratio)})}"><span style="transform:scaleX(${Math.max(0,Math.min(q.ratio,1)).toFixed(4)})"></span></div>
     <p class="sub">${resetLabel(q)}</p>` : `
     <p class="label">${T('Estimated monthly quota')}</p><p class="empty">${q.key_set
-      ? q.error === 'incomplete history' ? T('History incomplete') : q.key_error || q.key_storage_error ? T('Quota unavailable') : !q.monthly ? T('Cap not configured') : T('No cycle configured')
+      ? q.error === 'partial reset day' ? T('Reset day') : q.error === 'incomplete history' ? T('History incomplete') : q.key_error || q.key_storage_error ? T('Quota unavailable') : !q.monthly ? T('Cap not configured') : T('No cycle configured')
       : T('Connect your account')}</p><p class="sub">${q.key_set
-        ? q.error === 'incomplete history' ? T('Incomplete cycle history — open the dashboard for details.')
+        ? q.error === 'partial reset day' ? T('Daily spending remains available. The quota estimate excludes the partial reset day.') : q.error === 'incomplete history' ? T('Incomplete cycle history — open the dashboard for details.')
           : !q.key_error && (q.cycle_known === false || !q.monthly) ? T('Open Settings to enter the reset date and monthly cap.') : T('Cannot read — check your API key in the dashboard.')
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   document.getElementById('body').innerHTML = `${quotaBlock}
-    ${d.usage_available ? `<div class="spending"><div><p class="label">${d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p><span class="big">${usd(d.usd || 0)}</span></div><div><p class="label">${T('Today (UTC)')}</p><span class="big">${today ? usd(today.usd) : '…'}</span></div></div>
+    ${d.usage_available ? `<div class="spending"><div><p class="label">${q.error === 'partial reset day' ? T('Today (UTC)') : d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p><span class="big">${q.error === 'partial reset day' && !today ? '…' : usd(q.error === 'partial reset day' ? today.usd : (d.usd || 0))}</span></div><div><p class="label">${T(q.error === 'partial reset day' ? 'Requests' : 'Today (UTC)')}</p><span class="big">${today ? q.error === 'partial reset day' ? exact(today.requests) : usd(today.usd) : '…'}</span></div></div>
       <div class="models">${days.slice(-3).reverse().map(day=>`<div class="m"><span class="n">${dayLabel(day.day)}</span><span class="v">${usd(day.usd)}</span></div>`).join('')}</div>` : ''}
     <div class="actions"><button type="button" id="open">${T('Open the dashboard')} ↗</button></div>`;
   document.getElementById('open').addEventListener('click',()=>{ location.href='ollama-buddy://open'; });
@@ -242,7 +246,7 @@ function connect() {
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
     const sig = JSON.stringify({
-      usd: d.usd, requests: d.requests, days: d.days, usage_available: d.usage_available,
+      usd: d.usd, requests: d.requests, days: d.days, daily_days: d.daily_days, usage_available: d.usage_available,
       period: d.period, theme: d.theme, lang: d.lang,
       quota: { ...d.quota, days_left: Math.floor(d.quota?.days_left ?? -1) },
     });

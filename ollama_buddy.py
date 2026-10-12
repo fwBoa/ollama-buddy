@@ -635,7 +635,8 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
     resets_at, cycle_start, reset_source = reset_window(conn, cfg, now)
     consume = cloud_cycle_usage(cloud, cycle_start)
 
-    if consume is None or monthly <= 0:
+    if (consume is None or monthly <= 0 or
+                cycle_first_day(cycle_start) > now.date().isoformat()):
         return quota_unavailable(conn, cfg, cloud, account)
 
     ratio = consume / monthly
@@ -691,7 +692,9 @@ def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = 
     days = cloud_days(cloud)
     return {
         "source": "indisponible",
-        "error": ("incomplete history" if cycle_start and (
+        "error": ("partial reset day" if days is not None and cycle_start and
+                  cycle_first_day(cycle_start) > datetime.now(timezone.utc).date().isoformat()
+                  else "incomplete history" if cycle_start and (
                   (cloud or {}).get("history_complete") is False or
                   (days and cycle_first_day(cycle_start) < days[0]["day"]))
                   else None),
@@ -724,6 +727,7 @@ def empty_usage() -> dict:
     return {
         "unit": "jours",
         "days": [],
+        "daily_days": [],
         "days_total": 0,
         "usd": 0.0,
         "requests": 0,
@@ -745,8 +749,10 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
     cycle = cloud_cycle_usage(cloud, start) is not None
     cutoff = first if cycle else (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     today = datetime.now(timezone.utc).date().isoformat()
+    daily_cutoff = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+    daily_days = [day for day in days if daily_cutoff <= day["day"] <= today]
     days = [day for day in days if cutoff <= day["day"] <= today]
-    return {"unit": "jours", "days": days, "days_total": len(days),
+    return {"unit": "jours", "days": days, "daily_days": daily_days, "days_total": len(days),
             "usd": sum(day["usd"] for day in days),
             "requests": sum(day["requests"] for day in days),
             "peak": max((day["usd"] for day in days), default=0),

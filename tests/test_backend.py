@@ -207,6 +207,27 @@ class StateTests(StateFixture):
             self.state.update_config({"ollama_api_key": "another-account"})
             self.assertEqual(self.state.conn.execute("SELECT * FROM daily_usage").fetchall(), [])
 
+    def test_daily_usage_updates_on_partial_reset_day(self):
+        with patch.object(buddy, "datetime", wraps=datetime) as clock:
+            clock.now.return_value = utc(2026, 10, 12, 15)
+            self.state.cfg.update(ollama_api_key="test-key", quota_reset_at=epoch(utc(2026, 10, 12, 12)))
+            with patch.object(buddy, "cloud_usage", return_value=usage([("2026-10-12", .2)])):
+                first = self.state.payload()
+            self.assertEqual(first["days"], [])
+            self.assertEqual(first["daily_days"][-1]["usd"], .2)
+            self.assertEqual(first["quota"]["error"], "partial reset day")
+            self.assertIsNone(first["quota"]["ratio"])
+            self.state.invalidate_cloud()
+            with patch.object(buddy, "cloud_usage", return_value=usage([("2026-10-12", .4)])):
+                second = self.state.payload()
+            self.assertEqual(second["daily_days"][-1]["usd"], .4)
+            clock.now.return_value = utc(2026, 10, 13)
+            self.state.invalidate_cloud()
+            with patch.object(buddy, "cloud_usage", return_value=usage([("2026-10-12", .4), ("2026-10-13", .1)])):
+                third = self.state.payload()
+            self.assertEqual(third["quota"]["current"], .1)
+            self.assertEqual(len(third["daily_days"]), 2)
+
     def test_history_gap_and_partial_bucket_do_not_become_complete_usage(self):
         with patch.object(buddy, "datetime", wraps=datetime) as clock:
             clock.now.return_value = utc(2026, 10, 31, 12)

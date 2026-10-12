@@ -185,6 +185,12 @@ The old per-model counters are archived data and are no longer displayed. The
 current app focuses on daily spending. Replacing a key **does not revoke it on
 Ollama**; revoke it on Ollama's settings page.
 
+Daily charts and tables show the available records from the last 30 UTC days,
+independently of the estimated monthly cycle. On a reset day that starts after
+midnight UTC, today's spending and requests remain visible and update normally.
+The quota is marked unavailable until the first full UTC day instead of showing
+an artificial 0%. Ollama does not split its daily records at the reset time.
+
 ## Notifications
 
 Enable **Notifications at 70%, 90% and 100%** in Settings in the native app.

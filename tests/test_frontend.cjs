@@ -54,13 +54,13 @@ async function main() {
     console.log('PASS historical models removed, CSP and secret minimisation');
     await dashboard.setViewportSize({ width: 1120, height: 880 });
     await dashboard.locator('[data-chart-range="30"]').click();
-    assert.equal(await dashboard.locator('.chart-day').count(), payload.days.length);
-    const firstDay = payload.days[0];
+    assert.equal(await dashboard.locator('.chart-day').count(), payload.daily_days.length);
+    const firstDay = payload.daily_days[0];
     await dashboard.locator(`[data-select-day="${firstDay.day}"]`).click();
     assert.match(await dashboard.locator('#chart-detail').innerText(), /requests?/);
     assert.equal(await dashboard.locator(`[data-select-day="${firstDay.day}"]`).getAttribute('aria-pressed'), 'true');
     await dashboard.locator('.nav [data-view="activity"]').click();
-    assert.equal(await dashboard.locator('.ledger tbody tr').count(), payload.days.length);
+    assert.equal(await dashboard.locator('.ledger tbody tr').count(), payload.daily_days.length);
     await dashboard.locator('.nav [data-view="overview"]').click();
     await dashboard.locator('[data-chart-range="7"]').click();
     for (const width of [360, 680, 880, 1120]) {
@@ -85,15 +85,15 @@ async function main() {
       await mini.locator('body').screenshot({ path: '/private/tmp/ollama-buddy-mini.png' });
     }
     console.log('PASS chart selection, full activity, keyboard navigation and responsive layout');
-    const gapDay = payload.days[payload.days.length - 3].day;
-    await dashboard.evaluate(day => applyData({ ...lastData, days: lastData.days.filter(d => d.day !== day),
+    const gapDay = payload.daily_days[payload.daily_days.length - 3].day;
+    await dashboard.evaluate(day => applyData({ ...lastData, days: lastData.days.filter(d => d.day !== day), daily_days: lastData.daily_days.filter(d => d.day !== day),
       quota: { ...lastData.quota, source: 'unavailable', error: 'incomplete history', ratio: null } }), gapDay);
     assert.match(await dashboard.locator('.quota').innerText(), /History incomplete/);
     await dashboard.locator(`[data-select-day="${gapDay}"]`).click();
     assert.match(await dashboard.locator('#chart-detail').innerText(), /No record for this day/);
     assert.equal(await dashboard.locator('.chart-day.missing').count(), 1);
     await dashboard.evaluate(data => applyData(data), payload);
-    await dashboard.evaluate(() => applyData({ ...lastData, days: [], usd: 0, requests: 0, peak: 0 }));
+    await dashboard.evaluate(() => applyData({ ...lastData, days: [], daily_days: [], usd: 0, requests: 0, peak: 0 }));
     assert.match(await dashboard.locator('#app').innerText(), /No daily records yet/);
     await dashboard.evaluate(data => applyData({ ...data, usage_available: false,
       quota: { ...data.quota, source: 'unavailable', key_set: false } }), payload);
@@ -112,6 +112,18 @@ async function main() {
     assert.equal(await dashboard.evaluate(() => document.activeElement.dataset.selectDay), payload.days.at(-1).day);
     await dashboard.evaluate(data => applyData(data), payload);
     console.log('PASS missing records, empty history, onboarding, escaped errors and exceeded quota');
+    await dashboard.evaluate(data => applyData({ ...data, days: [], usd: 0, requests: 0,
+      daily_days: [{day: new Date().toISOString().slice(0,10),usd:.25,requests:7}],
+      quota: {...data.quota,source:'indisponible',error:'partial reset day',ratio:null,current:null} }), payload);
+    assert.match(await dashboard.locator('#hero').innerText(), /0.25/);
+    assert.match(await dashboard.locator('#chart-detail').innerText(), /7 requests/);
+    assert.match(await dashboard.locator('.quota').innerText(), /Reset day/);
+    await dashboard.evaluate(() => applyData({...lastData,daily_days:[{...lastData.daily_days[0],usd:.5,requests:8}]}));
+    assert.match(await dashboard.locator('#hero').innerText(), /0.50/);
+    assert.match(await dashboard.locator('#chart-detail').innerText(), /8 requests/);
+    await dashboard.evaluate(data => applyData(data),payload);
+    console.log('PASS daily spending updates during the partial reset day');
+
 
 
     await dashboard.locator('.nav [data-view="settings"]').click();
