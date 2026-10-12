@@ -20,8 +20,10 @@ now = datetime.now(timezone.utc)
 anchor = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 buckets = [{"from": (now - timedelta(days=offset)).date().isoformat() + "T00:00:00Z",
             "usage_usd": 1.2, "request_count": 3, "input_tokens": 4, "output_tokens": 5}
-           for offset in range(29, -1, -1)]
-data = {"buckets": buckets, "totals": {"usage_usd": 36, "request_count": 90}}
+           for offset in range(30, -1, -1)]
+data = {"buckets": buckets, "totals": {
+    "usage_usd": sum(day["usage_usd"] for day in buckets),
+    "request_count": sum(day["request_count"] for day in buckets)}}
 buddy.ollama_account = lambda: {"plan": "pro", "email": "never-expose@example.test"}
 buddy.cloud_usage = lambda key: data
 state = buddy.State({**buddy.DEFAULT_CONFIG, "ollama_api_key": "fixture-secret",

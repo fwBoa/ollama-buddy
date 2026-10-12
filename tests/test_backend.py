@@ -190,6 +190,11 @@ class StateTests(StateFixture):
             self.assertEqual(payload["days_total"], 31)
             self.assertEqual(payload["quota"]["current"], 31)
             self.assertEqual(payload["period"], "cycle")
+            self.state.account_data = {"plan": "unknown"}
+            missing_cap = self.state.payload()
+            self.assertTrue(missing_cap["usage_available"])
+            self.assertIsNone(missing_cap["quota"]["ratio"])
+            self.assertEqual(missing_cap["usd"], 31)
             self.state.update_config({"monthly_quota": 100})
             self.assertEqual(self.state.payload()["quota"]["ratio"], .31)
             # Le fichier SQLite survit au redemarrage, contrairement au cache HTTP.
