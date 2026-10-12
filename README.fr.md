@@ -11,10 +11,13 @@ API. Un serveur Python fournit un tableau de bord dans une fenêtre macOS native
 avec un résumé dans la barre de menus. Le serveur peut aussi fonctionner seul,
 dans un navigateur.
 
-- Dépense du cycle en dollars, requêtes et sept derniers jours.
+- Dépense du cycle en dollars, requêtes et sept derniers jours. La dépense
+  quotidienne reste visible lorsque le quota ne peut pas être calculé.
 - Quota mensuel estimé, compte à rebours et projections après une journée complète
   d’échantillons.
-- Français/anglais et thèmes automatique/clair/sombre, partagés entre les vues.
+- Notifications natives optionnelles à 70 %, 90 % et 100 % du quota estimé.
+- Français/anglais et thèmes automatique/clair/sombre dans les paramètres.
+- Clé de l’app native dans le Trousseau macOS, avec migration de l’ancien fichier.
 - Bibliothèque standard Python 3.9+ à l’exécution, sans framework frontend.
 
 La capture ci-dessous précède les dernières modifications du cycle et de
@@ -57,15 +60,17 @@ python3 ollama_buddy.py
 ```
 
 Fermer la fenêtre laisse l’app dans la barre de menus. `⌘Q` arrête le serveur si
-c’est cette app qui l’a démarré ; un serveur lancé indépendamment reste actif.
+c’est cette app qui l’a démarré ; un serveur natif compatible préexistant reste
+actif. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
 
 ## Connexion et réglages
 
 1. Crée une clé sur [ollama.com/settings/keys](https://ollama.com/settings/keys).
 2. Colle-la dans le tableau de bord.
-3. Dans **Paramètres**, renseigne **Prochaine réinitialisation (UTC)**, avec l’heure
-   si tu la connais. Utilise la date affichée par Ollama, ou l’anniversaire de ta
-   souscription converti en UTC.
+3. Dans **Paramètres**, renseigne **Réinitialisation de référence (UTC)**, avec l’heure
+   si tu la connais. Utilise une date affichée par Ollama, ou l’anniversaire de ta
+   souscription converti en UTC. Cette référence peut être passée ; l’app rejoue
+   son quantième chaque mois.
 4. Vérifie **Plafond mensuel**. Une valeur saisie remplace le plafond de l’offre
    lue dans l’app Ollama locale. Vide, le champ utilise les valeurs intégrées :
    Pro 60 $, Max 300 $, Team 1 000 $. Une offre inconnue n’a pas de plafond déduit.
@@ -75,8 +80,8 @@ Les plafonds et la règle du quantième viennent de la
 [FAQ tarifaire Ollama](https://www.ollama.com/pricing), vérifiée le 12 octobre 2026.
 Ils peuvent évoluer ; le plafond manuel reste disponible.
 
-Les boutons en haut à droite actualisent les données, changent le thème et
-changent la langue. Les paramètres proposent aussi une liste de langues.
+Le bouton en haut à droite actualise les données. Les listes de thème et de
+langue vivent dans les paramètres et suivent le système par défaut.
 Les deux préférences sont enregistrées sur le serveur.
 
 | Raccourci | Action |
@@ -89,7 +94,7 @@ Les deux préférences sont enregistrées sur le serveur.
 
 La barre de menus affiche un lama et le pourcentage estimé : alerte orange à 70 %,
 rouge à 90 %. Une mesure indisponible affiche un tiret. Le résumé montre les trois
-derniers jours et, s’il existe, un ancien relevé par modèle daté.
+derniers jours. Les anciens compteurs par modèle ne sont plus affichés.
 
 ## Cycle mensuel
 
@@ -102,7 +107,9 @@ L’app **ne découvre pas la date de souscription et n’observe pas les remise
 Le timestamp UTC saisi sert d’ancre mensuelle. Les deux bornes du cycle sont
 calculées depuis cette ancre originale : un 31 devient le 28/29 février, puis
 retrouve le 31 en mars. Les dates anciennes sont rejouées sans limite d’un an.
-Effacer la date retire le calcul du cycle.
+Effacer la date retire le calcul du cycle. Pour une souscription le 29, 30 ou 31,
+utilise la date de souscription originale : un reset ramené au 28 février ne
+permet pas de retrouver le quantième d’origine.
 
 L’intégration demande `https://ollama.com/api/usage?range=30d` et attend des
 `buckets` portant `from`, `usage_usd`, `request_count`, ainsi que `totals`.
@@ -117,23 +124,46 @@ permet pas de le couper à l’heure du reset. Modifier l’heure peut donc chan
 somme. Les remboursements, crédits achetés, changements d’offre et différences
 d’imputation ne sont pas reconstitués.
 
-Une réponse sur trente jours peut ne pas couvrir un cycle de trente et un jours.
-Si le premier jour reçu est postérieur au premier jour entier du cycle, l’app
-masque le quota plutôt que de présenter une somme tronquée. Sans clé, plafond,
-cycle, réponse valide ou accès à l’API, elle masque également les chiffres et
-explique le motif dans le tableau de bord.
+Chaque lecture réussie actualise les journées dans SQLite, conservées pendant
+400 jours. Une app qui a déjà observé les jours peut ainsi compléter un cycle de
+31 jours lorsque la réponse suivante n’en couvre que 30. Les anciennes journées
+sont actualisées, corrections comprises ; un premier compartiment partiel ne
+remplace jamais une journée entière. Changer de clé efface cet historique pour
+ne pas mélanger les comptes.
+
+Une installation neuve ne peut pas récupérer un jour que l’API ne fournit plus.
+Un trou dans l’historique du cycle masque le quota plutôt que de produire une
+somme tronquée. Sans plafond, date ou cycle complet, la dépense reste visible :
+la vue montre les journées disponibles sur les 30 derniers jours et leurs bornes.
+Le cycle est affiché quand son historique est complet, même si seul son plafond
+manque. Sans clé ou en cas de réponse invalide ou d’échec API, la dépense est
+masquée avec une explication.
 
 Un échantillon est enregistré au plus toutes les cinq minutes. Le rythme moyen
 nécessite au moins vingt-quatre heures de mesures du cycle courant. Les projections
-prolongent ce rythme ; elles ne prédisent pas les dépenses futures. Modifier le
-plafond ou le cycle efface ces échantillons pour éviter de mélanger les mesures.
+prolongent ce rythme ; elles ne prédisent pas les dépenses futures. Elles vivent
+dans la section repliable **Projection estimative**. Modifier le plafond ou le
+cycle efface les échantillons du rythme, tout en conservant les journées, pour
+éviter de mélanger les mesures.
 
-L’API ne fournit plus l’ancienne répartition par modèle attendue par ce projet.
-Si SQLite contient un relevé antérieur, sa date et ses compteurs sont affichés.
-Une base neuve n’a aucune répartition par modèle. Remplacer ou retirer la clé
-efface les relevés et couleurs enregistrés pour éviter d’attribuer l’historique
-d’un compte à un autre. Remplacer la clé **ne la révoque pas chez Ollama** :
-la révocation se fait dans les paramètres du site Ollama.
+Les anciens compteurs par modèle sont des archives et ne sont plus affichés.
+L’app se concentre sur les dépenses quotidiennes. Remplacer la clé **ne la révoque
+pas chez Ollama** : la révocation se fait dans les paramètres du site Ollama.
+
+## Notifications
+
+Active **Notifications à 70 %, 90 % et 100 %** dans les paramètres de l’app native.
+La fonction est désactivée par défaut. macOS demande l’autorisation, et la page
+signale quand les Réglages Système bloquent les notifications. Aucune alerte n’est
+produite sans quota calculable. L’app native doit rester ouverte.
+
+Le seuil le plus haut atteint est notifié une seule fois par cycle. Un passage de
+moins de 70 % à 95 % produit une alerte à 90 %. Repasser sous un seuil puis le
+franchir, redémarrer l’app ou désactiver/réactiver les alertes ne le répète pas.
+Un nouveau cycle, une nouvelle clé, un plafond ou une ancre modifiée ouvrent un
+nouveau contexte d’alerte. Cliquer sur la notification ouvre le tableau de bord.
+Ces alertes suivent le quota estimé, pas le solde officiel des crédits.
+Elles ne sont pas disponibles avec le serveur CLI seul.
 
 ## Sécurité
 
@@ -143,12 +173,20 @@ la révocation se fait dans les paramètres du site Ollama.
   de paramètres depuis un site tiers et le DNS rebinding. Actualiser exige un POST.
 - Les paramètres exigent un objet JSON de taille limitée, des champs connus,
   des montants finis et positifs ou nuls, un timestamp valide et des préférences reconnues.
-- La clé est enregistrée atomiquement dans `config.json`, en `0600` dès la création.
-  Elle reste **en clair**, sans Trousseau macOS. Un logiciel lancé sous ton utilisateur
-  peut la lire : ce mécanisme n’isole pas d’un processus local malveillant.
+- L’app native conserve la clé dans le **Trousseau macOS**, via son exécutable
+  signé et le framework Security. Le secret passe par l’entrée standard, jamais
+  par les arguments d’une commande. Aucune dépendance tierce n’est ajoutée.
+- Au lancement natif, une ancienne clé en clair est copiée dans le Trousseau avant
+  d’être retirée de `config.json`. Un échec conserve le fichier et permet de
+  réessayer sans perdre la clé. macOS peut demander une nouvelle autorisation
+  d’accès après reconstruction de l’app signée ad-hoc.
+- Le lancement CLI conserve le fichier privé (`0600`), sauf si
+  `OLLAMA_BUDDY_KEYCHAIN_HELPER` désigne le nouvel exécutable natif. Le stockage
+  CLI reste en clair. Le Trousseau protège le stockage au repos ; il n’isole pas
+  cette app des logiciels qui tournent sous ton propre utilisateur.
 - La clé est envoyée à `ollama.com` dans l’en-tête HTTPS Authorization. Elle n’est
   jamais renvoyée au tableau de bord. Seule l’offre du compte est exposée, pas son email.
-- Les noms de modèles et erreurs insérés dans le HTML sont échappés. Les pages
+- Les erreurs insérées dans le HTML sont échappées. Les pages
   portent une politique de scripts avec nonce, interdisent l’intégration dans une
   frame et limitent leurs requêtes réseau au serveur local.
 
@@ -174,10 +212,11 @@ L’app native conserve `config.json` et `usage.db` dans
 du projet, sauf si `OLLAMA_BUDDY_DATA` désigne un autre répertoire. Secrets, bases
 et artefacts de construction sont exclus de Git.
 
-SQLite conserve `cloud_samples` et `model_color`, en mode WAL. Supprimer la base
-perd l’historique du rythme et les anciens relevés par modèle ; seuls de nouveaux
-échantillons globaux sont reconstruits. Le démarrage supprime également les anciennes
-tables qui ne sont plus utilisées par cette version.
+SQLite conserve `daily_usage` et `cloud_samples`, en mode WAL. Les anciennes
+bases peuvent garder des lignes/couleurs de modèles, qui n’ont plus d’affichage.
+Supprimer la base perd les journées enregistrées et les échantillons du rythme ;
+seul ce qui est encore disponible dans l’API peut être récupéré. Le démarrage
+supprime également les anciennes tables inutilisées.
 
 Les vues web reçoivent des événements SSE, avec maintien de connexion et reconnexion.
 Le tableau de bord interroge toutes les cinq secondes si EventSource est absent.
@@ -194,7 +233,15 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Les tests navigateur se lancent avec `node tests/test_frontend.cjs` lorsque Playwright
 et son navigateur Chromium sont disponibles. Ils utilisent un dossier de données
-temporaire et des réponses Ollama simulées. Reconstruis le bundle après une modification
-des sources pour utiliser la nouvelle version.
+temporaire, des réponses Ollama et un Trousseau simulés, sans accéder aux vraies
+clés. Après construction, les seuils et leur déduplication sont vérifiables avec :
+
+```bash
+"Ollama Buddy.app/Contents/MacOS/OllamaBuddy" --test-alerts
+```
+
+L’accès réel au Trousseau et l’autorisation de notification sont gérés par macOS
+au lancement natif et à l’activation des alertes. Reconstruis le bundle après une
+modification des sources pour utiliser la nouvelle version.
 
 Licence MIT. App indépendante, sans affiliation officielle à Ollama.
