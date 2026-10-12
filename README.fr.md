@@ -101,7 +101,8 @@ python3 ollama_buddy.py
 
 Fermer la fenêtre laisse l’app dans la barre de menus. `⌘Q` arrête le serveur si
 c’est cette app qui l’a démarré ; un serveur natif compatible préexistant reste
-actif. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
+actif. Au lancement, l’app vérifie que le serveur réutilisé prend en charge le
+suivi quotidien. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
 
 ## Connexion et réglages
 

@@ -45,6 +45,7 @@
   button { cursor:pointer; }
   button:disabled { cursor:wait; opacity:.55; }
   :focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+  #main:focus { outline:none; }
   a { color:var(--accent); text-underline-offset:3px; }
   h1,h2,h3,p { margin:0; }
   h1 { font-size:25px; line-height:1.25; letter-spacing:-.035em; font-weight:650; }
@@ -68,7 +69,7 @@
   .account-label { display:block; font-size:12px; font-weight:600; }
   .plan,.rail-footer p { font-size:11px; color:var(--muted); }
   .rail-footer p { margin-top:12px; }
-  .workspace { min-width:0; padding:34px 36px 24px; max-width:1450px; width:100%; margin:auto; }
+  .workspace { min-width:0; padding:34px 36px 24px; max-width:1450px; width:100%; margin:0 auto; }
   .in-app .workspace { padding-top:48px; }
   .topbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:30px; }
   .eyebrow { color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; margin-bottom:6px; }
@@ -639,7 +640,7 @@ function renderChart(days) {
   const peak = Math.max(0,...shown.map(d=>d.usd));
   const selected = shown.find(d=>d.day === selectedDay) || shown[shown.length-1];
   selectedDay = selected?.day || null;
-  return `<div class="section-head"><h2>${T('Daily activity')}</h2><div class="segmented" role="group" aria-label="${T('Daily activity')}">${[7,30].map(n=>`<button type="button" data-chart-range="${n}" aria-pressed="${chartRange===n}">${T(n+' days')}</button>`).join('')}</div></div>
+  return `<div class="section-head"><h2>${T('Daily activity')}</h2><div class="segmented" role="group" aria-label="${T('Daily activity')}">${[7,30].map(n=>`<button type="button" data-chart-range="${n}"${shown.length ? '' : ' disabled'} aria-pressed="${chartRange===n}">${T(n+' days')}</button>`).join('')}</div></div>
     ${!shown.length ? `<div class="empty-chart">${T('No daily records yet.')}<br>${T('Once Ollama publishes usage, it will appear here.')}</div>` : `
     <div class="chart"><span class="chart-scale">${usd(peak)}</span><div class="chart-grid" aria-hidden="true"><span></span><span></span><span></span></div><div class="chart-bars">${shown.map(j=>`<button class="chart-day${j.usd===null ? ' missing' : j.usd===0 ? ' zero' : ''}" type="button" data-select-day="${escapeHTML(j.day)}" aria-pressed="${selectedDay===j.day}" aria-label="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)+', '+exact(j.requests)+' '+T('requests')))}" title="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)))}"><span style="--height:${peak ? (j.usd/peak*90).toFixed(2) : 0}%"></span></button>`).join('')}</div></div>
     <div class="chart-axis"><span>${shortDate(shown[0].day)}</span><span>${shortDate(shown[Math.floor((shown.length-1)/2)].day)}</span><span>${shortDate(shown[shown.length-1].day)} · UTC</span></div>`}
@@ -669,8 +670,8 @@ function renderContent(data) {
   const metrics = `<div class="metrics"><div class="metric"><span class="k">${resetDay ? T('Today (UTC)') : cycle ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T('Requests')}</span><span class="v">${requests == null ? '…' : fmt(requests)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(peak)}</span></div></div>`;
   const source = `<details class="source-note"><summary>${T('How this is calculated')}</summary><p>${T('Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')} ${T("<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.")}</p></details>`;
   app.innerHTML = `${data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : ''}
-    ${currentView === 'activity' ? `${metrics}${renderChart(days)}<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}${source}` : `
-    <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days)}<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),peak)}</section></section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
+    ${currentView === 'activity' ? `${metrics}${renderChart(days)}${days.length ? `<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}` : ''}${source}` : `
+    <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days)}${days.length ? `<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),peak)}</section>` : ''}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
 }
 
 // A push must preserve unfinished settings, even after focus left a field.

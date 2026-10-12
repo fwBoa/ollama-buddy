@@ -61,6 +61,7 @@ async function main() {
     assert.equal(await dashboard.locator(`[data-select-day="${firstDay.day}"]`).getAttribute('aria-pressed'), 'true');
     await dashboard.locator('.nav [data-view="activity"]').click();
     assert.equal(await dashboard.locator('.ledger tbody tr').count(), payload.daily_days.length);
+    assert.equal(await dashboard.locator('#main').evaluate(el=>getComputedStyle(el).outlineStyle), 'none');
     await dashboard.locator('.nav [data-view="overview"]').click();
     await dashboard.locator('[data-chart-range="7"]').click();
     for (const width of [360, 680, 880, 1120]) {
@@ -95,6 +96,17 @@ async function main() {
     await dashboard.evaluate(data => applyData(data), payload);
     await dashboard.evaluate(() => applyData({ ...lastData, days: [], daily_days: [], usd: 0, requests: 0, peak: 0 }));
     assert.match(await dashboard.locator('#app').innerText(), /No daily records yet/);
+    await dashboard.locator('.nav [data-view="activity"]').click();
+    assert.equal((await dashboard.locator('#app').innerText()).match(/No daily records yet/g).length, 1);
+    assert.equal(await dashboard.locator('[data-chart-range="7"]').isDisabled(), true);
+    if (process.env.OLLAMA_BUDDY_QA) {
+      await dashboard.evaluate(() => { applyLang('fr'); render(lastData); });
+      await dashboard.screenshot({ path: '/private/tmp/ollama-buddy-empty-fixed.png', fullPage: true });
+      await dashboard.evaluate(() => { applyLang('en'); render(lastData); });
+    }
+
+    await dashboard.locator('.nav [data-view="overview"]').click();
+
     await dashboard.evaluate(data => applyData({ ...data, usage_available: false,
       quota: { ...data.quota, source: 'unavailable', key_set: false } }), payload);
     await dashboard.locator('#api-key').waitFor({ state: 'visible' });

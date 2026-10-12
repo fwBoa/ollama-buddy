@@ -98,7 +98,8 @@ python3 ollama_buddy.py
 
 Closing the native window keeps the menu bar app running. `⌘Q` stops the server
 if this app started it; a compatible pre-existing native server stays running. A plain CLI server is
-kept separate so the native app can use Keychain storage.
+kept separate so the native app can use Keychain storage. On launch, the app also
+checks that a reused server supports daily tracking.
 
 ## Connect and configure
 

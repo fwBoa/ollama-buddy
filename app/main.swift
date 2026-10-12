@@ -624,6 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 ok = text.contains("ollama-buddy") && json?["keychain"] as? Bool == true
                     && json?["native"] as? Bool == true
+                    && json?["daily_usage"] as? Bool == true
             } else {
                 ok = false
             }

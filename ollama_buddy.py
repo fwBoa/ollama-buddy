@@ -1008,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         if url.path == "/health":
-            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app()})
+            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app(), "daily_usage": True})
             return
 
         if url.path == "/api/stream":
