@@ -1,256 +1,188 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Your Ollama Cloud usage on your Mac — quota, dollars, live</em></p>
+  <p><em>Your Ollama Cloud spending on your Mac — cycle, quota estimate, live updates</em></p>
 
-  ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)
-  ![No dependencies](https://img.shields.io/badge/dependencies-none-199e70)
-  ![Servers](https://img.shields.io/badge/servers-ollama.com%20only-199e70)
-  ![macOS](https://img.shields.io/badge/macOS-native%20app-000000?logo=apple&logoColor=white)
-  ![MIT licence](https://img.shields.io/badge/licence-MIT-199e70)
-
-  [Features](#features) • [Install](#install) • [Usage](#usage) • [The monthly quota](#the-monthly-quota) • [Design](#design) • [Français](README.fr.md)
+  [Français](README.fr.md) · [Install](#install) · [Monthly cycle](#monthly-cycle) · [Security](#security)
 </div>
 
-<img src="docs/dashboard.png" alt="The Ollama Buddy dashboard: the monthly quota with its meter, the spend over thirty days, and the day-by-day consumption" width="100%">
+Ollama Buddy reads your account's daily cloud spending with your own API key. A
+Python server serves a dashboard in a native macOS window, with a compact summary
+in the menu bar. Running the server directly also works in a browser.
 
----
+- Cycle spending in dollars, requests and the seven most recent days.
+- Estimated monthly quota, reset countdown and projections once a full day of
+  samples has accumulated.
+- English/French and automatic/light/dark themes, shared between both views.
+- Python 3.9+ standard library at runtime; no frontend framework or build step.
 
-A macOS app that answers one question: **where has my Ollama Cloud quota got to?**
-A Python server with no dependencies reads your usage on `ollama.com` with your key,
-a dashboard displays it, and a discreet summary stays in the menu bar at all times.
+The screenshot below predates the latest cycle and model-history changes; labels
+and figures in the current app differ.
 
-## Features
-
-- **Exact monthly quota, live** — the percentage published by ollama.com, plus the
-  amount in dollars, the burn rate and the reset date.
-- **The cycle, day by day** — what each day of the cycle cost, in dollars, with the
-  request count that goes with it, and the breakdown by model above it.
-- **A permanent summary in the menu bar** — a coloured dot and the percentage
-  (with a key), which opens a compact summary.
-- **Real time** — the server pushes changes over SSE, the interface polls nothing.
-  On the server side, ollama.com is queried at most once a minute, however many
-  tabs are open.
-- **In English and French** — the app follows your Mac's language, or you can
-  force either one. Both settings are remembered.
-- **No dependencies** — Python 3.9+ standard library only. To build the app:
-  `swiftc` and Pillow.
+<img src="docs/dashboard.png" alt="An earlier Ollama Buddy dashboard" width="100%">
 
 ## Install
 
-**Requirements** — macOS, and the Xcode command line tools, where `swiftc` comes from:
+To build the native app: macOS 12+, Xcode command line tools (`swiftc`, `lipo`,
+`iconutil`, `codesign`), Python 3.9+ and Pillow for the icon.
 
 ```bash
 xcode-select --install
-pip3 install pillow          # to generate the icon
-```
+pip3 install pillow
 
-```bash
 git clone https://github.com/fwBoa/ollama-buddy.git
 cd ollama-buddy
-./build_app.sh --install     # builds and copies into /Applications
+./build_app.sh
+open "Ollama Buddy.app"
 ```
 
-Then drag `Ollama Buddy.app` into the Dock. The app starts its server, opens the
-dashboard in a native window, exposes the menu bar summary, and stops its server
-when you quit. Without `--install`, the bundle stays in the project folder.
+The bundle contains both Apple Silicon and Intel executables. Add `--install` to
+copy it into `/Applications`. The native launcher uses `/usr/bin/python3`, so its
+runtime requires the Xcode command line tools too.
 
-The binary is **universal**: Apple Silicon and Intel.
-
-**From the command line** — the same program, without the macOS wrapper:
-
-```bash
-python3 ollama_buddy.py            # server + dashboard
-```
-
-> [!NOTE]
-> Closing the window **does not quit** the app: it lives on in the menu bar.
-> `⌘Q` stops the server.
-
-### On someone else's machine
-
-The clean path is **the same command**: clone and build in place. A binary compiled
-locally carries no quarantine marker, so macOS asks nothing.
-
-If you would rather ship an already-built `.app` — a GitHub Release, say — the
-archive arrives tagged `com.apple.quarantine` and Gatekeeper refuses it: the
-signature is **ad-hoc**, with no identified developer. Whoever receives it lifts
-that with one command:
+The app is signed ad-hoc, without Developer ID notarisation. A downloaded bundle
+can be blocked by Gatekeeper; building locally is the recommended installation.
+Only for a bundle you trust, removing its quarantine marker is possible with:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Ollama Buddy.app"
 ```
 
-Two caveats, stated plainly:
+To use the dashboard without the native wrapper:
 
-- On macOS 26, an ad-hoc signed `.app` **in quarantine** may report "is damaged and
-  can't be opened", sometimes with no button to override it. The command above
-  remains the way out.
-- A downloaded `.app` needs `/usr/bin/python3`, which itself requires the Xcode
-  tools. Without them, the app opens and then fails. Building from source has no
-  such problem, since `swiftc` already demands them.
+```bash
+python3 ollama_buddy.py
+# Optional: --no-browser --port 11499
+```
 
-Avoiding all that would mean a *Developer ID* signature and Apple notarisation,
-hence the Apple Developer Program at $99/year. Without it, **building from source
-is the only frictionless path** — and the one to recommend.
+Closing the native window keeps the menu bar app running. `⌘Q` stops the server
+if this app started it; an existing independently launched server stays running.
 
-> [!NOTE]
-> Homebrew is no longer a way out either: since 1 September 2026, casks that fail
-> the Gatekeeper check are no longer accepted into the official repositories.
+## Connect and configure
 
-## Usage
+1. Create an API key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
+2. Paste it into the dashboard.
+3. In **Settings**, enter **Next reset (UTC)**, including the time if known. Use
+   the date displayed by Ollama, or the subscription anniversary converted to UTC.
+4. Check **Monthly cap**. An explicit value overrides the local Ollama plan.
+   Leaving it empty uses the built-in plan defaults: Pro $60, Max $300, Team $1,000.
+   Unknown plans have no inferred cap. Confirm your own plan, especially legacy plans.
+
+The cap values and subscription-day rule follow [Ollama's pricing FAQ](https://www.ollama.com/pricing),
+checked on 12 October 2026. They can change; the manual cap remains available.
+
+The top-right buttons refresh cloud data, cycle the theme and cycle the language.
+Settings also offers a language selector. Both preferences are saved on the server.
 
 | Shortcut | Action |
 |---|---|
 | `⌘1` | Show the window |
 | `⌘R` | Reload the dashboard |
-| `⌘⇧R` | Ask ollama.com for usage again |
+| `⌘⇧R` | Invalidate the cache and refresh |
 | `⌘O` | Open in the browser |
-| `⌘Q` | Quit (stops the server) |
+| `⌘Q` | Quit |
 
-The dashboard carries three buttons in its top right. The first asks ollama.com for
-usage again — without it, the one-minute cache would serve the same value. The second
-cycles the three themes: **automatic** (follows macOS), **light**, **dark**. The third
-cycles the language: **automatic** (follows the system language), **English**,
-**French**. Both settings are remembered, and both appear again as a list in
-*Settings*.
+The menu bar shows a llama and the estimated percentage, with an orange alert
+at 70% and red at 90%. Unavailable usage shows a dash. Its summary shows the
+last three days and, when available, a dated historical model reading.
 
-The menu bar summary and the macOS menus follow the same setting — no second place to
-configure.
+## Monthly cycle
 
-### The menu bar
+Ollama says included credits reset monthly on the subscription's original day of
+the month, including annual subscriptions. Switching to the new pricing resets
+usage immediately while keeping that original anniversary.
 
-A coloured dot, then the percentage consumed **when an API key is stored** — blue,
-orange at 70%, red at 90%. With no key, the icon shows only a llama followed by a
-dash: no figure is published.
+The app does **not** discover your subscription date or observe credit resets.
+Its configured UTC timestamp is the monthly anchor. Both cycle boundaries are
+calculated from that original anchor, so a day 31 becomes February 28/29 and
+returns to day 31 in March. Old anchors are replayed without a one-year limit.
+Clearing the date removes the cycle calculation.
 
-A click opens a summary: quota, reset date, this month's consumption and the top
-three days — with a key. Without one, it settles for the invitation to enter a
-key, and a button to the dashboard.
+The API integration requests `https://ollama.com/api/usage?range=30d` and expects
+`buckets` with `from`, `usage_usd`, `request_count`, plus `totals`. This usage route
+is undocumented and its response format can change. The source was adapted to
+this format on 7 October 2026; it no longer reads `limits.monthly.usage`.
 
-The summary is live too: it updates for as long as it stays open.
+**The quota is an estimate, not Ollama's authoritative remaining credit balance.**
+The app sums the available daily spending in the configured cycle and divides
+by the cap. Buckets are UTC days: if the cycle starts during a day, that entire
+partial first day is excluded because the API cannot split it at the reset time.
+Changing the reset hour can therefore change the sum. Refunds, purchased credits,
+plan switches and differing billing attribution are not reconstructed.
 
-## The monthly quota
+A 30-day response may not cover a 31-day cycle. If its earliest day is later than
+the first full cycle day, the app withholds the quota instead of presenting a
+truncated sum. A missing key, missing cap, missing cycle, invalid response or API
+failure also hides the figures and gives a message in the dashboard.
 
-Ollama includes **$60 of usage per month on Pro**, and **$300 on Max**. That is the
-measure that matters, because it covers **all** your clients, including those whose
-requests the app never sees.
+Samples are recorded at most every five minutes. The average daily rate requires
+at least 24 hours of samples from the current cycle. Projections extrapolate that
+rate and can differ from future spending. Changing the cap or cycle clears those
+samples so incompatible measurements are never mixed.
 
-The app reads your plan from the local Ollama app and takes its cap from there. The
-**Monthly cap** setting overrides that — leave the field empty to follow the plan
-again. A plan the app doesn't know shows no dollar amount rather than a wrong one.
+The API no longer supplies the old per-model breakdown expected by this project.
+If SQLite contains an earlier model reading, the app shows its date and counts.
+A fresh database has no model breakdown. Replacing/removing the key clears the
+saved readings and colours, avoiding attribution of one account's history to another.
+Replacing a key **does not revoke it on Ollama**; revoke it on Ollama's settings page.
 
-### Linking your account (BYOK)
+## Security
 
-The app works with **your own key**: create one at
-[ollama.com/settings/keys](https://ollama.com/settings/keys), paste it into the
-dashboard, and your usage is read live.
+- The server binds only to `127.0.0.1`, on port `11499` by default.
+- Requests must use the actual local host and port. Foreign browser origins and
+  cross-site requests are rejected, protecting against cross-site settings changes
+  and DNS rebinding. Refresh is a POST action.
+- Settings endpoints require a JSON object, bounded request size, known fields,
+  finite non-negative amounts, a valid timestamp and supported preference values.
+- The key is saved atomically in `config.json` with mode `0600` from file creation.
+  It is stored **in plaintext**, not in macOS Keychain. Other software running as
+  your user can read it; this is not isolation from local malware or processes.
+- The key goes to `ollama.com` in the HTTPS Authorization header. It is never sent
+  back to the dashboard. The account payload exposes only the plan, not the email.
+- Dynamic model/error text is HTML-escaped. Pages carry a nonce-based script policy,
+  deny framing and restrict their network requests to the local server.
 
-What the key unlocks:
+These protections target browser-origin attacks. Local programs can still access
+the HTTP API. The native bundle is not sandboxed or notarised.
 
-| | |
-|---|---|
-| The month's percentage | `limits.monthly.usage`, exact and refreshed on its own |
-| Each day's spend, in dollars | `totals.usage_usd` and one bucket per day, since 7 October 2026 |
-| The requests behind it | `request_count`, and the token counts |
-| The rate in $/day | measured from samples taken every five minutes, once a full day has accumulated |
-
-What it does not give you, and how the app copes:
-
-| | |
-|---|---|
-| The amount in dollars | The API returns only a **share** (`0.874`), not a sum. The app multiplies it by the plan's cap, which lands back on the figure the site displays. |
-| The reset date | ollama.com does not publish it — `activity.period` is a rolling four-week window, not a billing cycle. So the app measures it: usage falling back to zero is a reset, and that day number then replays monthly, like the subscription. Once two resets have been seen, they say which of the two it is: the same day number twice means a calendar month, and the app keeps replaying the day; a day number that has moved means a fixed interval, and it replays that many days instead. The **Next reset** setting carries the first cycle, before anything has been observed; after that the measurement wins, because a date typed into a field is confirmed by nothing. Until it has one of the two, it says so instead of inventing a date. |
-
-> [!WARNING]
-> `ollama.com/api/usage` is **not documented**. If the route disappears or the key is
-> refused, the app shows **no quota figure at all**: it invites you to enter one. That
-> is deliberate: the quota is ollama.com's data, and without a key there is none. The
-> reset date, though, still works: it comes from your settings or from a reset the app
-> observed earlier, neither of which depends on reading today's usage.
-
-The key lives in `config.json`, at `0600`, and is never sent back to the browser —
-the input field stays empty even when a key is stored. It serves only to **read**
-your usage.
-
-To **replace or remove it**: *Settings*, below the quota.
-
-### Without a key
-
-The app **shows nothing at all** — no percentage, no meter, no amount, no countdown,
-no breakdown. The page reduces to the sign-in card.
-
-That is deliberate. The quota is ollama.com's data: without a key, the app has none,
-and it would rather say so than display an approximation. The reset date stays
-editable in the settings — it comes from there or from a reset the app observed
-earlier, never from the API — but it is not displayed: it is not a measurement, only
-a setting.
-
-## Where the figures come from
-
-A single source: `ollama.com/api/usage`, with your key. It covers **all** your
-clients, including those whose requests the app never sees.
-
-> [!IMPORTANT]
-> On **7 October 2026**, ollama.com replaced the `usage` endpoint. It no longer
-> publishes the share of the quota (`limits.monthly.usage`) nor the breakdown by
-> model (`limits.monthly.models`); it now returns a spend in dollars, hour by hour
-> or day by day, over 24 hours, 7 days or 30 days. No other endpoint carries what
-> was dropped, and none of it is documented.
->
-> The app adds the days up from the start of the cycle, which the **Next reset**
-> setting supplies, and divides by the plan's cap. The page shows that day by day
-> and, above it, the breakdown by model as of the last reading that still carried
-> it — dated, because those counters have stopped.
-
-## Design
-
-**Layout.** Fluid rather than fixed: maximum width 1560px, gutters and heading sizes
-in `clamp()`, two columns that fold into one below 940px. Components use **container
-queries** — the day list reacts to *its* width, not the window's.
-
-**Colours.** Eight categorical hues — those of the validation tool's reference
-palette — plus a grey for "Other", which is not a series but a remainder. Each
-model keeps its own **permanently** (stored in the database), never according to
-its rank. The days below are a single ordered series, so they carry one hue: there
-is nothing to tell apart.
-
-**Theme.** Light and dark are two **chosen** palettes, not an automatic inversion.
-The theme follows macOS by default, and can be forced.
-
-**The llama.** `web/ollama.png` serves as a **CSS mask** in the header — so it takes
-the text colour and follows both themes without needing two files — and as a
-**template image** in the menu bar, where macOS inverts it according to the
-background.
-
-**Motion.** Custom easing curves, transitions under 300ms, `scale(0.97)` on click,
-staggered entrance. Hover states are gated behind `@media (hover: hover)`.
-`prefers-reduced-motion` is respected: fades remain, movement disappears.
-
-**Accessibility.** Skip link, focus visible for keyboard only, programmatic labels,
-an `aria-live` region, targets ≥ 24px, and **no information carried by colour alone**:
-the quota meter changes hue, but the percentage is written beside it.
-
-## Files
+## Development and data
 
 | File | Role |
 |---|---|
-| `ollama_buddy.py` | HTTP server, reading ollama.com usage, SSE stream |
-| `web/index.html` | The dashboard |
-| `web/mini.html` | The menu bar summary |
-| `app/main.swift` | The macOS wrapper: window, menu bar, lifecycle |
-| `app/make_icon.py` | Generates `AppIcon.icns` (Pillow + `iconutil`) |
-| `build_app.sh` | Assembles the bundle, `--install` to copy it into /Applications |
-| `config.example.json` | The shape of the configuration file |
-| `config.json` | Your configuration. **Not versioned** |
-| `usage.db` | Local SQLite index. Deletable, it rebuilds itself |
+| `ollama_buddy.py` | Cloud/account reads, cycle calculation, SQLite, HTTP and SSE |
+| `web/index.html` | Dashboard, settings and translations |
+| `web/mini.html` | Menu bar summary |
+| `app/main.swift` | Native lifecycle, windows, menus and navigation |
+| `app/make_icon.py` | Pillow/iconutil icon generator |
+| `build_app.sh` | Universal bundle assembly |
+| `config.example.json` | Configuration shape; zero cap follows the plan |
+| `tests/test_backend.py` | Cycle, validation, cache, storage and HTTP regression tests |
+| `tests/test_frontend.cjs` | Browser regression tests with synthetic data; requires Playwright |
 
-The macOS app stores its data in `~/Library/Application Support/OllamaBuddy/`.
+The native app stores `config.json` and `usage.db` in
+`~/Library/Application Support/OllamaBuddy/`. Direct launches use the project
+folder unless `OLLAMA_BUDDY_DATA` selects another directory. Secrets, databases
+and build artefacts are ignored by Git.
 
-## Notes
+SQLite stores `cloud_samples` and `model_color`, using WAL mode. Deleting the
+base loses rate history and old model readings; only new global samples are
+rebuilt. Startup also removes legacy tables that this version no longer uses.
 
-- The server listens only on `127.0.0.1`.
-- Only `127.0.0.1:11434` (Ollama, for the plan name) and `ollama.com` (with a key)
-  are queried. Nothing the app measures leaves the machine: only the key and the
-  usage request go to ollama.com.
-- **`11435` is already taken by the Ollama app** — hence the default port `11499`.
+The web views receive SSE pushes, with keepalives and reconnection. The dashboard
+falls back to five-second polling if EventSource is unavailable. A watcher checks
+every two seconds; shared caching limits cloud reads to roughly one per minute
+except explicit refreshes. A minute tick updates the cycle/countdown even if
+spending has not changed. The native menu bar separately reads the cached payload
+every 20 seconds.
+
+Run the backend tests without dependencies or a real Ollama account:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+The browser suite is run with `node tests/test_frontend.cjs` when Playwright and
+its Chromium browser are available. It uses a temporary data directory and mocked
+Ollama responses. Rebuild the bundle after source edits to use the latest version.
+
+MIT licence. This is an independent app, not an official Ollama client.
