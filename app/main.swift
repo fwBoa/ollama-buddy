@@ -310,6 +310,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     func userContentController(_ controller: WKUserContentController,
                                didReceive message: WKScriptMessage) {
         guard message.name == "popoverSize",
+              message.frameInfo.isMainFrame,
+              message.frameInfo.securityOrigin.host == "127.0.0.1",
+              message.frameInfo.securityOrigin.port == port,
               let value = message.body as? NSNumber else { return }
         let height = min(CGFloat(truncating: value), 620)
         guard height > 60 else { return }
@@ -455,33 +458,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                   let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
                   let quota = json["quota"] as? [String: Any] else { return }
 
-            // Le pourcentage n'est publie que par ollama.com. Sans cle — ou avec
-            // une cle refusee — `source` vaut "indisponible" et il n'y a rien a
-            // afficher. On lit la part telle que l'API la donne, jamais un
-            // rapport recalcule : la barre de menus ne peut plus diverger du
-            // tableau de bord.
+            // Le serveur estime la part du cycle configure a partir des jours
+            // publies. Sans mesure exploitable, aucun pourcentage n'est affiche.
             let source = quota["source"] as? String
             let ratio = source == "api" ? quota["ratio"] as? Double : nil
 
-            let note: String
-            if ratio != nil {
-                note = ""
-            } else if (quota["key_set"] as? Bool) == true {
-                // `key_error` vient du serveur : la sentinelle connue est
-                // traduite, un code HTTP ou un nom d'exception reste tel quel.
-                note = Lang.t(quota["key_error"] as? String ?? "no figures published")
-            } else {
-                note = Lang.t("no API key — open the dashboard to enter one")
-            }
-
-            // La langue voyage dans le meme payload que le quota : un
-            // changement fait depuis le tableau de bord reconstruit donc les
-            // menus ici, sans qu'aucun des deux n'ait a prevenir l'autre.
             let resolved = Lang.resolve(json["lang"] as? String ?? "auto")
-            let needsMenu = resolved != Lang.current
-            if needsMenu { Lang.current = resolved }
-
             DispatchQueue.main.async {
+                let needsMenu = resolved != Lang.current
+                Lang.current = resolved
+                let note: String
+                if ratio != nil {
+                    note = ""
+                } else if (quota["key_set"] as? Bool) == true {
+                    // `key_error` vient du serveur : la sentinelle connue est
+                    // traduite, un code HTTP ou un nom d'exception reste tel quel.
+                    note = Lang.t(quota["key_error"] as? String ?? "no figures published")
+                } else {
+                    note = Lang.t("no API key — open the dashboard to enter one")
+                }
+
+                // La langue voyage dans le meme payload que le quota : un
+                // changement fait depuis le tableau de bord reconstruit donc les
+                // menus ici, sans qu'aucun des deux n'ait a prevenir l'autre.
                 if needsMenu { self.buildMenu() }
                 self.updateStatusTitle(ratio: ratio, note: note)
             }
@@ -674,20 +673,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             return
         }
 
-        if let host = url.host, host != "127.0.0.1" && host != "localhost",
-           action.navigationType == .linkActivated {
-            NSWorkspace.shared.open(url)
+        if url.scheme == "about" { decisionHandler(.allow); return }
+        let local = url.scheme == "http" && url.host == "127.0.0.1" && url.port == port
+        if !local {
+            if action.navigationType == .linkActivated,
+               url.scheme == "https" || url.scheme == "http" {
+                NSWorkspace.shared.open(url)
+            }
             decisionHandler(.cancel)
-            return
+        } else {
+            decisionHandler(.allow)
         }
-        decisionHandler(.allow)
+    }
+
+    // WKWebView ne cree pas de nouvelle fenetre pour les liens target=_blank.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url,
+           url.scheme == "https" || url.scheme == "http" {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
     }
 
     // MARK: - Pages de statut
 
     private func shell(_ title: String, _ body: String, spinner: Bool) -> String {
         """
-        <!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
+        <!doctype html><html lang="\(Lang.current)"><head><meta charset="utf-8"><style>
           :root { color-scheme: dark; }
           body { margin:0; height:100vh; display:flex; align-items:center; justify-content:center;
                  background:#0d0d0d; color:#c3c2b7;
@@ -702,9 +715,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
           @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
         </style></head><body><div class="box">
           \(spinner ? "<div class=\"spin\"></div>" : "")
-          <h1>\(title)</h1><p>\(body)</p>
+          <h1>\(escapeHTML(title))</h1><p>\(escapeHTML(body).replacingOccurrences(of: "\n", with: "<br>"))</p>
         </div></body></html>
         """
+    }
+
+    private func escapeHTML(_ value: String) -> String {
+        value.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 
     private func loadingPage() -> String {
@@ -714,7 +735,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     private func errorPage(_ message: String) -> String {
-        shell("Ollama Buddy", message.replacingOccurrences(of: "\n", with: "<br>"), spinner: false)
+        shell("Ollama Buddy", message, spinner: false)
     }
 }
 

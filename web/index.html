@@ -464,6 +464,7 @@
   <main id="main">
     <p class="sub" id="sub">Ollama Cloud usage</p>
 
+    <p id="action-error" class="warn-line" role="alert" hidden></p>
     <div id="app"><p class="state" id="boot">Reading…</p></div>
   </main>
 </div>
@@ -499,21 +500,26 @@ const FR = {
   'Ollama Cloud usage': 'Consommation Ollama Cloud',
   'Reading…': 'Lecture…',
 
-  'Monthly quota': 'Quota mensuel',
+  'Monthly quota': 'Quota mensuel estimé',
+  'Estimated monthly quota': 'Quota mensuel estimé',
+  'Next reset (UTC)': 'Prochaine réinitialisation (UTC)',
+  'Models are unavailable for this account.': 'Aucun relevé par modèle disponible pour ce compte.',
+  'The API history does not cover the full cycle. A quota cannot be calculated from a partial history.': "L’historique de l’API ne couvre pas tout le cycle. Un historique partiel ne permet pas de calculer le quota.",
+  'Request failed: {error}': 'Échec de la demande : {error}',
   'requests': 'requêtes',
   'request': 'requête',
   'today': "aujourd'hui",
   'tomorrow': 'demain',
   'in {n} days': 'dans {n} jours',
-  'Reset on {date}': 'Réinitialisation le {date}',
+  'Reset on {date} (UTC)': 'Réinitialisation le {date} (UTC)',
   ' · reset tomorrow': ' · demain',
   ' · reset in {n} days': ' ·\u00A0dans {n} jours',
   'At this rate: <b>+{amount} / day</b>': 'À ce rythme : <b>+{amount} / jour</b>',
   'cap exceeded': 'plafond dépassé',
   'cap reached {when}, before the reset': 'plafond atteint {when}, avant la réinitialisation',
   'cap reached {when}': 'plafond atteint {when}',
-  'Connect your account to read the quota live: the exact percentage, and the breakdown by model for <b>all</b> your tools, including those whose requests the app never sees.':
-    "Relie ton compte pour lire le quota en direct : le pourcentage exact, et la répartition par modèle pour <b>tous</b> tes outils, y compris ceux dont l'app ne voit jamais passer la requête.",
+  'Connect your account to read daily spending for <b>all</b> your tools. Set the monthly cap and reset date to estimate your quota.':
+    "Relie ton compte pour lire la dépense quotidienne de <b>tous</b> tes outils. Renseigne le plafond et la date de réinitialisation pour estimer ton quota.",
   '<b class="bad">Key rejected</b> — Ollama turned it down. Create another one at {link}.':
     '<b class="bad">Clé refusée</b> — Ollama l\'a rejetée. Crée-en une autre sur {link}.',
   '<b class="bad">Cannot read</b> ({error}) — ollama.com did not answer as expected. Another attempt on the next refresh.':
@@ -524,8 +530,8 @@ const FR = {
   'paste another key': 'coller une autre clé',
   'paste your API key': 'coller ta clé API',
   'Save': 'Enregistrer',
-  'Create one at {link}. It never leaves your machine and serves only to <em>read</em> your usage.':
-    "Crée-la sur {link}. Elle ne quitte pas ta machine et ne sert qu'à <em>lire</em> ton usage.",
+  'Create one at {link}. It is stored locally and sent only to ollama.com to <em>read</em> your usage.':
+    "Crée-la sur {link}. Elle est stockée localement et envoyée uniquement à ollama.com pour <em>lire</em> ton usage.",
   '<b class="bad">No cap to set the spend against.</b> The app does not know your plan, so it cannot tell what share of it you have used. Enter one in <b>Monthly cap</b> below.':
     "<b class=\"bad\">Aucun plafond auquel rapporter la dépense.</b> L'app ne connaît pas ton offre, donc elle ne peut pas dire quelle part tu en as consommée. Renseigne <b>Plafond mensuel</b> ci-dessous.",
   '<b class="bad">No cycle to add up.</b> ollama.com no longer publishes the quota, so the app adds up your daily usage since the cycle began — and it needs to know when that was. Set <b>Next reset</b> below.':
@@ -537,8 +543,8 @@ const FR = {
   'Automatic': 'Automatique',
   'Change': 'Changer',
   'Remove': 'Retirer',
-  'Replacing the key revokes the old one on the next read. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.':
-    "Remplacer la clé révoque l'ancienne à la prochaine lecture. La retirer ne laisse que la carte de connexion : tout le quota vient d'ollama.com, donc sans clé il ne reste aucun chiffre.",
+  'Replacing the key changes the account read by this app and clears its saved usage. It does not revoke the old key on ollama.com. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.':
+    "Remplacer la clé change le compte lu par cette app et efface ses relevés enregistrés. Cela ne révoque pas l’ancienne clé sur ollama.com. La retirer ne laisse que la carte de connexion : tout le quota vient d'ollama.com, donc sans clé il ne reste aucun chiffre.",
   'no cap set': 'plafond non renseigné',
   '{pct} of the monthly quota consumed': '{pct} du quota mensuel consommé',
   '{current} of {monthly}': '{current} sur {monthly}',
@@ -546,8 +552,8 @@ const FR = {
   'projected at reset: {amount}': 'projeté au reset : {amount}',
   "<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.":
     "<b>ollama.com</b> publie la consommation de chaque jour, en dollars. Le cycle est la somme de ces jours depuis son début, et le pourcentage est cette somme rapportée au plafond du plan.",
-  'Reset date: the one set in Settings. It is what tells the app where the cycle begins.':
-    "Date de réinitialisation : celle saisie dans les réglages. C'est elle qui dit où commence le cycle.",
+  'Reset date: the UTC date and time set in Settings, repeated on the subscription day each month. Usage excludes the partial first UTC day.':
+    "Date de réinitialisation : date et heure UTC saisies dans les réglages, rejouées chaque mois au quantième de souscription. L’usage exclut le premier jour UTC partiel.",
   'Reset date unknown — ollama.com does not publish it, and the app has no other way to learn it: your daily usage is all the API still gives.':
     "Date de réinitialisation inconnue — ollama.com ne la publie pas, et l'app n'a plus aucun moyen de la déduire : la consommation quotidienne est tout ce que l'API donne encore.",
   'Monthly cap — leave empty to follow your Ollama plan.':
@@ -593,6 +599,7 @@ const squeeze = s => s.replace(/\s+/g, ' ').trim();
 const FR_BY_KEY = new Map(Object.entries(FR).map(([k, v]) => [squeeze(k), v]));
 
 const T = s => (lang === 'fr' ? (FR_BY_KEY.get(squeeze(s)) ?? s) : s);
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const locale = () => (lang === 'fr' ? 'fr-FR' : 'en-US');
 
 function resolveLang(pref) {
@@ -653,9 +660,9 @@ function whenText(days) {
 function resetLabel(quota) {
   if (!quota.resets_at || quota.days_left === null || quota.days_left === undefined) return '';
   const quand = new Date(quota.resets_at)
-    .toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const jours = Math.floor(quota.days_left);
-  return fill(T('Reset on {date}'), { date: quand })
+  return fill(T('Reset on {date} (UTC)'), { date: quand })
     + (jours === 0 ? ''
       : jours === 1 ? T(' · reset tomorrow')
       : fill(T(' · reset in {n} days'), { n: jours }));
@@ -664,8 +671,7 @@ function resetLabel(quota) {
 
 /* =====================================================================
    Quota mensuel. Lu sur ollama.com/api/usage — une route non documentee,
-   qui renvoie une *part* du plafond et non une somme : le montant affiche
-   ici est cette part appliquee au plafond du plan.
+   qui publie des depenses quotidiennes. Le serveur estime le cycle configure.
 
    Sans cle, aucun chiffre n'est publie. L'app affichait auparavant un
    montant colle a la main, presente comme le quota du jour alors qu'il
@@ -679,8 +685,7 @@ function renderQuota(q) {
   const monthly = q.monthly || 0;          // le plafond en vigueur
   const monthlySet = q.monthly_set || 0;   // ce qui est saisi, zero si rien
   const has = q.current !== null && q.current !== undefined;
-  /* La part vient de l'API, jamais d'un rapport recalcule : c'est elle qui
-     porte le pourcentage, meme si le plafond n'est pas renseigne. */
+  /* Le serveur rapporte les depenses au plafond configure. */
   const ratio = live && typeof q.ratio === 'number' ? q.ratio : 0;
   const resetText = resetLabel(q);
 
@@ -689,7 +694,7 @@ function renderQuota(q) {
      quantieme se decalait d'une semaine chaque semaine. Elle se tait
      desormais quand elle ne sait pas. */
   const resetNote = q.resets_source === 'settings'
-    ? T('Reset date: the one set in Settings. It is what tells the app where the cycle begins.')
+    ? T('Reset date: the UTC date and time set in Settings, repeated on the subscription day each month. Usage excludes the partial first UTC day.')
     : T('Reset date unknown — ollama.com does not publish it, and the app has no other way to learn it: your daily usage is all the API still gives.');
 
   /* Les projections vivent ici, avec le rythme dont elles decoulent. Le pied
@@ -721,15 +726,15 @@ function renderQuota(q) {
      inattendue n'appellent pas la meme action de la part de l'utilisateur. */
   const KEY_LINK = '<a href="https://ollama.com/settings/keys" target="_blank" rel="noreferrer">ollama.com/settings/keys</a>';
   const lead = !keySet
-    ? T(`Connect your account to read the quota live: the exact percentage, and the
-       breakdown by model for <b>all</b> your tools, including those whose
-       requests the app never sees.`)
+    ? T(`Connect your account to read daily spending for <b>all</b> your tools. Set the monthly cap and reset date to estimate your quota.`)
     : keyError === 'key rejected'
       ? fill(T(`<b class="bad">Key rejected</b> — Ollama turned it down. Create another one at
          {link}.`), { link: KEY_LINK })
       : keyError
         ? fill(T(`<b class="bad">Cannot read</b> ({error}) — ollama.com did not
-           answer as expected. Another attempt on the next refresh.`), { error: keyError })
+           answer as expected. Another attempt on the next refresh.`), { error: escapeHTML(keyError) })
+        : q.error === 'incomplete history'
+          ? T('The API history does not cover the full cycle. A quota cannot be calculated from a partial history.')
         : !q.monthly
           /* Une offre que l'app ne connait pas n'a pas de plafond : sans lui,
              la somme des jours ne se rapporte a rien. */
@@ -759,7 +764,7 @@ function renderQuota(q) {
         <button class="btn primary" id="save-key" type="button">${T('Save')}</button>
       </div>
       <p class="hint" id="key-hint">
-        ${fill(T('Create one at {link}. It never leaves your machine and serves only to <em>read</em> your usage.'), { link: KEY_LINK })}
+        ${fill(T('Create one at {link}. It is stored locally and sent only to ollama.com to <em>read</em> your usage.'), { link: KEY_LINK })}
       </p>
     </div>`;
 
@@ -785,9 +790,9 @@ function renderQuota(q) {
                  value="${monthlySet > 0 ? monthlySet : ''}"
                  placeholder="${monthly > 0 ? monthly : ''}">
         </label>
-        <label>${T('Next reset')}
-          <input id="reset-at" type="date"
-                 value="${q.resets_set ? new Date(q.resets_set).toISOString().slice(0, 10) : ''}">
+        <label>${T('Next reset (UTC)')}
+          <input id="reset-at" type="datetime-local"
+                 value="${q.resets_set ? new Date(q.resets_set).toISOString().slice(0, 16) : ''}">
         </label>
         <button class="btn" id="save-monthly" type="button">${T('Save')}</button>
       </div>
@@ -804,7 +809,7 @@ function renderQuota(q) {
         <button class="btn" id="remove-key" type="button">${T('Remove')}</button>
       </div>
       <p class="hint" id="key-hint-2">
-        ${T('Replacing the key revokes the old one on the next read. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.')}
+        ${T('Replacing the key changes the account read by this app and clears its saved usage. It does not revoke the old key on ollama.com. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.')}
       </p>` : ''}
     </details>`;
 
@@ -815,7 +820,7 @@ function renderQuota(q) {
   if (!live) {
     return `
       <section class="quota" aria-labelledby="quota-h">
-        <h2 id="quota-h" class="visually-hidden">${T('Monthly quota')}</h2>
+        <h2 id="quota-h" class="visually-hidden">${T('Estimated monthly quota')}</h2>
         ${connect}
         ${settings}
       </section>`;
@@ -826,9 +831,9 @@ function renderQuota(q) {
 
   return `
     <section class="quota" aria-labelledby="quota-h">
-      <h2 id="quota-h" class="visually-hidden">${T('Monthly quota')}</h2>
+      <h2 id="quota-h" class="visually-hidden">${T('Estimated monthly quota')}</h2>
       <div class="quota-head">
-        <span class="t">${T('Monthly quota')}</span>
+        <span class="t">${T('Estimated monthly quota')}</span>
         <span class="pct">${pct(ratio)}</span>
       </div>
       <div class="meter" role="img" style="--fill:${severity(ratio)}"
@@ -857,14 +862,14 @@ const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? 
 /* Les jours arrivent en ISO, coupes en UTC. Le libelle appartient au client :
    seul lui sait dans quelle langue et quel fuseau la page se lit. */
 const dayLabel = iso => new Date(iso + 'T00:00:00Z')
-  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /* Combien de jours la colonne montre. Trente tiendraient dans la page, mais
    les derniers jours sont ce qu'on vient lire : au-dela de quinze, la liste
    devient un mur. */
 const JOURS_MONTRES = 7;
 
-function render(data) {
+function renderContent(data) {
   const app = document.getElementById('app');
   const jours = data.days || [];
 
@@ -899,8 +904,8 @@ function render(data) {
      remise a zero qui porte tout le calcul, autant qu'elle soit sous les yeux. */
   const bornes = data.quota?.cycle_start && data.quota?.resets_at
     ? fill(T(' ({from} to {to})'), {
-        from: new Date(data.quota.cycle_start).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
-        to: new Date(data.quota.resets_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
+        from: new Date(data.quota.cycle_start).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+        to: new Date(data.quota.resets_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' }),
       })
     : '';
   sub.innerHTML = fill(T('<b>{amount}</b> of usage this cycle'), { amount: usd(data.usd) })
@@ -924,13 +929,13 @@ function render(data) {
   const modelRows = modeles.map(m => {
     const v = SLOTS[m.slot] || SLOTS[8];
     return `
-      <div class="model" data-model="${m.model}">
+      <div class="model" data-model="${escapeHTML(m.model)}">
         <i class="swatch" style="background:var(${v})"></i>
         <div class="model-name">
-          <span class="id">${modelLabel(m)}</span>
+          <span class="id">${escapeHTML(modelLabel(m))}</span>
           <span class="n">${exact(m.messages)} ${T(m.messages > 1 ? 'requests' : 'request')}</span>
         </div>
-        <div class="bar" role="img" aria-label="${fill(T('{model}: {pct} of the total'), { model: modelLabel(m), pct: pct(m.share) })}">
+        <div class="bar" role="img" aria-label="${fill(T('{model}: {pct} of the total'), { model: escapeHTML(modelLabel(m)), pct: pct(m.share) })}">
           <span style="--c:var(${v}); transform:scaleX(${m.share.toFixed(4)})"></span>
         </div>
         <div class="model-stats">
@@ -979,14 +984,14 @@ function render(data) {
       <section aria-labelledby="split-h">
         <h2 id="split-h" class="section-title">${T('Breakdown by model')}</h2>
         <div class="models${staggerNext ? ' stagger' : ''}">${modelRows}</div>
-        <p class="stale-note">${modelsNote}</p>
+        <p class="stale-note">${modelsNote || T('Models are unavailable for this account.')}</p>
 
         <h2 class="section-title">${T('Daily consumption')}</h2>
         <div class="models">${rows}</div>
       </section>
     </div>
 
-    ${data.error ? `<div class="warn-line" role="alert">${fill(T('Read error: {error}'), { error: data.error })}</div>` : ''}
+    ${data.error ? `<div class="warn-line" role="alert">${fill(T('Read error: {error}'), { error: escapeHTML(data.error) })}</div>` : ''}
   `;
 
   document.getElementById('hero').setAttribute('aria-label',
@@ -1001,6 +1006,32 @@ function render(data) {
       requestAnimationFrame(() => requestAnimationFrame(() => list.classList.remove('stagger')));
     }
     staggerNext = false;
+  }
+}
+
+/* Les pushes conservent les reglages ouverts et une saisie en cours. */
+function render(data) {
+  const app = document.getElementById('app');
+  const opened = app.querySelector('.quota-settings')?.open;
+  const active = document.activeElement;
+  const editing = active && app.contains(active) && active.matches('input, select');
+  const fields = editing ? [...app.querySelectorAll('input, select')]
+    .map(el => ({ id: el.id, value: el.value })) : [];
+  const selection = editing && active.type === 'password'
+    ? [active.selectionStart, active.selectionEnd] : null;
+  renderContent(data);
+  const details = app.querySelector('.quota-settings');
+  if (details && opened) details.open = true;
+  for (const field of fields) {
+    const el = document.getElementById(field.id);
+    if (el) el.value = field.value;
+  }
+  if (editing) {
+    const el = document.getElementById(active.id);
+    if (el) {
+      el.focus({ preventScroll: true });
+      if (selection) el.setSelectionRange(...selection);
+    }
   }
 }
 
@@ -1076,24 +1107,34 @@ function applyLang(value) {
 function changeLang(value) {
   applyLang(value);
   lastSignature = '';
-  if (lastData) applyData(lastData);
-  fetch('/api/lang', {
+  if (lastData) applyData({ ...lastData, lang: value });
+  savePreference('/api/lang', { lang: value });
+}
+
+async function savePreference(path, payload) {
+  const errorEl = document.getElementById('action-error');
+  errorEl.hidden = true;
+  try {
+    const response = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lang: value }),
-  }).catch(() => { /* deja applique localement */ });
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+  } catch (err) {
+    errorEl.textContent = fill(T('Request failed: {error}'), { error: err.message });
+    errorEl.hidden = false;
+    lastSignature = '';
+    await load();
+  }
 }
 
 document.getElementById('theme').addEventListener('click', async () => {
   const next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
   applyTheme(next);
-  try {
-    await fetch('/api/theme', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ theme: next }),
-    });
-  } catch { /* le reglage est deja applique localement */ }
+  if (lastData) lastData = { ...lastData, theme: next };
+  await savePreference('/api/theme', { theme: next });
 });
 
 document.getElementById('lang').addEventListener('click', () => {
@@ -1105,21 +1146,18 @@ document.getElementById('lang').addEventListener('click', () => {
    si les flux ne sont pas disponibles.
    ===================================================================== */
 let stream = null;
+let pollingTimer = null;
 let lastSignature = '';
 
 function applyData(data) {
   /* Rien de neuf ? On ne redessine pas : sinon les animations d'entree
      rejoueraient a chaque battement du flux. */
-  const signature = [
-    data.usd, data.requests, data.days?.length, data.error,
-    data.days?.map(j => `${j.day}:${j.usd}`).join(','),
-    data.quota?.current, data.quota?.monthly, data.quota?.rate_per_day,
-    data.quota?.resets_at, data.theme, data.lang,
-    /* source / key_set / key_error sont indispensables a la signature :
-       passer d'une cle refusee a une cle retiree ne change aucune autre
-       composante, donc rien ne se redessinerait. */
-    data.quota?.source, data.quota?.key_set, data.quota?.key_error,
-  ].join('|');
+  const signature = JSON.stringify({
+    usd: data.usd, requests: data.requests, peak: data.peak,
+    days: data.days, models: data.models, models_at: data.models_at,
+    quota: { ...data.quota, days_left: Math.floor(data.quota?.days_left ?? -1) },
+    theme: data.theme, lang: data.lang, account: data.account, error: data.error,
+  });
   if (signature === lastSignature) return;
   lastSignature = signature;
 
@@ -1128,6 +1166,7 @@ function applyData(data) {
   if (data.lang) applyLang(data.lang);
 
   const planEl = document.getElementById('plan');
+  planEl.hidden = !data.account?.plan;
   if (data.account?.plan) {
     planEl.textContent = 'Ollama ' + data.account.plan;
     planEl.hidden = false;
@@ -1135,7 +1174,7 @@ function applyData(data) {
 
   if (data.error && !data.days) {
     document.getElementById('app').innerHTML =
-      `<p class="state" role="alert">${fill(T('Error: {error}'), { error: data.error })}</p>`;
+      `<p class="state" role="alert">${fill(T('Error: {error}'), { error: escapeHTML(data.error) })}</p>`;
     return;
   }
   render(data);
@@ -1162,11 +1201,12 @@ function beat() {
 
 function connect() {
   if (stream) { stream.close(); stream = null; }
+  if (pollingTimer !== null) { clearInterval(pollingTimer); pollingTimer = null; }
 
   if (!('EventSource' in window)) {   // repli : interrogation periodique
     setLive('off');
     load();
-    setInterval(load, 5000);
+    pollingTimer = setInterval(load, 5000);
     return;
   }
 
@@ -1187,16 +1227,21 @@ function connect() {
 async function load() {
   try {
     const res = await fetch('/api/usage');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     applyData(await res.json());
+    setLive('on');
   } catch (err) {
+    setLive('off');
     document.getElementById('app').innerHTML =
-      `<p class="state" role="alert">${fill(T('Could not read usage: {error}'), { error: err.message })}</p>`;
+      `<p class="state" role="alert">${fill(T('Could not read usage: {error}'), { error: escapeHTML(err.message) })}</p>`;
   }
 }
 
 /* --- Quota : les controles sont recrees a chaque rendu, on delegue --- */
 async function postQuota(payload, button) {
   if (button) button.disabled = true;
+  const errorEl = document.getElementById('action-error');
+  errorEl.hidden = true;
   try {
     const res = await fetch('/api/quota', {
       method: 'POST',
@@ -1204,12 +1249,14 @@ async function postQuota(payload, button) {
       body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (data.quota && lastData) {
-      lastData = { ...lastData, quota: data.quota };
-      lastSignature = '';
-      if (lastData.models) render(lastData);
-    }
-  } catch { /* le flux resynchronisera */ }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    lastSignature = '';
+    await load();
+  } catch (err) {
+    errorEl.textContent = fill(T('Request failed: {error}'), { error: err.message });
+    errorEl.hidden = false;
+    throw err;
+  }
   finally { if (button) button.disabled = false; }
 }
 
@@ -1224,7 +1271,7 @@ document.addEventListener('click', e => {
     // chemin de retour une fois un plafond saisi.
     const value = raw === '' ? 0 : parseFloat(raw);
     if (!Number.isFinite(value) || value < 0) return;
-    postQuota({ monthly_quota: value }, btn);
+    postQuota({ monthly_quota: value }, btn).catch(() => {});
   }
 
   if (btn.id === 'refresh') {
@@ -1245,11 +1292,11 @@ document.addEventListener('click', e => {
     if (!key) { field.focus(); return; }
     // Le champ est vide des l'envoi : le secret ne reste pas dans le DOM.
     field.value = '';
-    postQuota({ ollama_api_key: key }).then(reload);
+    postQuota({ ollama_api_key: key }, btn).then(reload).catch(() => {});
   }
 
   if (btn.id === 'remove-key') {
-    postQuota({ ollama_api_key: '' }).then(reload);
+    postQuota({ ollama_api_key: '' }, btn).then(reload).catch(() => {});
   }
 });
 
@@ -1270,10 +1317,14 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('change', e => {
-  if (e.target.id !== 'reset-at' || !e.target.value) return;
-  const when = new Date(e.target.value + 'T00:00:00');
+  if (e.target.id !== 'reset-at') return;
+  if (!e.target.value) {
+    postQuota({ quota_reset_at: 0 }).catch(() => {});
+    return;
+  }
+  const when = new Date(e.target.value + 'Z');
   if (Number.isNaN(when.getTime())) return;
-  postQuota({ quota_reset_at: when.getTime() });
+  postQuota({ quota_reset_at: when.getTime() }).catch(() => {});
 });
 
 /* Le select des reglages : il double le bouton de l'en-tete. Meme chemin. */
@@ -1285,7 +1336,7 @@ document.addEventListener('change', e => {
 
 /* Revenir sur l'onglet ne doit pas laisser une vue figee. */
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && (!stream || stream.readyState === EventSource.CLOSED)) {
+  if (!document.hidden && (!stream || stream.readyState === 2)) {
     lastSignature = '';
     connect();
   }

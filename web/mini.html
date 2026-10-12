@@ -137,14 +137,18 @@
 const FR = {
   'Ollama Buddy — summary': 'Ollama Buddy — aperçu',
   'Reading…': 'Lecture…',
-  'Reset on {date}': 'Réinitialisation le {date}',
+  'Reset on {date} (UTC)': 'Réinitialisation le {date} (UTC)',
   ' · reset tomorrow': ' · demain',
   ' · reset in {n} days': ' ·\u00A0dans {n} jours',
-  'Monthly quota': 'Quota mensuel',
+  'Monthly quota': 'Quota mensuel estimé',
+  'Estimated monthly quota': 'Quota mensuel estimé',
+  'Models · read on {date}': 'Modèles · relevé du {date}',
   '{pct} of the monthly quota': '{pct} du quota mensuel',
   ': {current} of {monthly}': ' : {current} sur {monthly}',
   '{current} of {monthly}': '{current} sur {monthly}',
   'Cannot read — check your API key in the dashboard.': 'Lecture impossible — vérifie ta clé API dans le tableau de bord.',
+  'Open Settings to enter the reset date and monthly cap.': 'Ouvre les paramètres pour renseigner la date de réinitialisation et le plafond mensuel.',
+  'Incomplete cycle history — open the dashboard for details.': 'Historique du cycle incomplet — ouvre le tableau de bord pour les détails.',
   'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.':
     'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.',
   '{amount} / day': '{amount} / jour',
@@ -170,6 +174,7 @@ const FR_BY_KEY = new Map(Object.entries(FR).map(([k, v]) => [squeeze(k), v]));
 const fill = (text, values) =>
   text.replace(/\{(\w+)\}/g, (m, k) => (k in values ? values[k] : m));
 const T = s => (lang === 'fr' ? (FR_BY_KEY.get(squeeze(s)) ?? s) : s);
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const locale = () => (lang === 'fr' ? 'fr-FR' : 'en-US');
 
 function resolveLang(pref) {
@@ -195,7 +200,7 @@ const compact = n => {
 const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
 
 const dayLabel = iso => new Date(iso + 'T00:00:00Z')
-  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /* Combien de jours pleins il reste, comme ollama.com les compte. Le libelle
    porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
@@ -204,9 +209,9 @@ const dayLabel = iso => new Date(iso + 'T00:00:00Z')
 function resetLabel(q) {
   if (!q.resets_at || q.days_left === null || q.days_left === undefined) return '';
   const quand = new Date(q.resets_at)
-    .toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const jours = Math.floor(q.days_left);
-  return fill(T('Reset on {date}'), { date: quand })
+  return fill(T('Reset on {date} (UTC)'), { date: quand })
     + (jours === 0 ? ''
       : jours === 1 ? T(' · reset tomorrow')
       : fill(T(' · reset in {n} days'), { n: jours }));
@@ -231,7 +236,7 @@ function render(d) {
     const has = q.current !== null && q.current !== undefined;
     quotaBlock = `
       <div class="row">
-        <span class="label" style="margin:0">${T('Monthly quota')}</span>
+        <span class="label" style="margin:0">${T('Estimated monthly quota')}</span>
         <span class="sub" style="font-weight:600;color:var(--text-1)">${pct(ratio)}</span>
       </div>
       <div class="meter" style="--fill:${severity(ratio)}" role="img"
@@ -247,9 +252,13 @@ function render(d) {
     /* Rien d'autre ici : sans cle, ollama.com ne repond rien, et l'app n'a
        donc aucun chiffre de quota a montrer — juste l'invitation a en saisir
        une depuis le tableau de bord. */
-    quotaBlock = `<p class="label">${T('Monthly quota')}</p>
+    quotaBlock = `<p class="label">${T('Estimated monthly quota')}</p>
       <p class="sub">${q.key_set
-        ? T('Cannot read — check your API key in the dashboard.')
+        ? q.error === 'incomplete history'
+          ? T('Incomplete cycle history — open the dashboard for details.')
+          : !q.key_error && (q.cycle_known === false || !q.monthly)
+            ? T('Open Settings to enter the reset date and monthly cap.')
+            : T('Cannot read — check your API key in the dashboard.')
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   }
 
@@ -257,7 +266,7 @@ function render(d) {
      par modele ne bouge plus : le 07/10/2026 l'API a cesse de la publier. */
   const modeles = (d.models || []).slice(0, 3).map(m =>
     `<div class="m"><i style="background:var(--s${m.slot + 1}, var(--text-3))"></i>
-       <span class="n">${modelLabel(m)}</span><span class="v">${compact(m.total)}</span></div>`
+       <span class="n">${escapeHTML(modelLabel(m))}</span><span class="v">${compact(m.total)}</span></div>`
   ).join('');
   const jours = (d.days || []).slice(-3).reverse().map(j =>
     `<div class="m"><span class="n">${dayLabel(j.day)}</span><span class="v">${usd(j.usd)}</span></div>`
@@ -289,7 +298,9 @@ function render(d) {
         <span class="big">${usd(d.usd || 0)}</span>
         <span class="sub">${exact(d.requests || 0)} req.</span>
       </div>
-      <div class="models">${modeles || jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>
+      ${modeles ? `<p class="label" style="margin-top:12px">${fill(T('Models · read on {date}'), {
+        date: new Date(d.models_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }),
+      })}</p><div class="models">${modeles}</div>` : ''}
       <p class="label" style="margin-top:12px">${T('Last days')}</p>
       <div class="models">${jours || `<p class="empty">${T('No usage in this cycle.')}</p>`}</div>` : ''}
     <div class="actions">
@@ -356,12 +367,11 @@ function connect() {
   stream.onerror = () => setLive(false);
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
-    const sig = `${d.usd}|${d.requests}|${d.days?.length}|${d.quota?.current}|${d.quota?.monthly}`
-      // source / key_set : sans eux, coller une cle refusee ne redessinerait rien.
-      + `|${d.quota?.source}|${d.quota?.key_set}`
-      // lang : un changement de langue ne bouge aucun chiffre, mais doit
-      // redessiner tout le texte.
-      + `|${d.lang}`;
+    const sig = JSON.stringify({
+      usd: d.usd, requests: d.requests, days: d.days, models: d.models,
+      models_at: d.models_at, theme: d.theme, lang: d.lang,
+      quota: { ...d.quota, days_left: Math.floor(d.quota?.days_left ?? -1) },
+    });
     if (sig === lastSig) return;
     lastSig = sig;
     setLive(true);

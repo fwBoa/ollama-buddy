@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Ollama Buddy - suivi de la consommation des modeles Ollama Cloud.
 
-Lit le quota mensuel et la repartition par modele sur ollama.com/api/usage,
-avec la cle API de l'utilisateur, et sert un tableau de bord sur 127.0.0.1.
+Lit les depenses quotidiennes sur ollama.com/api/usage, estime la consommation
+du cycle configure, et sert un tableau de bord sur 127.0.0.1.
 Sans cle, aucune mesure n'existe : l'app n'affiche alors aucun chiffre.
 
 Rien ne quitte la machine : les mesures restent en local (SQLite + HTTP local),
@@ -13,23 +13,24 @@ from __future__ import annotations
 
 import argparse
 import calendar
-import http.client
 import json
+import math
 import mimetypes
 import os
 import queue
 import sqlite3
 import sys
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
-import uuid
+import secrets
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
@@ -54,8 +55,8 @@ CLOUD_TTL_SECONDS = 60
 # La fenetre demandee a ollama.com. Le 07/10/2026, /api/usage a change de
 # contrat : il ne renvoie plus la part du quota ni la repartition par modele,
 # mais une consommation par heure ou par jour, en dollars. Les plages
-# acceptees sont 24h, 7d et 30d ; trente jours couvrent un cycle entier, quel
-# que soit son quantieme.
+# acceptees sont 24h, 7d et 30d. La couverture doit etre verifiee : un mois
+# peut compter 31 jours, et un total tronque ne doit pas devenir un quota.
 CLOUD_RANGE = "30d"
 
 # Les compteurs de l'API sont des cumuls : un point toutes les cinq minutes
@@ -88,25 +89,69 @@ DEFAULT_CONFIG = {
 }
 
 
+def validate_config(values: dict) -> dict:
+    """Valide avant toute mutation ou ecriture (HTTP et fichier local)."""
+    if not isinstance(values, dict):
+        raise ValueError("configuration invalide")
+    cfg = dict(DEFAULT_CONFIG)
+    cfg.update({key: value for key, value in values.items() if key in cfg})
+    for key in ("monthly_quota", "watch_seconds"):
+        if isinstance(cfg[key], bool) or not isinstance(cfg[key], (int, float, str)):
+            raise ValueError(f"{key} invalide")
+        try:
+            cfg[key] = float(cfg[key] or 0)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(f"{key} invalide") from None
+        if not math.isfinite(cfg[key]) or cfg[key] < 0:
+            raise ValueError(f"{key} invalide")
+    for key in ("quota_reset_at", "port"):
+        value = cfg[key]
+        try:
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)) or float(value or 0) != int(value or 0):
+                raise ValueError()
+            cfg[key] = int(value or 0)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(f"{key} invalide") from None
+    if not 1 <= cfg["port"] <= 65535:
+        raise ValueError("port invalide")
+    if not 0 <= cfg["quota_reset_at"] <= 253370764800000:  # fin de 9998
+        raise ValueError("date invalide")
+    if cfg["theme"] not in ("auto", "light", "dark"):
+        raise ValueError("theme inconnu")
+    if cfg["lang"] not in ("auto", "en", "fr"):
+        raise ValueError("langue inconnue")
+    key = cfg["ollama_api_key"]
+    if not isinstance(key, str) or len(key) > 4096 or any(ord(c) < 33 or ord(c) > 126 for c in key.strip()):
+        raise ValueError("cle invalide")
+    cfg["ollama_api_key"] = key.strip()
+    cfg["watch_seconds"] = max(1.0, cfg["watch_seconds"])
+    return cfg
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULT_CONFIG)
     if CONFIG_PATH.exists():
         try:
-            cfg.update(json.loads(CONFIG_PATH.read_text("utf-8")))
-        except (json.JSONDecodeError, OSError) as exc:
-            print(f"[config] illisible, valeurs par defaut ({exc})", file=sys.stderr)
+            cfg = validate_config(json.loads(CONFIG_PATH.read_text("utf-8")))
+        except (ValueError, OSError):
+            print("[config] illisible ou invalide, valeurs par defaut", file=sys.stderr)
     return cfg
 
 
 def save_config(cfg: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(cfg, indent=2) + "\n", "utf-8")
-    # Le fichier peut contenir une cle API ollama.com : lisible par le seul
-    # proprietaire, jamais par le reste de la machine.
+    # mkstemp cree en 0600 AVANT d'y ecrire la cle. Le remplacement atomique
+    # conserve l'ancien fichier si l'ecriture echoue et evite une config tronquee.
+    fd, name = tempfile.mkstemp(prefix=".config-", dir=DATA_DIR)
     try:
-        CONFIG_PATH.chmod(0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(cfg, indent=2, allow_nan=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, CONFIG_PATH)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
 
 
 # --------------------------------------------------------------------------
@@ -118,8 +163,9 @@ def ollama_account() -> dict | None:
     """Compte ollama.com (plan, email) via l'API locale."""
     try:
         req = urllib.request.Request(f"{OLLAMA_API}/api/me", method="POST")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            account = json.loads(resp.read().decode("utf-8"))
+            return account if isinstance(account, dict) else None
     except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError):
         return None
 
@@ -129,7 +175,7 @@ def ollama_account() -> dict | None:
 # Ollama a deja change ses tarifs, donc cette table peut vieillir — le reglage
 # manuel reste la sortie, et une offre absente de la table n'affiche aucun
 # montant plutot qu'un montant faux.
-PLAN_CAPS = {"pro": 60.0, "max": 300.0}
+PLAN_CAPS = {"pro": 60.0, "max": 300.0, "team": 1000.0}
 
 
 def monthly_cap(cfg: dict, account: dict | None) -> float:
@@ -144,6 +190,13 @@ def monthly_cap(cfg: dict, account: dict | None) -> float:
         return configured
     plan = str((account or {}).get("plan") or "").strip().lower()
     return PLAN_CAPS.get(plan, 0.0)
+
+
+class NoCloudRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # L'Authorization ne doit jamais suivre une redirection vers un autre
+        # hote. Une route deplacee est une erreur visible, pas un nouvel hote.
+        return None
 
 
 def cloud_usage(api_key: str) -> dict:
@@ -167,13 +220,17 @@ def cloud_usage(api_key: str) -> dict:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        opener = urllib.request.build_opener(NoCloudRedirect())
+        with opener.open(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if cloud_days(data) is None or cloud_totals(data) is None:
+                return {"error": "unexpected response"}
+            return data
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
             return {"error": "key rejected"}
         return {"error": f"HTTP {exc.code}"}
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError) as exc:
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as exc:
         return {"error": type(exc).__name__}
 
 
@@ -249,27 +306,44 @@ def cloud_days(cloud: dict | None) -> list[dict] | None:
     la part du quota et la repartition par modele ; ni l'une ni l'autre n'a
     ete reprise ailleurs, et aucun autre endpoint ne les publie.
     """
-    buckets = (cloud or {}).get("buckets")
+    buckets = cloud.get("buckets") if isinstance(cloud, dict) else None
     if not isinstance(buckets, list):
         return None
     rows = []
+    seen = set()
     for bucket in buckets:
+        if not isinstance(bucket, dict):
+            return None
         debut = bucket.get("from")
         if not isinstance(debut, str):
-            continue
+            return None
         try:
             moment = datetime.fromisoformat(debut.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        rows.append({
-            "day": moment.astimezone(timezone.utc).date().isoformat(),
-            "requests": int(bucket.get("request_count") or 0),
-            "usd": float(bucket.get("usage_usd") or 0.0),
-            "tokens": (int(bucket.get("input_tokens") or 0)
-                       + int(bucket.get("output_tokens") or 0)),
-        })
+            if moment.tzinfo is None:
+                return None
+            day = moment.astimezone(timezone.utc).date().isoformat()
+            if day in seen:
+                return None
+            seen.add(day)
+            requests = usage_number(bucket, "request_count", integer=True)
+            usd = usage_number(bucket, "usage_usd")
+            tokens = (usage_number(bucket, "input_tokens", integer=True, optional=True)
+                      + usage_number(bucket, "output_tokens", integer=True, optional=True))
+        except (KeyError, ValueError, TypeError, OverflowError):
+            return None
+        rows.append({"day": day, "requests": requests, "usd": usd, "tokens": tokens})
     rows.sort(key=lambda r: r["day"])
     return rows
+
+
+def usage_number(data: dict, key: str, integer: bool = False, optional: bool = False):
+    value = data.get(key, 0) if optional else data[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError("compteur invalide")
+    number = float(value)
+    if not math.isfinite(number) or number < 0 or (integer and number != int(number)):
+        raise ValueError("compteur invalide")
+    return int(number) if integer else number
 
 
 def cloud_totals(cloud: dict | None) -> dict | None:
@@ -278,8 +352,15 @@ def cloud_totals(cloud: dict | None) -> dict | None:
     Leur presence distingue « la reponse a change de forme » de « aucun usage
     sur la periode », qui ne veulent pas dire la meme chose a l'ecran.
     """
-    totaux = (cloud or {}).get("totals")
-    return totaux if isinstance(totaux, dict) else None
+    totaux = cloud.get("totals") if isinstance(cloud, dict) else None
+    if not isinstance(totaux, dict):
+        return None
+    try:
+        usage_number(totaux, "usage_usd")
+        usage_number(totaux, "request_count", integer=True)
+    except (KeyError, ValueError, TypeError, OverflowError):
+        return None
+    return totaux
 
 
 def cycle_ratio(cap: float, cycle_start: int | None,
@@ -384,9 +465,16 @@ def cloud_cycle_usage(cloud: dict | None, cycle_start: int | None) -> float | No
     """
     jours = cloud_days(cloud)
     premier = cycle_first_day(cycle_start)
-    if jours is None or premier is None:
+    if jours is None or premier is None or cloud_totals(cloud) is None:
         return None
-    return sum(j["usd"] for j in jours if j["day"] >= premier)
+    today = datetime.now(timezone.utc).date().isoformat()
+    if not jours and float(cloud_totals(cloud)["usage_usd"]) > 0:
+        return None
+    # Une reponse vide valide signifie aucun usage. Une liste qui commence
+    # apres le debut du cycle est incomplete, pas une consommation plus faible.
+    if jours and premier < jours[0]["day"] and premier <= today:
+        return None
+    return sum(j["usd"] for j in jours if premier <= j["day"] <= today)
 
 
 def next_occurrence(anchor: datetime, now: datetime) -> int:
@@ -396,15 +484,11 @@ def next_occurrence(anchor: datetime, now: datetime) -> int:
     borne le jour au dernier du mois : une remise a zero le 31 tombe le 30 en
     novembre.
     """
-    if anchor > now:
-        return int(anchor.timestamp() * 1000)
-    # De mois en mois jusqu'a depasser aujourd'hui : robuste quand la date
-    # saisie a plus d'un cycle de retard.
-    for pas in range(1, 14):
-        candidate = month_shift(anchor, pas)
-        if candidate > now:
-            return int(candidate.timestamp() * 1000)
-    return 0
+    offset = (now.year - anchor.year) * 12 + now.month - anchor.month
+    candidate = month_shift(anchor, offset)
+    if candidate <= now:
+        candidate = month_shift(anchor, offset + 1)
+    return int(candidate.timestamp() * 1000)
 
 
 def reset_window(conn: sqlite3.Connection, cfg: dict,
@@ -431,9 +515,12 @@ def reset_window(conn: sqlite3.Connection, cfg: dict,
     resets_at = next_occurrence(anchor, now)
     if not resets_at:
         return 0, None, None
-    # Le debut du cycle n'est pas publie : on le suppose un mois en arriere.
+    # Les DEUX bornes partent de l'ancre originale. Reculer d'un mois depuis
+    # le 28 fevrier perdrait le quantieme 31 et produirait le 28 janvier.
     fin = datetime.fromtimestamp(resets_at / 1000, timezone.utc)
-    return resets_at, int(month_shift(fin, -1).timestamp() * 1000), "settings"
+    offset = (fin.year - anchor.year) * 12 + fin.month - anchor.month
+    debut = month_shift(anchor, offset - 1)
+    return resets_at, int(debut.timestamp() * 1000), "settings"
 
 def record_cloud_sample(conn: sqlite3.Connection, cloud: dict | None, cycle_start: int | None,
                         cap: float) -> bool:
@@ -562,11 +649,14 @@ def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = 
     """
     resets_at, cycle_start, reset_source = reset_window(conn, cfg, datetime.now(timezone.utc))
     now_ms = int(time.time() * 1000)
+    days = cloud_days(cloud)
     return {
         "source": "indisponible",
-        "error": None,
+        "error": ("incomplete history" if days and cycle_start
+                  and cycle_first_day(cycle_start) < days[0]["day"]
+                  else None),
         "key_set": bool(str(cfg.get("ollama_api_key") or "").strip()),
-        "key_error": (cloud or {}).get("error"),
+        "key_error": cloud.get("error") if isinstance(cloud, dict) else None,
         "monthly": monthly_cap(cfg, account),
         "monthly_set": float(cfg.get("monthly_quota") or 0),
         "ratio": None,
@@ -618,7 +708,8 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
 
     # Les jours du cycle, et eux seuls : la fenetre de trente jours deborde sur
     # le cycle precedent, et son total contredirait celui du quota.
-    jours = [j for j in tous if premier and j["day"] >= premier]
+    today = datetime.now(timezone.utc).date().isoformat()
+    jours = [j for j in tous if premier and premier <= j["day"] <= today]
 
     # La repartition par modele, elle, vient de la derniere lecture qui l'a
     # portee. La cle API ne la donne plus ; le site, lui, l'a toujours.
@@ -666,20 +757,34 @@ class State:
         self.revision = 0
         self.cloud_data: dict | None = None
         self.cloud_ts = 0.0
+        self.account_data: dict | None = None
+        self.account_ts = 0.0
+
+    def account(self) -> dict | None:
+        with self.lock:
+            if not self.account_ts or time.time() - self.account_ts >= CLOUD_TTL_SECONDS:
+                self.account_data = ollama_account()
+                self.account_ts = time.time()
+            return self.account_data
 
     def subscribe(self) -> queue.Queue:
         inbox: queue.Queue = queue.Queue(maxsize=8)
-        self.subscribers.append(inbox)
+        with self.lock:
+            self.subscribers.append(inbox)
         return inbox
 
     def unsubscribe(self, inbox: queue.Queue) -> None:
-        try:
-            self.subscribers.remove(inbox)
-        except ValueError:
-            pass
+        with self.lock:
+            try:
+                self.subscribers.remove(inbox)
+            except ValueError:
+                pass
 
     def broadcast(self) -> None:
-        for inbox in list(self.subscribers):
+        with self.lock:
+            self.revision += 1
+            subscribers = list(self.subscribers)
+        for inbox in subscribers:
             try:
                 inbox.put_nowait(self.revision)
             except queue.Full:
@@ -689,18 +794,20 @@ class State:
         """Force la prochaine lecture a repasser par ollama.com."""
         with self.lock:
             self.cloud_data, self.cloud_ts = None, 0.0
+            self.account_ts = 0.0
 
     def cloud(self, account: dict | None = None) -> dict | None:
         """Usage ollama.com, mis en cache une minute. None si aucune cle."""
-        api_key = str(self.cfg.get("ollama_api_key") or "")
-        if not api_key:
-            return None
         with self.lock:
+            api_key = str(self.cfg.get("ollama_api_key") or "")
+            if not api_key:
+                return None
             fresh = self.cloud_data is not None and time.time() - self.cloud_ts < CLOUD_TTL_SECONDS
             if fresh:
                 return self.cloud_data
-        data = cloud_usage(api_key)
-        with self.lock:
+            # La lecture est serialisee avec les changements de cle : ni
+            # requetes doubles, ni reponse de l'ancien compte publiee apres.
+            data = cloud_usage(api_key)
             self.cloud_data, self.cloud_ts = data, time.time()
             if "error" not in data:
                 try:
@@ -712,7 +819,7 @@ class State:
                                         monthly_cap(self.cfg, account))
                 except sqlite3.Error as exc:   # un echantillon rate n'est pas fatal
                     print(f"[cloud] echantillon non enregistre ({exc})", file=sys.stderr)
-        return data
+            return data
 
     def payload(self) -> dict:
         """Une seule source : ollama.com, avec une cle.
@@ -722,18 +829,36 @@ class State:
         """
         # Le compte est lu une fois : l'offre sert au plafond — donc a
         # l'echantillon — et part aussi telle quelle dans le payload.
-        account = ollama_account()
-        cloud = self.cloud(account)
-        live = bool(cloud) and "error" not in (cloud or {})
         with self.lock:
+            account = self.account()
+            cloud = self.cloud(account)
+            live = cloud_days(cloud) is not None and cloud_totals(cloud) is not None
             data = build_cloud_usage(self.conn, self.cfg, cloud) if live else empty_usage()
             data["quota"] = build_quota(self.conn, self.cfg, cloud, account)
-        data["cloud"] = cloud
-        data["account"] = account
-        data["error"] = self.last_error
-        data["theme"] = self.cfg.get("theme") or "auto"
-        data["lang"] = self.cfg.get("lang") or "auto"
+            # L'interface n'utilise que le plan : pas d'email ni de reponse
+            # distante brute dans le navigateur.
+            data["account"] = {"plan": account.get("plan")} if account else None
+            data["error"] = self.last_error
+            data["theme"] = self.cfg.get("theme") or "auto"
+            data["lang"] = self.cfg.get("lang") or "auto"
         return data
+
+    def update_config(self, changes: dict) -> dict:
+        with self.lock:
+            cfg = validate_config({**self.cfg, **changes})
+            save_config(cfg)  # une erreur laisse l'etat courant intact
+            if any(cfg[key] != self.cfg[key] for key in
+                   ("monthly_quota", "quota_reset_at", "ollama_api_key")):
+                # Les parts d'un autre plafond/cycle/compte ne doivent pas
+                # servir a calculer le rythme du nouveau reglage.
+                self.conn.execute("DELETE FROM cloud_samples WHERE model = ''")
+                if cfg["ollama_api_key"] != self.cfg["ollama_api_key"]:
+                    self.conn.execute("DELETE FROM cloud_samples WHERE model <> ''")
+                    self.conn.execute("DELETE FROM model_color")
+                    self.invalidate_cloud()
+                self.conn.commit()
+            self.cfg = cfg
+            return dict(cfg)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -742,6 +867,56 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # silence par defaut
         pass
+
+    def end_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        if hasattr(self, "page_nonce"):
+            self.send_header("Content-Security-Policy",
+                             "default-src 'self'; script-src 'self' 'nonce-" + self.page_nonce
+                             + "'; style-src 'self' 'unsafe-inline'; img-src 'self'; "
+                             "connect-src 'self'; object-src 'none'; base-uri 'none'; "
+                             "frame-ancestors 'none'; form-action 'none'")
+        super().end_headers()
+
+    def local_request(self) -> bool:
+        """Host strict contre le DNS rebinding, origine contre les sites tiers."""
+        port = self.server.server_address[1]
+        allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        host = self.headers.get("Host", "").lower()
+        if len(self.headers.get_all("Host", [])) != 1 or host not in allowed:
+            self._json({"error": "hote refuse"}, 403)
+            return False
+        origin = self.headers.get("Origin")
+        if (origin is not None and origin != f"http://{host}") or self.headers.get("Sec-Fetch-Site") == "cross-site":
+            self._json({"error": "origine refusee"}, 403)
+            return False
+        return True
+
+    def read_json(self) -> dict | None:
+        if self.headers.get_content_type() != "application/json":
+            self._json({"error": "application/json requis"}, 415)
+            return None
+        try:
+            lengths = self.headers.get_all("Content-Length", [])
+            if len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
+                raise ValueError()
+            length = int(lengths[0])
+            if not 0 < length <= 16384:
+                self._json({"error": "corps trop grand ou vide"}, 413)
+                return None
+            self.connection.settimeout(5)
+            def reject_constant(value):
+                raise ValueError("nombre JSON invalide")
+            body = json.loads(self.rfile.read(length), parse_constant=reject_constant)
+            if not isinstance(body, dict):
+                raise ValueError()
+            return body
+        except (ValueError, UnicodeError, OSError):
+            self._json({"error": "corps invalide"}, 400)
+            return None
 
     def _send(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)
@@ -757,17 +932,20 @@ class Handler(BaseHTTPRequestHandler):
                    "application/json; charset=utf-8")
 
     def do_GET(self) -> None:  # noqa: N802
+        if not self.local_request():
+            return
         url = urlparse(self.path)
-        query = parse_qs(url.query)
 
-        if url.path in ("/", "/index.html", "/mini"):
-            name = "mini.html" if url.path == "/mini" else "index.html"
+        if url.path in ("/", "/index.html", "/mini", "/mini.html"):
+            name = "mini.html" if url.path in ("/mini", "/mini.html") else "index.html"
             page = WEB_DIR / name
             if not page.exists():
                 self._send(404, f"{name} introuvable".encode("utf-8"),
                            "text/plain; charset=utf-8")
                 return
-            self._send(200, page.read_bytes(), "text/html; charset=utf-8")
+            self.page_nonce = secrets.token_urlsafe(24)
+            html = page.read_text("utf-8").replace("<script>", f'<script nonce="{self.page_nonce}">')
+            self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
 
         # Assets statiques (le logo). Le nom doit tenir en un segment : pas de
@@ -793,7 +971,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if url.path == "/api/refresh":
-            self.refresh_all()
+            self._json({"error": "POST requis"}, 405)
             return
 
         self._json({"error": "not found"}, 404)
@@ -838,6 +1016,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self.local_request():
+            return
         url = urlparse(self.path)
         if url.path == "/api/refresh":
             # Le GET existait seul : le bouton de l'interface faisait un POST et
@@ -850,80 +1030,38 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ("/api/theme", "/api/lang"):
             self.update_prefs()
             return
+        self._json({"error": "not found"}, 404)
 
     def update_prefs(self) -> None:
-        """Reglages d'affichage : theme et langue.
-
-        Les deux vivent dans le meme handler parce qu'ils se comportent pareil :
-        une valeur contrainte, ecrite dans la config, puis poussee aux clients
-        deja ouverts. Seuls les champs presents sont touches.
-        """
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except (ValueError, json.JSONDecodeError):
-            self._json({"error": "corps invalide"}, 400)
+        body = self.read_json()
+        if body is None:
             return
-
-        cfg = self.state.cfg
-        if "theme" in body:
-            theme = str(body.get("theme") or "auto")
-            if theme not in ("auto", "light", "dark"):
-                self._json({"error": "theme inconnu"}, 400)
-                return
-            cfg["theme"] = theme
-        if "lang" in body:
-            lang = str(body.get("lang") or "auto")
-            if lang not in ("auto", "en", "fr"):
-                self._json({"error": "langue inconnue"}, 400)
-                return
-            cfg["lang"] = lang
-
-        save_config(cfg)
-        # Le theme et la langue voyagent dans le payload : sans cette purge et
-        # ce reveil, une deuxieme fenetre garderait l'ancien reglage jusqu'a ce
-        # que l'usage change d'elle-meme.
-        self.state.broadcast()
-        self._json({"ok": True, "theme": cfg.get("theme"),
-                    "lang": cfg.get("lang")})
+        allowed = {"theme"} if urlparse(self.path).path == "/api/theme" else {"lang"}
+        self.save_changes(body, allowed)
 
     def update_quota(self) -> None:
-        """Plafond mensuel, date de reinitialisation, et cle API ollama.com."""
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except (ValueError, json.JSONDecodeError):
-            self._json({"error": "corps invalide"}, 400)
+        body = self.read_json()
+        if body is None:
             return
+        self.save_changes(body, {"monthly_quota", "quota_reset_at", "ollama_api_key"})
 
-        cfg = self.state.cfg
-        if "monthly_quota" in body:
-            try:
-                cfg["monthly_quota"] = max(0.0, float(body["monthly_quota"] or 0))
-            except (TypeError, ValueError):
-                self._json({"error": "quota invalide"}, 400)
-                return
-        if "quota_reset_at" in body:
-            try:
-                cfg["quota_reset_at"] = max(0, int(body["quota_reset_at"] or 0))
-            except (TypeError, ValueError):
-                self._json({"error": "date invalide"}, 400)
-                return
-        if "ollama_api_key" in body:
-            # Une cle changee doit etre testee tout de suite : sans purge, le
-            # cache d'une minute continuerait de servir l'ancien resultat.
-            cfg["ollama_api_key"] = str(body["ollama_api_key"] or "").strip()
-            self.state.invalidate_cloud()
-        save_config(cfg)
-
-        with self.state.lock:
-            # L'offre est repassee : vider le plafond doit rendre celui du plan
-            # tout de suite, sans attendre le prochain envoi.
-            account = ollama_account()
-            quota = build_quota(self.state.conn, cfg, self.state.cloud(account),
-                                account)
+    def save_changes(self, body: dict, allowed: set) -> None:
+        if not body or not set(body).issubset(allowed):
+            self._json({"error": "champs invalides"}, 400)
+            return
+        try:
+            cfg = self.state.update_config(body)
+        except ValueError as exc:
+            self._json({"error": str(exc)}, 400)
+            return
+        except (OSError, sqlite3.Error):
+            self._json({"error": "enregistrement impossible"}, 500)
+            return
         self.state.broadcast()
-        self._json({"ok": True, "quota": quota})
+        if "ollama_api_key" in body or "monthly_quota" in body or "quota_reset_at" in body:
+            self._json({"ok": True, "quota": self.state.payload()["quota"]})
+        else:
+            self._json({"ok": True, "theme": cfg["theme"], "lang": cfg["lang"]})
 
 
 # --------------------------------------------------------------------------
@@ -938,7 +1076,9 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = load_config()
-    port = args.port or int(cfg.get("port") or DEFAULT_CONFIG["port"])
+    port = args.port if args.port is not None else int(cfg["port"])
+    if not 1 <= port <= 65535:
+        parser.error("port must be between 1 and 65535")
 
     state = State(cfg)
 
@@ -957,11 +1097,11 @@ def main() -> int:
         while True:
             time.sleep(interval)
             try:
-                cloud = state.cloud(ollama_account())
+                cloud = state.cloud(state.account())
             except Exception as exc:  # noqa: BLE001 - ne jamais tuer la boucle
                 print(f"[veille] {exc}", file=sys.stderr)
                 continue
-            stamp = json.dumps(cloud, sort_keys=True) if cloud else None
+            stamp = (json.dumps(cloud, sort_keys=True), int(time.time() // 60))
             if stamp != fingerprint:
                 fingerprint = stamp
                 state.broadcast()

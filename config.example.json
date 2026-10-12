@@ -1,5 +1,5 @@
 {
-  "monthly_quota": 60.0,
+  "monthly_quota": 0,
   "quota_reset_at": 0,
   "ollama_api_key": "",
   "port": 11499,
