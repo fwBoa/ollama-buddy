@@ -542,6 +542,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private func checkNotification(json: [String: Any], quota: [String: Any]) {
         notificationsEnabled = json["notifications"] as? Bool == true
         guard notificationsEnabled, !notificationBusy else { return }
+        guard quota["source"] as? String == "api", quota["ratio"] is NSNumber else { return }
         let ratio = quota["ratio"] as? Double ?? 0
         let reset = quota["resets_at"] as? NSNumber ?? 0
         let generation = (json["alerts_generation"] as? NSNumber)?.intValue ?? 0
@@ -563,9 +564,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 }
                 let content = UNMutableNotificationContent()
                 content.title = "Ollama Buddy"
+                let official = quota["measurement"] as? String == "balance"
                 content.body = french
-                    ? "Ton quota mensuel estimé a atteint \(level) %."
-                    : "Your estimated monthly quota has reached \(level)%."
+                    ? "Ton quota mensuel\(official ? "" : " estimé") a atteint \(level) %."
+                    : "Your \(official ? "" : "estimated ")monthly quota has reached \(level)%."
                 content.sound = .default
                 let request = UNNotificationRequest(identifier: "quota-\(cycle)-\(level)",
                                                     content: content, trigger: nil)
@@ -625,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 ok = text.contains("ollama-buddy") && json?["keychain"] as? Bool == true
                     && json?["native"] as? Bool == true
                     && json?["daily_usage"] as? Bool == true
+                    && json?["balance_tokens"] as? Bool == true
             } else {
                 ok = false
             }

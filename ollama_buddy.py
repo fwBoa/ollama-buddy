@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Ollama Buddy - suivi de la consommation des modeles Ollama Cloud.
 
-Lit les depenses quotidiennes sur ollama.com/api/usage, estime la consommation
-du cycle configure, et sert un tableau de bord sur 127.0.0.1.
+Lit le solde sur ollama.com/api/balance et les depenses et tokens sur /api/usage,
+et sert un tableau de bord sur 127.0.0.1.
 Sans cle, aucune mesure n'existe : l'app n'affiche alors aucun chiffre.
 
 Rien ne quitte la machine : les mesures restent en local (SQLite + HTTP local),
@@ -241,20 +241,13 @@ class NoCloudRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def cloud_usage(api_key: str) -> dict:
-    """Usage du compte ollama.com, lu avec une cle API.
-
-    Ollama n'expose l'usage ni en local ni dans sa documentation : le seul
-    moyen programmable est cet endpoint, qui n'est pas documente — il a deja
-    change de forme une fois, le 07/10/2026. D'ou une fonction qui ne leve
-    jamais et renvoie toujours un dict : soit les donnees, soit
-    `{"error": ...}` que l'interface affiche.
-    """
+def cloud_get(api_key: str, path: str) -> dict:
+    """Lecture authentifiee sans redirection ; aucune erreur ne contient la cle."""
     if not api_key:
         return {"error": "no key"}
 
     req = urllib.request.Request(
-        f"{OLLAMA_CLOUD}/api/usage?range={CLOUD_RANGE}",
+        f"{OLLAMA_CLOUD}{path}",
         headers={
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
@@ -265,15 +258,75 @@ def cloud_usage(api_key: str) -> dict:
         opener = urllib.request.build_opener(NoCloudRedirect())
         with opener.open(req, timeout=8) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            if cloud_days(data) is None or cloud_totals(data) is None:
+            if not isinstance(data, dict):
                 return {"error": "unexpected response"}
             return data
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
             return {"error": "key rejected"}
+        if exc.code == 429:
+            try:
+                wait = max(CLOUD_TTL_SECONDS, min(3600, int(exc.headers.get("Retry-After", "60"))))
+            except (ValueError, TypeError, AttributeError):
+                wait = CLOUD_TTL_SECONDS
+            return {"error": "HTTP 429", "retry_after": wait}
         return {"error": f"HTTP {exc.code}"}
     except (urllib.error.URLError, OSError, ValueError, TimeoutError) as exc:
         return {"error": type(exc).__name__}
+
+
+def cloud_usage(api_key: str) -> dict:
+    data = cloud_get(api_key, f"/api/usage?range={CLOUD_RANGE}")
+    if "error" not in data and (cloud_days(data) is None or cloud_totals(data) is None):
+        return {"error": "unexpected response"}
+    return data
+
+
+def cloud_balance(api_key: str) -> dict:
+    data = cloud_get(api_key, "/api/balance")
+    if "error" not in data and balance_values(data) is None:
+        return {"error": "unexpected response"}
+    return data
+
+
+def utc_timestamp(value) -> int:
+    if not isinstance(value, str):
+        raise ValueError("date invalide")
+    moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        raise ValueError("fuseau absent")
+    return int(moment.timestamp() * 1000)
+
+
+def balance_values(data: dict | None) -> dict | None:
+    """Valide uniquement les champs utiles, sans inventer de dollars pour les anciennes offres."""
+    if not isinstance(data, dict) or not isinstance(data.get("included"), dict):
+        return None
+    included = data["included"]
+    try:
+        purchased = usage_number(data["purchased"], "balance_usd")
+        if "session" in included or "weekly" in included:
+            limits = {}
+            for name in ("session", "weekly"):
+                limit = included[name]
+                remaining = usage_number(limit, "remaining_percent")
+                reset = utc_timestamp(limit["resets_at"])
+                if remaining > 100 or reset <= 0:
+                    return None
+                limits[name] = {"remaining_percent": remaining, "resets_at": reset}
+            return {"kind": "legacy", "purchased": purchased, "limits": limits}
+        monthly = usage_number(included, "allowance_usd")
+        remaining = usage_number(included, "balance_usd")
+        start = utc_timestamp(included["period"]["from"])
+        end = utc_timestamp(included["period"]["until"])
+        now = int(datetime.now(timezone.utc).timestamp() * 1000)
+        if remaining > monthly or not 0 < start <= now < end:
+            return None
+        return {"kind": "credits", "monthly": monthly, "remaining": remaining,
+                "current": max(0.0, monthly - remaining), "purchased": purchased,
+                "cycle_start": start, "resets_at": end}
+    except (KeyError, TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 # --------------------------------------------------------------------------
@@ -303,7 +356,16 @@ CREATE TABLE IF NOT EXISTS daily_usage (
     usd REAL NOT NULL,
     requests INTEGER NOT NULL,
     tokens INTEGER NOT NULL,
-    read_at INTEGER NOT NULL
+    read_at INTEGER NOT NULL,
+    input_tokens INTEGER,
+    cached_input_tokens INTEGER,
+    output_tokens INTEGER
+);
+CREATE TABLE IF NOT EXISTS balance_samples (
+    ts INTEGER PRIMARY KEY,
+    cycle_start INTEGER NOT NULL,
+    allowance REAL NOT NULL,
+    used REAL NOT NULL
 );
 """
 
@@ -333,6 +395,11 @@ def connect() -> sqlite3.Connection:
         conn.commit()
 
     conn.executescript(SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(daily_usage)")}
+    for name in ("input_tokens", "cached_input_tokens", "output_tokens"):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE daily_usage ADD COLUMN {name} INTEGER")
+    conn.commit()
     return conn
 
 
@@ -351,9 +418,7 @@ def cloud_days(cloud: dict | None) -> list[dict] | None:
     `None` quand la reponse n'est pas celle attendue — une forme inconnue ne
     doit pas se confondre avec « aucun usage ».
 
-    C'est tout ce que /api/usage donne depuis le 07/10/2026. Il portait avant
-    la part du quota et la repartition par modele ; ni l'une ni l'autre n'a
-    ete reprise ailleurs, et aucun autre endpoint ne les publie.
+    /api/usage publie des agregats quotidiens ; /api/balance porte le solde.
     """
     buckets = cloud.get("buckets") if isinstance(cloud, dict) else None
     if not isinstance(buckets, list):
@@ -378,11 +443,17 @@ def cloud_days(cloud: dict | None) -> list[dict] | None:
             usd = usage_number(bucket, "usage_usd")
             tokens = (usage_number(bucket, "input_tokens", integer=True, optional=True)
                       + usage_number(bucket, "output_tokens", integer=True, optional=True))
+            counters = {key: (usage_number(bucket, key, integer=True) if key in bucket else None)
+                        for key in ("input_tokens", "cached_input_tokens", "output_tokens")}
+            if (counters["cached_input_tokens"] is not None and
+                    counters["input_tokens"] is not None and
+                    counters["cached_input_tokens"] > counters["input_tokens"]):
+                return None
         except (KeyError, ValueError, TypeError, OverflowError):
             return None
         full_start = moment.astimezone(timezone.utc).strftime("%H:%M:%S.%f") == "00:00:00.000000"
         rows.append({"day": day, "requests": requests, "usd": usd, "tokens": tokens,
-                     "full_start": full_start})
+                     "full_start": full_start, **counters})
     rows.sort(key=lambda r: r["day"])
     return rows
 
@@ -401,20 +472,29 @@ def record_days(conn: sqlite3.Connection, cloud: dict) -> None:
         # remplacer une journee complete par la fin de cette journee.
         if day["day"] > today or not day["full_start"]:
             continue
-        conn.execute("""INSERT INTO daily_usage VALUES (?,?,?,?,?)
+        conn.execute("""INSERT INTO daily_usage
+            (day,usd,requests,tokens,read_at,input_tokens,cached_input_tokens,output_tokens)
+            VALUES (?,?,?,?,?,?,?,?)
             ON CONFLICT(day) DO UPDATE SET usd=excluded.usd,
-            requests=excluded.requests, tokens=excluded.tokens, read_at=excluded.read_at""",
-                     (day["day"], day["usd"], day["requests"], day["tokens"], ts))
+            requests=excluded.requests, tokens=excluded.tokens, read_at=excluded.read_at,
+            input_tokens=excluded.input_tokens, cached_input_tokens=excluded.cached_input_tokens,
+            output_tokens=excluded.output_tokens""",
+                     (day["day"], day["usd"], day["requests"], day["tokens"], ts,
+                      day.get("input_tokens"), day.get("cached_input_tokens"), day.get("output_tokens")))
     cutoff = (datetime.now(timezone.utc).date() - timedelta(days=400)).isoformat()
     conn.execute("DELETE FROM daily_usage WHERE day < ?", (cutoff,))
     conn.commit()
 
 
-def history_cloud(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
-    rows = conn.execute("SELECT day, usd, requests, tokens FROM daily_usage ORDER BY day").fetchall()
+def history_cloud(conn: sqlite3.Connection, cfg: dict, cloud: dict,
+                  balance: dict | None = None) -> dict:
+    rows = conn.execute("""SELECT day, usd, requests, tokens, input_tokens,
+        cached_input_tokens, output_tokens FROM daily_usage ORDER BY day""").fetchall()
     buckets = [{"from": day + "T00:00:00Z", "usage_usd": usd, "request_count": requests,
-                "input_tokens": tokens, "output_tokens": 0} for day, usd, requests, tokens in rows]
-    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
+                **{key: value for key, value in zip(
+                    ("input_tokens", "cached_input_tokens", "output_tokens"), counters) if value is not None}}
+               for day, usd, requests, tokens, *counters in rows]
+    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
     first = cycle_first_day(start)
     complete = False
     if first:
@@ -531,21 +611,14 @@ def next_occurrence(anchor: datetime, now: datetime) -> int:
 
 
 def reset_window(conn: sqlite3.Connection, cfg: dict,
-                 now: datetime) -> tuple[int, int | None, str | None]:
+                 now: datetime, balance: dict | None = None) -> tuple[int, int | None, str | None]:
     """Cycle en cours : (prochaine remise a zero, debut du cycle, origine).
 
-    Une seule source : la date saisie dans les reglages, lue sur le site. Le
-    quantieme se rejoue alors de mois en mois, comme l'abonnement.
-
-    L'app a su la deduire de l'API, puis l'observer sur ses echantillons. Les
-    deux sont mortes le 07/10/2026 : `activity.period` decrivait une fenetre
-    glissante de quatre semaines — son `starting_at` avancait d'une semaine
-    chaque semaine — et le nouveau /api/usage ne publie plus de cumul qui
-    retombe a zero, donc plus rien a observer.
-
-    Sans date saisie, il n'y en a pas, et l'interface se tait plutot que d'en
-    inventer une. Elle rend son `origine` pour pouvoir le dire.
+    Balance fournit les deux bornes exactes. La date saisie sert de secours.
     """
+    values = balance_values(balance)
+    if values and values["kind"] == "credits":
+        return values["resets_at"], values["cycle_start"], "balance"
     declared = int(cfg.get("quota_reset_at") or 0)
     if not declared:
         return 0, None, None
@@ -617,18 +690,45 @@ def cloud_rate(conn: sqlite3.Connection,
     return part_par_jour
 
 
+def record_balance_sample(conn: sqlite3.Connection, values: dict) -> None:
+    ts = int(time.time() * 1000)
+    previous = conn.execute("SELECT MAX(ts) FROM balance_samples").fetchone()[0]
+    if not previous or ts - previous >= CLOUD_SAMPLE_SECONDS * 1000:
+        conn.execute("INSERT OR REPLACE INTO balance_samples VALUES (?,?,?,?)",
+                     (ts, values["cycle_start"], values["monthly"], values["current"]))
+        conn.execute("DELETE FROM balance_samples WHERE ts < ?", (ts - 400 * DAY_MS,))
+        conn.commit()
+
+
 def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
-                account: dict | None = None) -> dict:
-    """Etat du plafond mensuel, lu sur ollama.com quand une cle est fournie.
-
-    Depuis le 07/10/2026, l'API ne publie plus la part du quota : elle publie
-    la consommation de chaque jour, en dollars. Le cycle est donc leur somme
-    depuis son debut, et la part est cette somme rapportee au plafond. Le
-    debut du cycle vient des reglages — il porte desormais tout le calcul.
-
-    Sans cle, ou sans debut de cycle, l'etat est neutre : aucun chiffre de
-    quota n'est publie. Mieux vaut ne rien dire qu'afficher un a-peu-pres.
-    """
+                account: dict | None = None, balance: dict | None = None) -> dict:
+    """Solde officiel en priorite, estimation des jours complets en secours."""
+    values = balance_values(balance)
+    if values:
+        quota = quota_unavailable(conn, cfg, cloud, account)
+        quota.update(measurement="balance", key_error=None, error=None,
+                     balance_error=None, purchased=values["purchased"],
+                     monthly=0, cycle_known=False, resets_at=0, days_left=None,
+                     resets_source=None, legacy_limits=values.get("limits"))
+        if values["kind"] == "legacy":
+            quota["error"] = "legacy plan"
+            return quota
+        days_left = max(0.0, (values["resets_at"] - time.time() * 1000) / DAY_MS)
+        rows = conn.execute("""SELECT ts, used FROM balance_samples
+            WHERE cycle_start=? AND allowance=? ORDER BY ts""",
+                            (values["cycle_start"], values["monthly"])).fetchall()
+        span = (rows[-1][0] - rows[0][0]) / DAY_MS if len(rows) > 1 else 0
+        rate = (rows[-1][1] - rows[0][1]) / span if span >= 1 else 0
+        rate = rate if rate > 0 else None
+        quota.update(source="api", monthly=values["monthly"], current=values["current"],
+                     remaining=values["remaining"], resets_at=values["resets_at"],
+                     ratio=values["current"] / values["monthly"] if values["monthly"] else None,
+                     resets_source="balance", days_left=days_left, cycle_known=True,
+                     cycle_start=datetime.fromtimestamp(values["cycle_start"] / 1000, timezone.utc).isoformat(),
+                     rate_per_day=rate,
+                     projected_at_reset=values["current"] + rate * days_left if rate else None,
+                     exhausted_in_days=values["remaining"] / rate if rate else None)
+        return quota
     monthly = monthly_cap(cfg, account)
     now = datetime.now(timezone.utc)
     now_ms = int(time.time() * 1000)
@@ -637,7 +737,9 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
 
     if (consume is None or monthly <= 0 or
                 cycle_first_day(cycle_start) > now.date().isoformat()):
-        return quota_unavailable(conn, cfg, cloud, account)
+        quota = quota_unavailable(conn, cfg, cloud, account)
+        quota["balance_error"] = (balance or {}).get("error")
+        return quota
 
     ratio = consume / monthly
     days_left = max(0.0, (resets_at - now_ms) / DAY_MS) if resets_at else None
@@ -646,6 +748,10 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
 
     return {
         "source": "api",
+        "measurement": "estimate",
+        "balance_error": (balance or {}).get("error"),
+        "remaining": max(0.0, monthly - consume),
+        "purchased": None,
         "error": None,
         "key_set": True,
         "key_error": None,
@@ -692,6 +798,9 @@ def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = 
     days = cloud_days(cloud)
     return {
         "source": "indisponible",
+        "measurement": "estimate",
+        "remaining": None,
+        "purchased": None,
         "error": ("partial reset day" if days is not None and cycle_start and
                   cycle_first_day(cycle_start) > datetime.now(timezone.utc).date().isoformat()
                   else "incomplete history" if cycle_start and (
@@ -741,10 +850,11 @@ def empty_usage() -> dict:
     }
 
 
-def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict) -> dict:
+def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict,
+                      balance: dict | None = None) -> dict:
     """La depense reste lisible sans plafond ou cycle complet."""
     days = cloud_days(cloud) or []
-    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc))
+    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
     first = cycle_first_day(start)
     cycle = cloud_cycle_usage(cloud, start) is not None
     cutoff = first if cycle else (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
@@ -773,6 +883,8 @@ class State:
         self.cloud_ts = 0.0
         self.account_data: dict | None = None
         self.account_ts = 0.0
+        self.balance_data: dict | None = None
+        self.balance_ts = 0.0
 
     def account(self) -> dict | None:
         with self.lock:
@@ -804,11 +916,36 @@ class State:
             except queue.Full:
                 pass  # client en retard : il se resynchronisera au prochain tour
 
-    def invalidate_cloud(self) -> None:
+    def invalidate_cloud(self, force: bool = False) -> None:
         """Force la prochaine lecture a repasser par ollama.com."""
         with self.lock:
-            self.cloud_data, self.cloud_ts = None, 0.0
+            for prefix in ("cloud", "balance"):
+                data = getattr(self, prefix + "_data")
+                timestamp = getattr(self, prefix + "_ts")
+                if (not force and (data or {}).get("retry_after", 0) > time.time() - timestamp):
+                    continue
+                setattr(self, prefix + "_data", None)
+                setattr(self, prefix + "_ts", 0.0)
             self.account_ts = 0.0
+
+    def balance(self) -> dict | None:
+        with self.lock:
+            api_key = str(self.cfg.get("ollama_api_key") or "")
+            if not api_key:
+                return None
+            expiry = max(CLOUD_TTL_SECONDS, (self.balance_data or {}).get("retry_after", 0))
+            expired_period = (self.balance_data is not None and "error" not in self.balance_data
+                              and balance_values(self.balance_data) is None)
+            if self.balance_data is None or time.time() - self.balance_ts >= expiry or expired_period:
+                self.balance_data = cloud_balance(api_key)
+                self.balance_ts = time.time()
+                values = balance_values(self.balance_data)
+                if values and values["kind"] == "credits":
+                    try:
+                        record_balance_sample(self.conn, values)
+                    except sqlite3.Error as exc:
+                        print(f"[balance] echantillon non enregistre ({exc})", file=sys.stderr)
+            return self.balance_data
 
     def cloud(self, account: dict | None = None) -> dict | None:
         """Usage ollama.com, mis en cache une minute. None si aucune cle."""
@@ -816,7 +953,8 @@ class State:
             api_key = str(self.cfg.get("ollama_api_key") or "")
             if not api_key:
                 return None
-            fresh = self.cloud_data is not None and time.time() - self.cloud_ts < CLOUD_TTL_SECONDS
+            expiry = max(CLOUD_TTL_SECONDS, (self.cloud_data or {}).get("retry_after", 0))
+            fresh = self.cloud_data is not None and time.time() - self.cloud_ts < expiry
             if fresh:
                 return self.cloud_data
             # La lecture est serialisee avec les changements de cle : ni
@@ -831,8 +969,9 @@ class State:
                                                      datetime.now(timezone.utc))
                     record_days(self.conn, data)
                     history = history_cloud(self.conn, self.cfg, data)
-                    record_cloud_sample(self.conn, history, cycle_start,
-                                        monthly_cap(self.cfg, account))
+                    if balance_values(self.balance_data) is None:
+                        record_cloud_sample(self.conn, history, cycle_start,
+                                            monthly_cap(self.cfg, account))
                 except sqlite3.Error as exc:   # un echantillon rate n'est pas fatal
                     print(f"[cloud] echantillon non enregistre ({exc})", file=sys.stderr)
             return data
@@ -847,11 +986,13 @@ class State:
         # l'echantillon — et part aussi telle quelle dans le payload.
         with self.lock:
             account = self.account()
+            balance = self.balance()
             cloud = self.cloud(account)
             live = cloud_days(cloud) is not None and cloud_totals(cloud) is not None
-            history = history_cloud(self.conn, self.cfg, cloud) if live else cloud
-            data = build_cloud_usage(self.conn, self.cfg, history) if live else empty_usage()
-            data["quota"] = build_quota(self.conn, self.cfg, history, account)
+            history = history_cloud(self.conn, self.cfg, cloud, balance) if live else cloud
+            data = build_cloud_usage(self.conn, self.cfg, history, balance) if live else empty_usage()
+            data["usage_error"] = (cloud or {}).get("error")
+            data["quota"] = build_quota(self.conn, self.cfg, history, account, balance)
             protected = keychain_available() and not self.cfg.get("_key_storage_error")
             data["quota"]["key_storage"] = "keychain" if protected else "file"
             data["quota"]["key_storage_error"] = self.cfg.get("_key_storage_error")
@@ -898,7 +1039,8 @@ class State:
                     self.conn.execute("DELETE FROM cloud_samples WHERE model <> ''")
                     self.conn.execute("DELETE FROM model_color")
                     self.conn.execute("DELETE FROM daily_usage")
-                    self.invalidate_cloud()
+                    self.conn.execute("DELETE FROM balance_samples")
+                    self.invalidate_cloud(force=True)
                 self.conn.commit()
             self.cfg = cfg
             return dict(cfg)
@@ -1008,7 +1150,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         if url.path == "/health":
-            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app(), "daily_usage": True})
+            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app(), "daily_usage": True, "balance_tokens": True})
             return
 
         if url.path == "/api/stream":
@@ -1150,11 +1292,12 @@ def main() -> int:
         while True:
             time.sleep(interval)
             try:
+                balance = state.balance()
                 cloud = state.cloud(state.account())
             except Exception as exc:  # noqa: BLE001 - ne jamais tuer la boucle
                 print(f"[veille] {exc}", file=sys.stderr)
                 continue
-            stamp = (json.dumps(cloud, sort_keys=True), int(time.time() // 60))
+            stamp = (json.dumps([cloud, balance], sort_keys=True), int(time.time() // 60))
             if stamp != fingerprint:
                 fingerprint = stamp
                 state.broadcast()

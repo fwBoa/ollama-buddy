@@ -1,7 +1,7 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Your Ollama Cloud spending on your Mac — cycle, quota estimate, live updates</em></p>
+  <p><em>Your Ollama Cloud spending on your Mac — official credits, tokens, live updates</em></p>
 
   [Français](README.fr.md) · [Interface](#interface) · [Install](#install) · [Monthly cycle](#monthly-cycle) · [Security](#security)
 </div>
@@ -10,14 +10,15 @@ Ollama Buddy reads your account's daily cloud spending with your own API key. A
 Python server serves a dashboard in a native macOS window, with a compact summary
 in the menu bar. Running the server directly also works in a browser.
 
-- Overview with spending, requests, estimated quota and the four most recent days.
+- Overview with spending, requests, official credits and the four most recent days.
 - **Activity** view with an interactive 7/30 calendar-day chart and every daily
   record in the available period. Missing records are distinct from zero spending.
 - Dedicated settings for connection, monthly cycle, alerts and appearance.
   Unfinished input survives live updates.
-- Estimated monthly quota, reset countdown and projections once a full day of
-  samples has accumulated.
-- Optional native notifications at 70%, 90% and 100% of the estimated quota.
+- Official monthly allowance, remaining credits, reset date and purchased credits.
+- Input/output/cached token counters for the selected 7/30-day activity range.
+- Estimated projections once a full day of balance samples has accumulated.
+- Optional native notifications at 70%, 90% and 100% of the monthly allowance used.
 - English/French and automatic/light/dark themes in Settings, shared between both views.
 - Native API-key storage in macOS Keychain, with migration from the previous file.
 - Python 3.9+ standard library at runtime; no frontend framework or build step.
@@ -26,10 +27,10 @@ in the menu bar. Running the server directly also works in a browser.
 
 Redesign screenshots use synthetic data and the same server and pages as the app.
 
-**Overview**: cycle spending, requests, estimated quota and recent days.
+**Overview**: cycle spending, requests, official credits and recent days.
 Select a chart bar to inspect a day's record.
 
-<img src="docs/dashboard.png" alt="Overview with an interactive daily chart and estimated monthly quota" width="100%">
+<img src="docs/dashboard.png" alt="Overview with an interactive daily chart and official monthly credits" width="100%">
 
 <details>
 <summary>Explore activity, settings, dark mode and the menu bar</summary>
@@ -37,15 +38,15 @@ Select a chart bar to inspect a day's record.
 ### Activity
 
 Switch between 7 and 30 calendar days and inspect every record in the available
-period. Missing records are distinct from days with zero spending.
+period, including input, output and cached token counters. Missing records are
+distinct from days with zero spending.
 
-<img src="docs/activity.png" alt="Activity view with a 30-day chart and a table of available daily records" width="100%">
+<img src="docs/activity.png" alt="Activity view with daily chart, token counters and daily records" width="100%">
 
 ### Settings
 
-Configure the connection, monthly cycle, alerts and appearance. The reset
-reference is entered in UTC; its local equivalent is shown to prevent timezone
-confusion.
+Configure connection, alerts and appearance. The cycle comes from Ollama;
+optional fallback settings use a UTC reset reference with its local equivalent.
 
 <img src="docs/settings.png" alt="Settings for connection, cap, UTC reset reference, alerts, theme and language" width="100%">
 
@@ -55,10 +56,10 @@ confusion.
 
 ### Menu bar
 
-Check the estimated quota, cycle spending and recent days, then open the full
+Check the official credits, cycle spending and recent days, then open the full
 dashboard from the panel.
 
-<img src="docs/menu-bar.png" alt="Menu bar panel showing estimated quota and daily spending" width="300">
+<img src="docs/menu-bar.png" alt="Menu bar panel showing official credits and daily spending" width="300">
 
 </details>
 
@@ -99,31 +100,25 @@ python3 ollama_buddy.py
 Closing the native window keeps the menu bar app running. `⌘Q` stops the server
 if this app started it; a compatible pre-existing native server stays running. A plain CLI server is
 kept separate so the native app can use Keychain storage. On launch, the app also
-checks that a reused server supports daily tracking.
+checks that a reused server supports daily tracking, Balance and token counters.
 
 ## Connect and configure
 
 1. Create an API key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
 2. Paste it into the dashboard.
-3. In **Settings**, enter **Monthly reset reference (UTC)**, including the time if known. Use
-   a reset date displayed by Ollama, or the subscription anniversary converted to UTC.
-   This reference can be in the past; the app replays its day of the month.
-4. Check **Cap in USD**. An explicit value overrides the local Ollama plan.
-   Leaving it empty uses the built-in plan defaults: Pro $60, Max $300, Team $1,000.
-   Unknown plans have no inferred cap. Confirm your own plan, especially legacy plans.
-
-The cap values and subscription-day rule follow [Ollama's pricing FAQ](https://www.ollama.com/pricing),
-checked on 12 October 2026. They can change; the manual cap remains available.
+3. The app reads your allowance, remaining credits and exact cycle dates from
+   [Ollama Balance](https://docs.ollama.com/api/balance), using the same key.
+4. **Settings** retains an optional fallback cap and UTC reset reference. These
+   apply only when Balance is unavailable, and the result is labelled estimated.
+   With no manual cap, the fallback uses the local plan's default (Pro $60,
+   Max $300, Team $1,000). It is not the authority for your actual allowance.
 
 The top-right button refreshes cloud data. Theme and language selectors live
 in Settings and default to the system preferences. Both are saved on the server.
 
-Reset dates include the configured UTC time and its local equivalent. For
-example, noon UTC is 2 pm in Paris in October. The estimate waits for that
-configured time: an actual refill on Ollama may therefore precede the local
-estimate when the reference is wrong. Ollama’s displayed refill date is the
-authority; this API does not expose the website’s credit balance. Disconnecting
-requires confirmation and clears the account’s locally saved usage.
+Reset dates show the official UTC time and its local equivalent. Purchased
+credits are displayed separately from included monthly credits. Disconnecting
+requires confirmation and clears locally saved account history.
 
 | Shortcut | Action |
 |---|---|
@@ -133,64 +128,57 @@ requires confirmation and clears the account’s locally saved usage.
 | `⌘O` | Open in the browser |
 | `⌘Q` | Quit |
 
-The menu bar shows a llama and the estimated percentage, with an orange alert
+The menu bar shows a llama and the consumed percentage, with an orange alert
 at 70% and red at 90%. Unavailable usage shows a dash. Its summary shows the
 last three days. Old model counters are no longer shown.
 
 ## Monthly cycle
 
-Ollama says included credits reset monthly on the subscription's original day of
-the month, including annual subscriptions. Switching to the new pricing resets
-usage immediately while keeping that original anniversary.
+The source for the quota is [`GET /api/balance`](https://docs.ollama.com/api/balance).
+It supplies `included.allowance_usd`, `included.balance_usd`, the exact period
+`from`/`until`, and `purchased.balance_usd`. Included credits used are calculated
+as allowance minus remaining balance. Purchased credits remain separate; they
+are not included in that percentage. The official balance works without a manual
+reset date or complete daily history, including on a reset day.
 
-The app does **not** discover your subscription date or observe credit resets.
-Its configured UTC timestamp is the monthly anchor. Both cycle boundaries are
-calculated from that original anchor, so a day 31 becomes February 28/29 and
-returns to day 31 in March. Old anchors are replayed without a one-year limit.
-Clearing the date removes the cycle calculation. For subscriptions on day 29,
-30 or 31, use the original subscription date: a reset clipped to February
-28 does not reveal the original day.
+Legacy plans instead return session and weekly limits. The app displays those
+remaining percentages, without inventing a monthly dollar quota or sending
+monthly threshold notifications. A zero included allowance is also shown without
+a made-up percentage. For teams, Balance is shared across members whereas the
+activity endpoint uses the default personal scope (`self`).
 
-The API integration requests `https://ollama.com/api/usage?range=30d` and expects
-`buckets` with `from`, `usage_usd`, `request_count`, plus `totals`. This usage route
-is undocumented and its response format can change. The source was adapted to
-this format on 7 October 2026; it no longer reads `limits.monthly.usage`.
+[`GET /api/usage?range=30d`](https://docs.ollama.com/api/cloud-usage) supplies the
+UTC daily chart and table. Activity shows available daily spending across the last
+30 UTC days, including spending that may draw on purchased credits; it is not the
+same measure as included credits consumed. New usage may take time to appear on
+Ollama. If the activity request fails, an available official balance remains visible.
 
-**The quota is an estimate, not Ollama's authoritative remaining credit balance.**
-The app sums the available daily spending in the configured cycle and divides
-by the cap. Buckets are UTC days: if the cycle starts during a day, that entire
-partial first day is excluded because the API cannot split it at the reset time.
-Changing the reset hour can therefore change the sum. Refunds, purchased credits,
-plan switches and differing billing attribution are not reconstructed.
+If Balance is unavailable, the fallback quota sums complete UTC days in the
+manually configured cycle and divides by the cap. A partial reset day is excluded;
+an incomplete cycle withholds this estimate. Both boundaries are replayed from
+the original UTC anchor, preserving day 31 through February. Empty fallback
+settings do not prevent the official balance from working.
 
-Each successful read updates daily spending in SQLite, retained for 400 days.
-This lets an app that has already observed the days complete a 31-day cycle even
-when the next API response covers only 30 days. Old buckets replace their earlier
-reading (including corrections); a partial leading bucket never overwrites a
-complete stored day. Switching keys clears this history to keep accounts separate.
+Daily readings are retained in SQLite for 400 days. Complete stored days can fill
+older API gaps, including 31-day cycles; partial leading buckets never overwrite
+complete days. Switching keys clears the daily and balance sample history.
 
-A fresh installation cannot recover days that the API no longer supplies. A gap
-in the cycle history withholds the quota rather than producing a truncated sum.
-Daily spending stays visible without a cap, reset date or complete cycle: the
-view then shows the available last 30 days and their date range. The cycle view
-is used when its daily history is complete, even if only its cap is missing.
-A missing key or an invalid/failed API read hides the spending and explains why.
+Balance samples are recorded at most every five minutes. **Estimated outlook**
+requires at least 24 hours of samples with the same cycle start and allowance.
+Projections remain estimates and do not reconstruct purchased-credit spending.
+Fallback rate samples are kept separate from official balance samples.
 
-Samples are recorded at most every five minutes. The average daily rate requires
-at least 24 hours of samples from the current cycle. Projections extrapolate that
-rate and can differ from future spending. They live in a collapsed **Estimated
-outlook** section. Changing the cap or cycle clears rate samples, while keeping
-the daily history, so incompatible measurements are never mixed.
+### Token counters
 
-The old per-model counters are archived data and are no longer displayed. The
-current app focuses on daily spending. Replacing a key **does not revoke it on
-Ollama**; revoke it on Ollama's settings page.
+**Activity** shows input, output and cached input tokens for the selected 7/30-day
+range, plus the selected day's counters. Cached input is a subset of input tokens
+and is never added again. Missing counters are shown as unavailable, not zero.
+Old stored totals cannot reveal the split; migrations preserve them without
+inventing values. A subsequent API reading fills in counters it actually supplies.
 
-Daily charts and tables show the available records from the last 30 UTC days,
-independently of the estimated monthly cycle. On a reset day that starts after
-midnight UTC, today's spending and requests remain visible and update normally.
-The quota is marked unavailable until the first full UTC day instead of showing
-an artificial 0%. Ollama does not split its daily records at the reset time.
+The API does not yet expose usage by model; Ollama lists it under
+[Coming soon](https://docs.ollama.com/api/cloud-usage#coming-soon). Old per-model
+archives are not displayed. Replacing a key does not revoke it on Ollama.
 
 ## Notifications
 
@@ -203,7 +191,7 @@ The highest threshold reached is notified once per cycle. If usage jumps from
 below 70% to 95%, one 90% alert is sent. Falling below and recrossing a notified
 threshold, restarting the app or toggling alerts does not repeat it. A new cycle,
 key, cap or reset anchor starts a new alert context. Clicking the alert opens the
-dashboard. These alerts use the estimated quota, not an official credit balance.
+dashboard. Alerts use the official balance when available, or the explicitly labelled fallback estimate.
 Notifications are unavailable for a standalone CLI server.
 
 ## Security
@@ -243,7 +231,7 @@ the HTTP API. The native bundle is not sandboxed or notarised.
 | `app/main.swift` | Native lifecycle, windows, menus and navigation |
 | `app/make_icon.py` | Pillow/iconutil icon generator |
 | `build_app.sh` | Universal bundle assembly |
-| `config.example.json` | Configuration shape; zero cap follows the plan |
+| `config.example.json` | Configuration shape; fallback cap; zero follows the local plan |
 | `tests/test_backend.py` | Cycle, validation, cache, storage and HTTP regression tests |
 | `tests/test_frontend.cjs` | Browser regression tests with synthetic data; requires Playwright |
 | `tests/capture_ui.cjs` | English/French README screenshots using synthetic data |
@@ -253,14 +241,14 @@ The native app stores `config.json` and `usage.db` in
 folder unless `OLLAMA_BUDDY_DATA` selects another directory. Secrets, databases
 and build artefacts are ignored by Git.
 
-SQLite stores `daily_usage` and `cloud_samples`, using WAL mode. Legacy model
+SQLite stores `daily_usage`, `balance_samples` and `cloud_samples`, using WAL mode. Legacy model
 rows/colours may remain in older databases but have no display. Deleting the
 base loses the saved daily history and rate samples; only what is still available
 from the API can be recovered. Startup also removes unused legacy tables.
 
 The web views receive SSE pushes, with keepalives and reconnection. The dashboard
 falls back to five-second polling if EventSource is unavailable. A watcher checks
-every two seconds; shared caching limits cloud reads to roughly one per minute
+every two seconds; shared caching limits reads to each cloud endpoint to roughly one per minute
 except explicit refreshes. A minute tick updates the cycle/countdown even if
 spending has not changed. The native menu bar separately reads the cached payload
 every 20 seconds.

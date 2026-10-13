@@ -220,6 +220,30 @@
    d'afficher un trou. Un texte neuf non traduit reste lisible.
    ===================================================================== */
 const FR = {
+  'Monthly credits': 'Crédits mensuels',
+  'Official balance': 'Solde officiel',
+  'Purchased credits': 'Crédits supplémentaires',
+  'Next reset': 'Prochaine réinitialisation',
+  'Included credits used': 'Crédits mensuels consommés',
+  'No included credits': 'Aucun crédit mensuel inclus',
+  'Legacy plan': 'Ancienne offre',
+  'Session': 'Session',
+  'Weekly': 'Semaine',
+  'Your plan uses session and weekly limits, rather than a monthly dollar allowance.': 'Ton offre utilise des limites par session et par semaine, plutôt qu’un plafond mensuel en dollars.',
+  'Fallback estimate': 'Estimation de secours',
+  'Ollama provides your cap, remaining credits and cycle dates automatically.': 'Ollama fournit automatiquement le plafond, les crédits restants et les dates du cycle.',
+  'These settings apply only when the official balance is unavailable.': 'Ces réglages s’appliquent uniquement lorsque le solde officiel est indisponible.',
+  'Official balance unavailable. The quota below is an estimate.': 'Solde officiel indisponible. Le quota ci-dessous est une estimation.',
+  'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.': 'Les crédits mensuels viennent du solde officiel Ollama. Les crédits supplémentaires sont séparés. Les graphiques montrent la dépense quotidienne, qui peut utiliser les deux types de crédits.',
+  'Daily spending unavailable': 'Dépense quotidienne indisponible',
+  'The balance remains available. Refresh to try loading daily activity again.': 'Le solde reste disponible. Actualise pour réessayer de charger l’activité quotidienne.',
+  'Tokens · available records': 'Tokens · relevés disponibles',
+  'Requests · available days': 'Requêtes · jours disponibles',
+  'Input tokens': 'Tokens d’entrée',
+  'Output tokens': 'Tokens de sortie',
+  'Cached input tokens': 'Tokens d’entrée en cache',
+  'Cached tokens are included in input tokens. They are not added again.': 'Les tokens en cache sont inclus dans les tokens d’entrée. Ils ne sont pas ajoutés une seconde fois.',
+  'Some token counters are unavailable for these records. Missing values are not zero.': 'Certains compteurs de tokens sont indisponibles pour ces relevés. Une valeur manquante ne vaut pas zéro.',
   "Reset day": "Jour de réinitialisation",
   "Daily spending is available. The quota estimate starts with the first complete UTC day because Ollama cannot split usage at the reset time.": "La dépense quotidienne reste disponible. L’estimation du quota commence au premier jour UTC complet, car Ollama ne permet pas de couper l’usage à l’heure de réinitialisation.",
 
@@ -450,8 +474,7 @@ function compact(n) {
 }
 const fmt = n => { const c = compact(n); return c.v + c.u; };
 
-/* Une seule unité : l'API ollama.com publie des nombres d'appels, jamais de
-   tokens. Seul le mot change de langue, jamais l'unité. */
+/* Les appels et tokens ont des compteurs distincts. */
 
 /* Seuils de gravité du quota : la barre change de couleur avant le plafond,
    jamais l'inverse — un rouge atteint trop tôt ne veut plus rien dire. */
@@ -495,8 +518,7 @@ function resetLabel(quota) {
 
 
 /* =====================================================================
-   Quota mensuel. Lu sur ollama.com/api/usage — une route non documentee,
-   qui publie des depenses quotidiennes. Le serveur estime le cycle configure.
+   /api/balance porte le solde ; /api/usage porte les journees et tokens.
 
    Sans cle, aucun chiffre n'est publie. L'app affichait auparavant un
    montant colle a la main, presente comme le quota du jour alors qu'il
@@ -582,7 +604,8 @@ function renderSettings(data) {
       ${q.key_storage_error ? `<p class="warn-line">${T('Unlock macOS Keychain or enter the key again to finish migration.')}</p>` : ''}
     </section>`}
     <section class="settings-section"><h2>${T('Monthly cycle')}</h2>
-      <p class="caption">${T('Ollama does not provide a reset date. Use a confirmed billing or subscription date.')}</p>
+      <p class="caption">${T('Ollama provides your cap, remaining credits and cycle dates automatically.')} ${q.measurement === 'balance' && !q.legacy_limits ? fill(T('{current} of {monthly}'), {current:usd(q.current),monthly:usd(q.monthly)})+' · '+resetLabel(q) : ''}</p>
+      <h3 style="margin-top:20px">${T('Fallback estimate')}</h3><p class="hint">${T('These settings apply only when the official balance is unavailable.')}</p>
       <div class="settings-row"><label for="monthly">${T('Cap in USD')}
         <input id="monthly" type="number" min="0" step="any" inputmode="decimal" value="${q.monthly_set > 0 ? q.monthly_set : ''}" placeholder="${q.monthly > 0 ? q.monthly : T('Automatic')}" aria-describedby="cap-hint">
       </label><button class="btn" id="save-monthly" type="button">${T('Save cap')}</button></div>
@@ -602,6 +625,7 @@ function renderSettings(data) {
 
 function renderQuota(q = {}) {
   const ready = q.source === 'api' && typeof q.ratio === 'number';
+  const official = q.measurement === 'balance';
   let body;
   if (ready) {
     const status = q.ratio >= 1 ? 'Cap reached' : q.ratio >= .7 ? 'Approaching cap' : 'Within cap';
@@ -609,9 +633,12 @@ function renderQuota(q = {}) {
     body = `<div class="quota-head"><span class="pct">${pct(q.ratio)}</span><span class="quota-tag" style="color:${severity(q.ratio)}">${T(status)}</span></div>
       <div class="meter" role="img" style="--fill:${severity(q.ratio)}" aria-label="${escapeHTML(fill(T('{pct} of the monthly quota consumed'), {pct:pct(q.ratio)}))}"><span style="transform:scaleX(${Math.max(0,Math.min(q.ratio,1)).toFixed(4)})"></span></div>
       <p class="quota-foot">${fill(T('{current} of {monthly}'), {current:usd(q.current || 0), monthly:usd(q.monthly)})}</p>
-      <dl class="quota-facts"><div><dt>${T('Remaining')}</dt><dd>${usd(Math.max(0,q.monthly-(q.current || 0)))}</dd></div><div><dt>${T('Configured reset')}</dt><dd>${reset} · UTC</dd></div></dl>
+      <dl class="quota-facts"><div><dt>${T('Remaining')}</dt><dd>${usd(q.remaining ?? Math.max(0,q.monthly-(q.current || 0)))}</dd></div><div><dt>${T(official ? 'Next reset' : 'Configured reset')}</dt><dd>${reset} · UTC</dd></div></dl>
       <p class="hint">${resetLabel(q)}<br>${localResetHint(q)}</p>
       ${q.rate_per_day ? `<details class="projection"><summary>${T('Estimated outlook')}</summary><p>${fill(T('At this rate: <b>+{amount} / day</b>'),{amount:usd(q.rate_per_day)})}${q.projected_at_reset ? '<br>'+fill(T('projected at reset: {amount}'),{amount:usd(q.projected_at_reset)}) : ''}${q.ratio < 1 && q.exhausted_in_days != null && q.days_left != null && q.exhausted_in_days < q.days_left ? `<br><span class="alert">${fill(T('cap reached {when}, before the reset'),{when:whenText(q.exhausted_in_days)})}</span>` : ''}</p></details>` : ''}`;
+  } else if (official) {
+    body = q.legacy_limits ? `<h3 style="margin-top:20px">${T('Legacy plan')}</h3><p class="hint">${T('Your plan uses session and weekly limits, rather than a monthly dollar allowance.')}</p><dl class="quota-facts">${['session','weekly'].map(name=>`<div><dt>${T(name === 'session' ? 'Session' : 'Weekly')} · ${T('Remaining')}</dt><dd>${pct(q.legacy_limits[name].remaining_percent/100)}</dd></div>`).join('')}</dl>`
+      : `<h3 style="margin-top:20px">${T('No included credits')}</h3><p class="hint">${resetLabel(q)}</p>`;
   } else {
     const issue = q.error === 'partial reset day' ? ['Reset day','Daily spending is available. The quota estimate starts with the first complete UTC day because Ollama cannot split usage at the reset time.']
       : q.error === 'incomplete history' ? ['History incomplete','Some days are missing. Available spending is shown, but a monthly quota cannot be estimated.']
@@ -620,7 +647,22 @@ function renderQuota(q = {}) {
       : ['No cycle configured','Set a reset reference to estimate your monthly quota. Daily spending remains available.'];
     body = `<h3 style="margin-top:20px">${T(issue[0])}</h3><p class="hint">${T(issue[1])}</p>`;
   }
-  return `<section class="quota" aria-labelledby="quota-h"><h2 id="quota-h">${T('Estimated monthly quota')}</h2>${body}<button class="text-button" type="button" data-view="settings">${T('Manage cycle')} ↗</button></section>`;
+  return `<section class="quota" aria-labelledby="quota-h"><h2 id="quota-h">${T(official ? 'Monthly credits' : 'Estimated monthly quota')}</h2>${body}
+    ${official ? `<dl class="quota-facts"><div><dt>${T('Purchased credits')}</dt><dd>${usd(q.purchased || 0)}</dd></div></dl><p class="caption">${T('Official balance')}</p>` : q.balance_error ? `<p class="hint">${T('Official balance unavailable. The quota below is an estimate.')}</p>` : ''}
+    <button class="text-button" type="button" data-view="settings">${T('Manage cycle')} ↗</button></section>`;
+}
+
+function renderTokens(days) {
+  if (!days.length) return '';
+  const end = Date.parse(days[days.length-1].day+'T00:00:00Z');
+  const records = days.filter(day=>Date.parse(day.day+'T00:00:00Z') > end-chartRange*86400000);
+  const counters = [['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']];
+  const missing = counters.some(([key])=>records.some(day=>day[key] == null));
+  return `<section class="tokens" aria-labelledby="tokens-h"><div class="section-head"><h2 id="tokens-h">${T('Tokens · available records')}</h2><span class="caption">${T(chartRange+' days')} · UTC</span></div><div class="metrics">${counters.map(([key,label])=>{
+    const known = records.every(day=>day[key] != null);
+    const total = known ? records.reduce((sum,day)=>sum+day[key],0) : null;
+    return `<div class="metric"><span class="k">${T(label)}</span><span class="v" data-token="${key}"${known ? ` title="${exact(total)}"` : ''}>${known ? fmt(total) : '…'}</span></div>`;
+  }).join('')}</div><p class="caption">${T('Cached tokens are included in input tokens. They are not added again.')}${missing ? ' '+T('Some token counters are unavailable for these records. Missing values are not zero.') : ''}</p></section>`;
 }
 
 function renderLedger(days, peak) {
@@ -644,7 +686,7 @@ function renderChart(days) {
     ${!shown.length ? `<div class="empty-chart">${T('No daily records yet.')}<br>${T('Once Ollama publishes usage, it will appear here.')}</div>` : `
     <div class="chart"><span class="chart-scale">${usd(peak)}</span><div class="chart-grid" aria-hidden="true"><span></span><span></span><span></span></div><div class="chart-bars">${shown.map(j=>`<button class="chart-day${j.usd===null ? ' missing' : j.usd===0 ? ' zero' : ''}" type="button" data-select-day="${escapeHTML(j.day)}" aria-pressed="${selectedDay===j.day}" aria-label="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)+', '+exact(j.requests)+' '+T('requests')))}" title="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)))}"><span style="--height:${peak ? (j.usd/peak*90).toFixed(2) : 0}%"></span></button>`).join('')}</div></div>
     <div class="chart-axis"><span>${shortDate(shown[0].day)}</span><span>${shortDate(shown[Math.floor((shown.length-1)/2)].day)}</span><span>${shortDate(shown[shown.length-1].day)} · UTC</span></div>`}
-    ${selected ? `<div class="chart-detail" id="chart-detail" role="status"><div><strong>${dayLabel(selected.day)}</strong><p class="caption">${selected.usd === null ? T('No record for this day') : exact(selected.requests)+' '+T(selected.requests === 1 ? 'request' : 'requests')}</p></div><span class="amount">${selected.usd === null ? '…' : usd(selected.usd)}</span></div><p class="caption">${T('Select a day to inspect its spending.')}</p>` : ''}`;
+    ${selected ? `<div class="chart-detail" id="chart-detail" role="status"><div><strong>${dayLabel(selected.day)}</strong><p class="caption">${selected.usd === null ? T('No record for this day') : exact(selected.requests)+' '+T(selected.requests === 1 ? 'request' : 'requests')}</p></div><span class="amount">${selected.usd === null ? '…' : usd(selected.usd)}</span></div>${selected.usd !== null ? `<p class="caption">${[['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']].map(([key,label])=>T(label)+': '+(selected[key] == null ? '…' : exact(selected[key]))).join(' · ')}</p>` : ''}<p class="caption">${T('Select a day to inspect its spending.')}</p>` : ''}`;
 }
 
 function renderContent(data) {
@@ -660,17 +702,23 @@ function renderContent(data) {
   if (days.length) sub.textContent = fill(T('Spending shown from {from} to {to} (UTC).'),{from:shortDate(days[0].day),to:shortDate(days[days.length-1].day)});
   else sub.textContent = T('Ollama Cloud usage');
   if (currentView === 'settings') { app.innerHTML = renderSettings(data); return; }
-  if (!data.usage_available) { app.innerHTML = renderConnection(data.quota); return; }
+  if (!data.usage_available) {
+    app.innerHTML = data.quota?.measurement === 'balance'
+      ? `<div class="overview-grid"><section><h2>${T('Daily spending unavailable')}</h2><p class="hint">${T('The balance remains available. Refresh to try loading daily activity again.')}</p></section><aside>${renderQuota(data.quota)}</aside></div>`
+      : renderConnection({...data.quota,key_error:data.usage_error || data.quota?.key_error});
+    return;
+  }
   const cycle = data.period === 'cycle';
   const resetDay = data.quota?.error === 'partial reset day';
   const today = days.find(day => day.day === new Date().toISOString().slice(0,10));
-  const spending = resetDay ? today?.usd : (data.usd || 0);
-  const requests = resetDay ? today?.requests : (data.requests || 0);
+  const official = data.quota?.measurement === 'balance' && !data.quota?.legacy_limits;
+  const spending = official ? currentView === 'overview' ? data.quota.current : days.reduce((sum,day)=>sum+day.usd,0) : resetDay ? today?.usd : (data.usd || 0);
+  const requests = official ? days.reduce((sum,day)=>sum+day.requests,0) : resetDay ? today?.requests : (data.requests || 0);
   const peak = Math.max(0,...days.map(day=>day.usd));
-  const metrics = `<div class="metrics"><div class="metric"><span class="k">${resetDay ? T('Today (UTC)') : cycle ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T('Requests')}</span><span class="v">${requests == null ? '…' : fmt(requests)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(peak)}</span></div></div>`;
-  const source = `<details class="source-note"><summary>${T('How this is calculated')}</summary><p>${T('Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')} ${T("<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.")}</p></details>`;
+  const metrics = `<div class="metrics"><div class="metric"><span class="k">${official && currentView === 'overview' ? T('Included credits used') : resetDay ? T('Today (UTC)') : cycle && !official ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T(official ? 'Requests · available days' : 'Requests')}</span><span class="v">${requests == null ? '…' : fmt(requests)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(peak)}</span></div></div>`;
+  const source = `<details class="source-note"><summary>${T('How this is calculated')}</summary><p>${T(official ? 'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.' : 'Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')}</p></details>`;
   app.innerHTML = `${data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : ''}
-    ${currentView === 'activity' ? `${metrics}${renderChart(days)}${days.length ? `<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}` : ''}${source}` : `
+    ${currentView === 'activity' ? `${metrics}${renderChart(days)}${renderTokens(days)}${days.length ? `<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}` : ''}${source}` : `
     <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days)}${days.length ? `<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),peak)}</section>` : ''}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
 }
 
@@ -828,7 +876,7 @@ function applyData(data) {
      rejoueraient a chaque battement du flux. */
   const signature = JSON.stringify({
     usd: data.usd, requests: data.requests, peak: data.peak,
-    days: data.days, daily_days: data.daily_days, usage_available: data.usage_available, period: data.period,
+    days: data.days, daily_days: data.daily_days, usage_available: data.usage_available, usage_error:data.usage_error, period: data.period,
     notifications: data.notifications, notifications_supported: data.notifications_supported,
     quota: { ...data.quota, days_left: Math.floor(data.quota?.days_left ?? -1) },
     theme: data.theme, lang: data.lang, account: data.account, error: data.error,

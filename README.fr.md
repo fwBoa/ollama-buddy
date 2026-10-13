@@ -1,7 +1,7 @@
 <div align="center">
   <img src="web/ollama.png" alt="Ollama Buddy" width="88">
   <h1>Ollama Buddy</h1>
-  <p><em>Ta consommation Ollama Cloud sur ton Mac — cycle, estimation du quota, mises à jour en direct</em></p>
+  <p><em>Ta consommation Ollama Cloud sur ton Mac — crédits officiels, tokens, mises à jour en direct</em></p>
 
   [English](README.md) · [Interface](#interface) · [Installation](#installation) · [Cycle mensuel](#cycle-mensuel) · [Sécurité](#sécurité)
 </div>
@@ -17,9 +17,10 @@ dans un navigateur.
   sont distingués des jours à dépense nulle.
 - Paramètres dédiés : connexion, cycle mensuel, alertes et apparence. Les saisies
   en cours sont conservées pendant les mises à jour en direct.
-- Quota mensuel estimé, compte à rebours et projections après une journée complète
-  d’échantillons.
-- Notifications natives optionnelles à 70 %, 90 % et 100 % du quota estimé.
+- Plafond, crédits mensuels restants, date de réinitialisation et crédits supplémentaires officiels.
+- Tokens d’entrée, de sortie et en cache sur les 7/30 jours sélectionnés dans Activité.
+- Projections estimatives après une journée complète de mesures du solde.
+- Notifications natives optionnelles à 70 %, 90 % et 100 % du quota mensuel consommé.
 - Français/anglais et thèmes automatique/clair/sombre dans les paramètres.
 - Clé de l’app native dans le Trousseau macOS, avec migration de l’ancien fichier.
 - Bibliothèque standard Python 3.9+ à l’exécution, sans framework frontend.
@@ -29,10 +30,10 @@ dans un navigateur.
 Captures de la refonte sur des données fictives, en français. Elles sont générées
 avec le même serveur et les mêmes pages que l’app.
 
-**Vue d’ensemble** : dépense du cycle, requêtes, quota estimé et derniers jours.
+**Vue d’ensemble** : dépense du cycle, requêtes, crédits officiels et derniers jours.
 Sélectionne une barre du graphique pour consulter le relevé d’un jour.
 
-<img src="docs/dashboard.fr.png" alt="Vue d’ensemble en français : graphique quotidien interactif et quota mensuel estimé" width="100%">
+<img src="docs/dashboard.fr.png" alt="Vue d’ensemble en français : graphique quotidien interactif et crédits mensuels officiels" width="100%">
 
 <details>
 <summary>Voir l’activité, les paramètres, le thème sombre et la barre de menus</summary>
@@ -40,15 +41,14 @@ Sélectionne une barre du graphique pour consulter le relevé d’un jour.
 ### Activité
 
 Passe entre 7 et 30 jours calendaires et consulte tous les relevés de la période
-disponible dans le tableau. Un jour manquant se distingue d’un jour à dépense nulle.
+disponible, avec les compteurs de tokens. Un jour manquant se distingue d’un jour à dépense nulle.
 
-<img src="docs/activity.fr.png" alt="Vue Activité en français : graphique sur 30 jours et tableau des relevés disponibles" width="100%">
+<img src="docs/activity.fr.png" alt="Vue Activité en français : graphique quotidien, compteurs de tokens et relevés disponibles" width="100%">
 
 ### Paramètres
 
-Configure la connexion, le cycle, les alertes et l’apparence. La référence de
-réinitialisation est saisie en UTC ; son équivalent local est affiché pour éviter
-la confusion entre les fuseaux horaires.
+Configure la connexion, les alertes et l’apparence. Le cycle vient d’Ollama ;
+les réglages de secours facultatifs utilisent une référence UTC avec son équivalent local.
 
 <img src="docs/settings.fr.png" alt="Paramètres en français : connexion, plafond, référence UTC, alertes, thème et langue" width="100%">
 
@@ -58,7 +58,7 @@ la confusion entre les fuseaux horaires.
 
 ### Barre de menus
 
-Consulte le quota estimé, la dépense du cycle et les derniers jours, puis ouvre le
+Consulte les crédits officiels, la dépense du cycle et les derniers jours, puis ouvre le
 tableau de bord depuis le panneau.
 
 <img src="docs/menu-bar.fr.png" alt="Panneau de la barre de menus en français avec le quota et les dépenses" width="300">
@@ -102,35 +102,26 @@ python3 ollama_buddy.py
 Fermer la fenêtre laisse l’app dans la barre de menus. `⌘Q` arrête le serveur si
 c’est cette app qui l’a démarré ; un serveur natif compatible préexistant reste
 actif. Au lancement, l’app vérifie que le serveur réutilisé prend en charge le
-suivi quotidien. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
+suivi quotidien, Balance et les tokens. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
 
 ## Connexion et réglages
 
 1. Crée une clé sur [ollama.com/settings/keys](https://ollama.com/settings/keys).
 2. Colle-la dans le tableau de bord.
-3. Dans **Paramètres**, renseigne **Réinitialisation de référence (UTC)**, avec l’heure
-   si tu la connais. Utilise une date affichée par Ollama, ou l’anniversaire de ta
-   souscription converti en UTC. Cette référence peut être passée ; l’app rejoue
-   son quantième chaque mois.
-4. Vérifie **Plafond en USD**. Une valeur saisie remplace le plafond de l’offre
-   lue dans l’app Ollama locale. Vide, le champ utilise les valeurs intégrées :
-   Pro 60 $, Max 300 $, Team 1 000 $. Une offre inconnue n’a pas de plafond déduit.
-   Vérifie ton propre contrat, notamment pour une ancienne offre.
-
-Les plafonds et la règle du quantième viennent de la
-[FAQ tarifaire Ollama](https://www.ollama.com/pricing), vérifiée le 12 octobre 2026.
-Ils peuvent évoluer ; le plafond manuel reste disponible.
+3. L’app lit le plafond, les crédits restants et les dates exactes du cycle via
+   [Balance Ollama](https://docs.ollama.com/api/balance), avec la même clé.
+4. **Paramètres** conserve un plafond et une référence UTC facultatifs pour
+   l’estimation de secours. Ils s’appliquent uniquement si Balance est indisponible.
+   Sans plafond manuel, le secours utilise les valeurs du plan local (Pro 60 $,
+   Max 300 $, Team 1 000 $), qui ne font pas autorité pour ton contrat réel.
 
 Le bouton en haut à droite actualise les données. Les listes de thème et de
 langue vivent dans les paramètres et suivent le système par défaut.
 Les deux préférences sont enregistrées sur le serveur.
 
-La date de réinitialisation affiche aussi l’heure UTC et son équivalent local.
-Par exemple, 12 h UTC correspond à 14 h à Paris en octobre. Le calcul attend
-l’heure configurée : un rechargement déjà effectué chez Ollama peut donc
-précéder l’estimation locale si cette référence est incorrecte. La date indiquée
-par Ollama fait foi ; le solde de crédits du site n’est pas lu par cette API.
-Déconnecter le compte demande une confirmation et efface ses relevés locaux.
+La date de réinitialisation affiche l’heure UTC officielle et son équivalent
+local. Les crédits supplémentaires sont séparés des crédits mensuels inclus.
+Déconnecter exige une confirmation et efface l’historique local du compte.
 
 | Raccourci | Action |
 |---|---|
@@ -140,70 +131,60 @@ Déconnecter le compte demande une confirmation et efface ses relevés locaux.
 | `⌘O` | Ouvrir dans le navigateur |
 | `⌘Q` | Quitter |
 
-La barre de menus affiche un lama et le pourcentage estimé : alerte orange à 70 %,
+La barre de menus affiche un lama et le pourcentage consommé : alerte orange à 70 %,
 rouge à 90 %. Une mesure indisponible affiche un tiret. Le résumé montre les trois
 derniers jours. Les anciens compteurs par modèle ne sont plus affichés.
 
 ## Cycle mensuel
 
-Selon Ollama, les crédits inclus se réinitialisent chaque mois au quantième de
-la souscription d’origine, y compris pour les abonnements annuels. Le passage à
-la nouvelle tarification réinitialise l’usage immédiatement, en conservant cet
-anniversaire pour les cycles suivants.
+Le quota vient de [`GET /api/balance`](https://docs.ollama.com/api/balance) :
+`included.allowance_usd`, `included.balance_usd`, les bornes exactes `from`/`until`
+et `purchased.balance_usd`. Les crédits mensuels consommés correspondent au
+plafond moins le solde restant. Les crédits supplémentaires sont séparés et
+n’entrent pas dans ce pourcentage. Le solde officiel fonctionne sans date saisie
+ni historique quotidien complet, y compris le jour de la réinitialisation.
 
-L’app **ne découvre pas la date de souscription et n’observe pas les remises à zéro**.
-Le timestamp UTC saisi sert d’ancre mensuelle. Les deux bornes du cycle sont
-calculées depuis cette ancre originale : un 31 devient le 28/29 février, puis
-retrouve le 31 en mars. Les dates anciennes sont rejouées sans limite d’un an.
-Effacer la date retire le calcul du cycle. Pour une souscription le 29, 30 ou 31,
-utilise la date de souscription originale : un reset ramené au 28 février ne
-permet pas de retrouver le quantième d’origine.
+Les anciennes offres renvoient des limites par session et par semaine. L’app
+montre leurs pourcentages restants, sans inventer de quota mensuel en dollars ni
+envoyer d’alertes mensuelles. Un plafond inclus nul n’affiche pas de pourcentage
+artificiel. Pour une équipe, Balance est partagé entre les membres, tandis que
+l’activité utilise le périmètre personnel par défaut (`self`).
 
-L’intégration demande `https://ollama.com/api/usage?range=30d` et attend des
-`buckets` portant `from`, `usage_usd`, `request_count`, ainsi que `totals`.
-Cette route d’usage n’est pas documentée et sa réponse peut changer. Le code a
-été adapté à ce format le 7 octobre 2026 ; il ne lit plus `limits.monthly.usage`.
+[`GET /api/usage?range=30d`](https://docs.ollama.com/api/cloud-usage) alimente les
+relevés quotidiens UTC. Activité montre la dépense disponible des 30 derniers
+jours UTC, qui peut utiliser des crédits supplémentaires : ce n’est pas la même
+mesure que les crédits mensuels consommés. Ollama peut publier l’usage avec un
+délai. Si la lecture de l’activité échoue, le solde officiel disponible reste visible.
 
-**Le quota est une estimation, pas le solde officiel des crédits Ollama.**
-L’app additionne les dépenses quotidiennes disponibles sur le cycle configuré,
-puis les divise par le plafond. Les jours sont coupés en UTC : si le cycle démarre
-en cours de journée, le premier jour partiel est entièrement exclu, car l’API ne
-permet pas de le couper à l’heure du reset. Modifier l’heure peut donc changer la
-somme. Les remboursements, crédits achetés, changements d’offre et différences
-d’imputation ne sont pas reconstitués.
+Lorsque Balance est indisponible, l’estimation de secours additionne les jours
+UTC complets du cycle configuré, puis divise par le plafond. Le premier jour
+partiel est exclu ; un historique incomplet masque cette estimation. Les bornes
+sont rejouées depuis l’ancre UTC originale, préservant le quantième 31 malgré
+février. Des réglages de secours vides ne bloquent pas le solde officiel.
 
-Chaque lecture réussie actualise les journées dans SQLite, conservées pendant
-400 jours. Une app qui a déjà observé les jours peut ainsi compléter un cycle de
-31 jours lorsque la réponse suivante n’en couvre que 30. Les anciennes journées
-sont actualisées, corrections comprises ; un premier compartiment partiel ne
-remplace jamais une journée entière. Changer de clé efface cet historique pour
-ne pas mélanger les comptes.
+Les journées sont conservées dans SQLite pendant 400 jours. Les relevés complets
+peuvent compléter une ancienne fenêtre API, notamment un cycle de 31 jours ; un
+premier compartiment partiel ne remplace pas une journée entière. Changer de clé
+efface l’historique quotidien et les échantillons du solde.
 
-Une installation neuve ne peut pas récupérer un jour que l’API ne fournit plus.
-Un trou dans l’historique du cycle masque le quota plutôt que de produire une
-somme tronquée. Sans plafond, date ou cycle complet, la dépense reste visible :
-la vue montre les journées disponibles sur les 30 derniers jours et leurs bornes.
-Le cycle est affiché quand son historique est complet, même si seul son plafond
-manque. Sans clé ou en cas de réponse invalide ou d’échec API, la dépense est
-masquée avec une explication.
+Un échantillon du solde est enregistré au plus toutes les cinq minutes.
+**Projection estimative** nécessite vingt-quatre heures de mesures avec le même
+début de cycle et le même plafond. Les projections restent des estimations et ne
+reconstituent pas les dépenses en crédits supplémentaires. Les mesures de secours
+sont séparées des mesures officielles.
 
-Un échantillon est enregistré au plus toutes les cinq minutes. Le rythme moyen
-nécessite au moins vingt-quatre heures de mesures du cycle courant. Les projections
-prolongent ce rythme ; elles ne prédisent pas les dépenses futures. Elles vivent
-dans la section repliable **Projection estimative**. Modifier le plafond ou le
-cycle efface les échantillons du rythme, tout en conservant les journées, pour
-éviter de mélanger les mesures.
+### Compteurs de tokens
 
-Les anciens compteurs par modèle sont des archives et ne sont plus affichés.
-L’app se concentre sur les dépenses quotidiennes. Remplacer la clé **ne la révoque
-pas chez Ollama** : la révocation se fait dans les paramètres du site Ollama.
+**Activité** affiche les tokens d’entrée, de sortie et d’entrée en cache des
+7/30 jours sélectionnés, ainsi que ceux du jour sélectionné. Le cache est inclus
+dans les tokens d’entrée et n’est jamais ajouté une seconde fois. Les compteurs
+absents sont indisponibles, pas nuls. Les anciens totaux sont conservés sans
+inventer leur répartition ; une nouvelle lecture remplit les compteurs réellement
+fournis par l’API.
 
-Les graphiques et tableaux affichent les relevés disponibles des 30 derniers
-jours UTC, indépendamment du cycle mensuel estimé. Lorsque la réinitialisation
-a lieu après minuit UTC, les dépenses et requêtes du jour restent visibles et
-s’actualisent. Le quota est indiqué comme indisponible jusqu’au premier jour UTC
-complet, plutôt que d’afficher artificiellement 0 %. Ollama ne permet pas de
-séparer le relevé quotidien à l’heure de réinitialisation.
+La répartition par modèle n’est pas encore exposée par l’API. Ollama l’annonce
+[prochainement](https://docs.ollama.com/api/cloud-usage#coming-soon). Les anciennes
+archives par modèle ne sont pas affichées. Remplacer une clé ne la révoque pas chez Ollama.
 
 ## Notifications
 
@@ -217,7 +198,7 @@ moins de 70 % à 95 % produit une alerte à 90 %. Repasser sous un seuil puis le
 franchir, redémarrer l’app ou désactiver/réactiver les alertes ne le répète pas.
 Un nouveau cycle, une nouvelle clé, un plafond ou une ancre modifiée ouvrent un
 nouveau contexte d’alerte. Cliquer sur la notification ouvre le tableau de bord.
-Ces alertes suivent le quota estimé, pas le solde officiel des crédits.
+Les alertes suivent le solde officiel disponible, ou l’estimation de secours explicitement indiquée.
 Elles ne sont pas disponibles avec le serveur CLI seul.
 
 ## Sécurité
@@ -258,7 +239,7 @@ peuvent toujours accéder à l’API HTTP. Le bundle natif n’est ni sandboxé 
 | `app/main.swift` | Cycle de vie natif, fenêtres, menus et navigation |
 | `app/make_icon.py` | Génération d’icône avec Pillow/iconutil |
 | `build_app.sh` | Construction du bundle universel |
-| `config.example.json` | Configuration ; plafond nul pour suivre l’offre |
+| `config.example.json` | Configuration de secours ; plafond nul pour suivre l’offre locale |
 | `tests/test_backend.py` | Tests du cycle, validation, cache, stockage et HTTP |
 | `tests/test_frontend.cjs` | Tests navigateur sur données fictives ; nécessite Playwright |
 | `tests/capture_ui.cjs` | Captures des README en français et anglais sur données fictives |
@@ -268,7 +249,7 @@ L’app native conserve `config.json` et `usage.db` dans
 du projet, sauf si `OLLAMA_BUDDY_DATA` désigne un autre répertoire. Secrets, bases
 et artefacts de construction sont exclus de Git.
 
-SQLite conserve `daily_usage` et `cloud_samples`, en mode WAL. Les anciennes
+SQLite conserve `daily_usage`, `balance_samples` et `cloud_samples`, en mode WAL. Les anciennes
 bases peuvent garder des lignes/couleurs de modèles, qui n’ont plus d’affichage.
 Supprimer la base perd les journées enregistrées et les échantillons du rythme ;
 seul ce qui est encore disponible dans l’API peut être récupéré. Le démarrage
@@ -277,7 +258,7 @@ supprime également les anciennes tables inutilisées.
 Les vues web reçoivent des événements SSE, avec maintien de connexion et reconnexion.
 Le tableau de bord interroge toutes les cinq secondes si EventSource est absent.
 Une veille passe toutes les deux secondes ; le cache partagé limite les appels Cloud
-à environ un par minute, sauf actualisation explicite. Un passage à chaque minute
+à environ un par minute et par endpoint, sauf actualisation explicite. Un passage à chaque minute
 met à jour le cycle et le compte à rebours même sans nouvelle dépense. La barre de
 menus native relit séparément le résultat en cache toutes les vingt secondes.
 

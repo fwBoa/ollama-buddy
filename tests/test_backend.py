@@ -32,6 +32,14 @@ def usage(days):
         "request_count": len(days) * 2, "usage_usd": sum(amount for _, amount in days)}}
 
 
+def balance(monthly=60, remaining=47.66):
+    now = datetime.now(timezone.utc)
+    return {"included": {"allowance_usd": monthly, "balance_usd": remaining,
+                         "period": {"from": (now - timedelta(days=11)).isoformat(),
+                                    "until": (now + timedelta(days=20)).isoformat()}},
+            "purchased": {"balance_usd": 7.5}}
+
+
 class CycleTests(unittest.TestCase):
     def window(self, anchor, now):
         return buddy.reset_window(None, {"quota_reset_at": epoch(anchor)}, now)
@@ -81,6 +89,29 @@ class CycleTests(unittest.TestCase):
 
 
 class CloudTests(unittest.TestCase):
+    def test_balance_endpoint_and_validation(self):
+        data = balance()
+        with patch.object(buddy.urllib.request, "build_opener") as opener:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.read.return_value = json.dumps(data).encode()
+            self.assertEqual(buddy.cloud_balance("test-key"), data)
+            request = opener.return_value.open.call_args[0][0]
+            self.assertEqual(request.full_url, "https://ollama.com/api/balance")
+            self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
+            for field in ("balance_usd", "allowance_usd"):
+                for invalid in (-1, True, float("nan"), float("inf"), {}, None):
+                    changed = copy.deepcopy(data)
+                    changed["included"][field] = invalid
+                    response.read.return_value = json.dumps(changed).encode()
+                    self.assertEqual(buddy.cloud_balance("test-key"), {"error": "unexpected response"})
+            changed = balance(60, 61)
+            self.assertIsNone(buddy.balance_values(changed))
+            for invalid in ("2026-10-01", "nonsense", "9999-12-31T00:00:00Z"):
+                changed = copy.deepcopy(data)
+                changed["included"]["period"]["from"] = invalid
+                self.assertIsNone(buddy.balance_values(changed))
+        self.assertEqual(buddy.cloud_balance(""), {"error": "no key"})
+
     def test_valid_and_malformed_cloud_responses(self):
         for data, expected in ((usage([]), usage([])), ([], {"error": "unexpected response"}),
                                ({"totals": {}}, {"error": "unexpected response"})):
@@ -113,15 +144,132 @@ class StateFixture(unittest.TestCase):
         self.state = buddy.State(dict(buddy.DEFAULT_CONFIG))
         self.account = patch.object(buddy, "ollama_account", return_value={"plan": "pro", "email": "private@example.test"})
         self.account.start()
+        self.balance = patch.object(buddy, "cloud_balance", return_value={"error": "HTTP 503"})
+        self.balance.start()
 
     def tearDown(self):
         self.account.stop()
+        self.balance.stop()
         self.state.conn.close()
         self.paths.stop()
         self.temp.cleanup()
 
 
 class StateTests(StateFixture):
+    def test_rate_limit_backoff_survives_refresh_but_not_account_change(self):
+        self.state.cfg['ollama_api_key'] = 'test-key'
+        buddy.cloud_balance.return_value = {'error':'HTTP 429','retry_after':120}
+        self.state.balance()
+        self.state.balance_ts -= 61
+        self.state.invalidate_cloud()
+        self.state.balance()
+        self.assertEqual(buddy.cloud_balance.call_count,1)
+        self.state.balance_ts -= 61
+        self.state.balance()
+        self.assertEqual(buddy.cloud_balance.call_count,2)
+        self.state.update_config({'ollama_api_key':'another-key'})
+        self.assertIsNone(self.state.balance_data)
+
+    def test_official_reset_day_and_expired_period_refresh(self):
+        with patch.object(buddy, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = utc(2026,10,12,15)
+            self.state.cfg['ollama_api_key'] = 'test-key'
+            buddy.cloud_balance.return_value = {'included':{'allowance_usd':60,'balance_usd':59.5,
+                'period':{'from':'2026-10-12T12:00:00Z','until':'2026-11-12T12:00:00Z'}},
+                'purchased':{'balance_usd':0}}
+            with patch.object(buddy, 'cloud_usage', return_value=usage([('2026-10-12',.8)])):
+                q = self.state.payload()['quota']
+            self.assertEqual(q['current'],.5)
+            self.assertIsNone(q['error'])
+            self.assertEqual(q['cycle_start'],'2026-10-12T12:00:00+00:00')
+            clock.now.return_value = utc(2026,11,12,15)
+            buddy.cloud_balance.return_value = {'included':{'allowance_usd':60,'balance_usd':60,
+                'period':{'from':'2026-11-12T12:00:00Z','until':'2026-12-12T12:00:00Z'}},
+                'purchased':{'balance_usd':0}}
+            self.state.balance()
+            self.assertEqual(buddy.cloud_balance.call_count,2)
+
+    def test_official_balance_ignores_manual_settings_and_usage_failure(self):
+        self.state.cfg.update(ollama_api_key="test-key", monthly_quota=999,
+                              quota_reset_at=epoch(utc(2020, 1, 31)))
+        data = balance()
+        buddy.cloud_balance.return_value = data
+        with patch.object(buddy, "cloud_usage", return_value={"error": "HTTP 500"}):
+            first = self.state.payload()
+            self.assertFalse(first["usage_available"])
+            self.assertEqual(first["quota"]["measurement"], "balance")
+            self.assertAlmostEqual(first["quota"]["current"], 12.34)
+            self.assertEqual(first["quota"]["monthly"], 60)
+            self.assertEqual(first["quota"]["remaining"], 47.66)
+            self.assertEqual(first["quota"]["purchased"], 7.5)
+            self.assertEqual(first["quota"]["resets_at"], buddy.utc_timestamp(data["included"]["period"]["until"]))
+            self.assertEqual(first["quota"]["resets_source"], "balance")
+            self.assertEqual(first["quota"]["monthly_set"], 999)
+            self.assertIsNone(first["quota"]["key_error"])
+            self.state.payload()
+            self.assertEqual(buddy.cloud_balance.call_count, 1)
+        self.state.invalidate_cloud()
+        buddy.cloud_balance.return_value = balance(60, 46)
+        with patch.object(buddy, "cloud_usage", return_value=usage([])):
+            self.assertEqual(self.state.payload()["quota"]["current"], 14)
+        self.state.update_config({"ollama_api_key": "other-key"})
+        self.assertIsNone(self.state.balance_data)
+        self.assertEqual(self.state.conn.execute("SELECT * FROM balance_samples").fetchall(), [])
+
+    def test_legacy_and_zero_allowance_do_not_use_manual_dollar_quota(self):
+        self.state.cfg.update(ollama_api_key="test-key", monthly_quota=999)
+        reset = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        buddy.cloud_balance.return_value = {"included": {
+            "session": {"remaining_percent": 75, "resets_at": reset},
+            "weekly": {"remaining_percent": 40, "resets_at": reset}},
+            "purchased": {"balance_usd": 5}}
+        with patch.object(buddy, "cloud_usage", return_value={"error": "unexpected response"}):
+            q = self.state.payload()["quota"]
+        self.assertEqual(q["error"], "legacy plan")
+        self.assertIsNone(q["ratio"])
+        self.assertEqual(q["monthly"], 0)
+        self.assertEqual(q["legacy_limits"]["weekly"]["remaining_percent"], 40)
+        self.state.invalidate_cloud()
+        buddy.cloud_balance.return_value = balance(0, 0)
+        with patch.object(buddy, "cloud_usage", return_value=usage([])):
+            q = self.state.payload()["quota"]
+        self.assertEqual(q["measurement"], "balance")
+        self.assertEqual(q["remaining"], 0)
+        self.assertIsNone(q["ratio"])
+
+    def test_token_counters_persist_separately_and_missing_cache_is_unknown(self):
+        today = datetime.now(timezone.utc).date().isoformat()
+        data = usage([(today, .2)])
+        data["buckets"][0].update(input_tokens=100, cached_input_tokens=40, output_tokens=20)
+        buddy.record_days(self.state.conn, data)
+        history = buddy.history_cloud(self.state.conn, self.state.cfg, data)
+        day = buddy.cloud_days(history)[-1]
+        self.assertEqual((day["input_tokens"], day["cached_input_tokens"], day["output_tokens"], day["tokens"]),
+                         (100, 40, 20, 120))
+        restarted = buddy.State(dict(self.state.cfg))
+        try:
+            self.assertEqual(buddy.cloud_days(buddy.history_cloud(restarted.conn, restarted.cfg, data))[-1], day)
+        finally:
+            restarted.conn.close()
+        del data["buckets"][0]["cached_input_tokens"]
+        buddy.record_days(self.state.conn, data)
+        day = buddy.cloud_days(buddy.history_cloud(self.state.conn, self.state.cfg, data))[-1]
+        self.assertIsNone(day["cached_input_tokens"])
+        data["buckets"][0]["cached_input_tokens"] = 101
+        self.assertIsNone(buddy.cloud_days(data))
+
+    def test_migrate_old_token_total_without_inventing_split(self):
+        self.state.conn.close()
+        buddy.DB_PATH.unlink()
+        old = sqlite3.connect(buddy.DB_PATH)
+        old.execute("CREATE TABLE daily_usage (day TEXT PRIMARY KEY,usd REAL NOT NULL,requests INTEGER NOT NULL,tokens INTEGER NOT NULL,read_at INTEGER NOT NULL)")
+        old.execute("INSERT INTO daily_usage VALUES ('2026-10-01',1,2,123,1)")
+        old.commit()
+        old.close()
+        self.state.conn = buddy.connect()
+        row = self.state.conn.execute("SELECT tokens,input_tokens,cached_input_tokens,output_tokens FROM daily_usage").fetchone()
+        self.assertEqual(row, (123, None, None, None))
+
     def test_private_atomic_config_and_failed_write(self):
         self.state.update_config({"ollama_api_key": "test-key"})
         self.assertEqual(os.stat(buddy.CONFIG_PATH).st_mode & 0o777, 0o600)

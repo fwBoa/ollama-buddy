@@ -25,8 +25,17 @@ buckets = [{"from": (now - timedelta(days=offset)).date().isoformat() + "T00:00:
 data = {"buckets": buckets, "totals": {
     "usage_usd": sum(day["usage_usd"] for day in buckets),
     "request_count": sum(day["request_count"] for day in buckets)}}
+for day in buckets:
+    day.update(input_tokens=day['request_count'] * 12480,
+               cached_input_tokens=day['request_count'] * 4160,
+               output_tokens=day['request_count'] * 1920)
+monthly_used = sum(day['usage_usd'] for day in buckets if day['from'] >= anchor.isoformat()[:10])
+balance = {'included': {'allowance_usd': 60, 'balance_usd': 60-monthly_used,
+                       'period': {'from': anchor.isoformat(), 'until': buddy.month_shift(anchor,1).isoformat()}},
+           'purchased': {'balance_usd': 12.5}}
 buddy.ollama_account = lambda: {"plan": "pro", "email": "never-expose@example.test"}
 buddy.cloud_usage = lambda key: data
+buddy.cloud_balance = lambda key: ({'error':'HTTP 503'} if os.environ.get('OLLAMA_BUDDY_TEST_FALLBACK') else balance)
 state = buddy.State({**buddy.DEFAULT_CONFIG, "ollama_api_key": "fixture-secret",
                      "quota_reset_at": int(anchor.timestamp() * 1000)})
 state.conn.execute("INSERT INTO cloud_samples VALUES (?,?,?,?)",

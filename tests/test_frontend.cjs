@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
 async function main() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ollama-buddy-browser-'));
   const server = spawn('python3', [path.join(__dirname, 'fixture_server.py')], {
-    env: { ...process.env, OLLAMA_BUDDY_DATA: temporary, PYTHONDONTWRITEBYTECODE: '1' },
+    env: { ...process.env, OLLAMA_BUDDY_DATA: temporary, PYTHONDONTWRITEBYTECODE: '1', OLLAMA_BUDDY_TEST_FALLBACK:'1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let browser;
@@ -62,7 +62,37 @@ async function main() {
     await dashboard.locator('.nav [data-view="activity"]').click();
     assert.equal(await dashboard.locator('.ledger tbody tr').count(), payload.daily_days.length);
     assert.equal(await dashboard.locator('#main').evaluate(el=>getComputedStyle(el).outlineStyle), 'none');
+    const input30 = payload.daily_days.reduce((sum,day)=>sum+day.input_tokens,0);
+    assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'), input30.toLocaleString('en-US'));
+    const cached30 = payload.daily_days.reduce((sum,day)=>sum+day.cached_input_tokens,0);
+    assert.equal(await dashboard.locator('[data-token="cached_input_tokens"]').getAttribute('title'), cached30.toLocaleString('en-US'));
+    await dashboard.locator('[data-chart-range="7"]').click();
+    assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'), payload.daily_days.slice(-7).reduce((sum,day)=>sum+day.input_tokens,0).toLocaleString('en-US'));
+    await dashboard.evaluate(data=>applyData({...data,daily_days:data.daily_days.map(day=>({...day,cached_input_tokens:null}))}),payload);
+    assert.equal(await dashboard.locator('[data-token="cached_input_tokens"]').innerText(),'…');
+    assert.match(await dashboard.locator('.tokens').innerText(),/Missing values are not zero/);
+    await dashboard.evaluate(data=>applyData(data),payload);
+    console.log('PASS token counters, cache subset, selected range and unavailable values');
     await dashboard.locator('.nav [data-view="overview"]').click();
+    const official = {...payload,quota:{...payload.quota,measurement:'balance',source:'api',monthly:60,current:12.34,remaining:47.66,purchased:7.5,ratio:12.34/60,resets_source:'balance',error:null}};
+    await dashboard.evaluate(data=>applyData(data),official);
+    assert.match(await dashboard.locator('.quota').innerText(),/Monthly credits/);
+    assert.match(await dashboard.locator('.quota').innerText(),/Purchased credits[\s\S]*7.50/);
+    assert.match(await dashboard.locator('#hero').innerText(),/12.34/);
+    await mini.evaluate(data=>render(data),official);
+    assert.match(await mini.locator('#body').innerText(),/Monthly credits/);
+    await dashboard.evaluate(data=>applyData({...data,usage_available:false,usage_error:'HTTP 503'}),official);
+    assert.match(await dashboard.locator('#app').innerText(),/Daily spending unavailable/);
+    assert.equal(await dashboard.locator('.quota .meter').count(),1);
+    assert.equal(await dashboard.locator('#api-key').count(),0);
+    const legacy = {...official,quota:{...official.quota,ratio:null,current:null,monthly:0,error:'legacy plan',legacy_limits:{session:{remaining_percent:75,resets_at:official.quota.resets_at},weekly:{remaining_percent:40,resets_at:official.quota.resets_at}}}};
+    await dashboard.evaluate(data=>applyData(data),legacy);
+    assert.match(await dashboard.locator('.quota').innerText(),/Legacy plan/);
+    assert.match(await dashboard.locator('.quota').innerText(),/75.0%/);
+    assert.equal(await dashboard.locator('.quota .meter').count(),0);
+    await dashboard.evaluate(data=>applyData(data),payload);
+    await mini.evaluate(data=>render(data),payload);
+    console.log('PASS official credits in both views, purchased balance, independent outage and legacy plans');
     await dashboard.locator('[data-chart-range="7"]').click();
     for (const width of [360, 680, 880, 1120]) {
       await dashboard.setViewportSize({ width, height: 880 });
