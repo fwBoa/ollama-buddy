@@ -17,7 +17,8 @@ usage.db-wal
 Ollama Buddy.app/
 *.icns
 
-# Captures generees et specifications de travail conservees en local.
+# Captures de travail et specifications conservees en local.
+# Les apercus publics des README vivent dans docs/readme/.
 /docs/*.png
 /specs.md
 
@@ -27,6 +28,8 @@ Ollama Buddy.app/
 
 __pycache__/
 *.pyc
+.venv/
+node_modules/
 .DS_Store
 
 # Reglages locaux de Claude Code (permissions, chemins de la machine).

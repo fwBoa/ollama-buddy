@@ -1,263 +1,216 @@
 <div align="center">
-  <img src="web/ollama.png" alt="Ollama Buddy" width="88">
+  <img src="web/ollama.png" alt="Ollama Buddy logo" width="80">
   <h1>Ollama Buddy</h1>
-  <p><em>Your Ollama Cloud spending on your Mac — official credits, tokens, live updates</em></p>
-
-  [Français](README.fr.md) · [Interface](#interface) · [Install](#install) · [Monthly cycle](#monthly-cycle) · [Security](#security)
+  <p>Your Ollama Cloud credits and daily usage, at a glance on your Mac.</p>
 </div>
 
-Ollama Buddy reads your account's daily cloud spending with your own API key. A
-Python server serves a dashboard in a native macOS window, with a compact summary
-in the menu bar. Running the server directly also works in a browser.
+[Français](README.fr.md) · [Screenshots](#screenshots) · [Install](#install) · [Usage](#usage) · [Development](#development)
 
-- Overview with today’s spending and requests, monthly credits and a cycle preview.
-- **Activity** view with an interactive current-cycle/7/30 calendar-day chart and every daily
-  record in the available period. Missing records are distinct from zero spending.
-- Dedicated settings for connection, monthly cycle, alerts and appearance.
-  Unfinished input survives live updates.
-- Official monthly allowance, remaining credits, reset date and purchased credits.
-- Input/output/cached token counters for the current cycle or selected 7/30-day activity range.
-- Estimated projections once a full day of balance samples has accumulated.
-- Optional native notifications at 70%, 90% and 100% of the monthly allowance used.
-- English/French and automatic/light/dark themes in Settings, shared between both views.
-- Native API-key storage in macOS Keychain, with migration from the previous file.
-- Python 3.9+ standard library at runtime; no frontend framework or build step.
+Ollama Buddy is a macOS menu bar utility for following your Ollama Cloud consumption.
+See your remaining credits without opening the website, then explore daily spending,
+requests and tokens in the dashboard. It reads Ollama’s official APIs with your own key.
 
-## Interface
+<img src="docs/readme/dashboard.png" alt="Overview: today’s spending and requests, cycle chart and monthly credits" width="100%">
 
-- **Overview**: today’s spending and requests, monthly credits and a cycle preview.
-  Selecting a bar opens that day in Activity.
-- **Activity**: spending, requests, tokens and daily records for the current cycle
-  or the selected 7/30-day period. Missing records differ from zero spending.
-- **Settings**: connection, optional fallback cycle, alerts, theme and language.
-- **Menu bar**: remaining credits, next local renewal and today’s usage, with
-  access to the full dashboard.
+## Features
+
+- **Official credits:** your actual monthly allowance, remaining balance and renewal date.
+  Purchased credits stay separate; session/weekly limits are supported for legacy plans.
+- **Daily activity:** explore the current billing cycle or its latest 7/30 days.
+  Spending, request counts, tokens and the table follow the same selection.
+- **Menu bar summary:** consumed percentage, remaining credits and today’s usage;
+  orange at 70%, red at 90%.
+- **Optional alerts:** native notifications at 70%, 90% and 100%, with threshold deduplication.
+- **Estimated outlook:** projections after at least 24 hours of comparable samples.
+- **Shared preferences:** English/French and system/light/dark themes across both views.
+- **Local storage:** API key in macOS Keychain, readings in SQLite. No frontend framework
+  or third-party Python runtime dependencies.
+
+## Screenshots
+
+These screenshots show the interface used by the app, with synthetic data rather than
+private account information. The main preview is above; other views are below.
+
+<details>
+<summary>Activity, settings, dark theme and menu bar</summary>
+
+### Activity
+
+Select a day to inspect its spending and requests. Tokens and records follow the chosen period.
+
+<img src="docs/readme/activity.png" alt="Activity: period totals, interactive chart, token counters and daily records" width="100%">
+
+### Settings
+
+Manage connection, optional fallback calculation, alerts and appearance.
+
+<img src="docs/readme/settings.png" alt="Settings: connection, collapsed fallback settings, notifications, theme and language" width="100%">
+
+### Dark theme
+
+<img src="docs/readme/dashboard-dark.png" alt="Overview with the dark theme" width="100%">
+
+### Menu bar panel
+
+<img src="docs/readme/menu-bar.png" alt="Compact panel: remaining credits, renewal, today’s spending and requests" width="300">
+
+</details>
 
 ## Install
 
-To build the native app: macOS 12+, Xcode command line tools (`swiftc`, `lipo`,
-`iconutil`, `codesign`), Python 3.9+ and Pillow for the icon.
+**Requirements:** macOS 12 or later, Apple Silicon or Intel, Xcode command line tools
+and Python 3.9+. Pillow is needed only to generate the icon during the build.
+The native launcher uses `/usr/bin/python3`, provided by the Xcode tools.
+
+Install the Xcode tools if needed, then build locally:
 
 ```bash
 xcode-select --install
-pip3 install pillow
 
 git clone https://github.com/fwBoa/ollama-buddy.git
 cd ollama-buddy
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install pillow
 ./build_app.sh
 open "Ollama Buddy.app"
 ```
 
-The bundle contains both Apple Silicon and Intel executables. Add `--install` to
-copy it into `/Applications`. The native launcher uses `/usr/bin/python3`, so its
-runtime requires the Xcode command line tools too.
+The build produces a universal app containing both architectures. Drag it into
+Applications, or build and copy it there with `./build_app.sh --install`.
 
-The app is signed ad-hoc, without Developer ID notarisation. A downloaded bundle
-can be blocked by Gatekeeper; building locally is the recommended installation.
-Only for a bundle you trust, removing its quarantine marker is possible with:
+> [!IMPORTANT]
+> The bundle uses an ad-hoc signature and is not notarised with Developer ID.
+> A downloaded bundle may be blocked by Gatekeeper; local builds are recommended.
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/Ollama Buddy.app"
-```
-
-To use the dashboard without the native wrapper:
+The dashboard also works without the macOS wrapper:
 
 ```bash
 python3 ollama_buddy.py
-# Optional: --no-browser --port 11499
+# Options: --no-browser --port 11499
 ```
 
-Closing the native window keeps the menu bar app running. `⌘Q` stops the server
-if this app started it; a compatible pre-existing native server stays running. A plain CLI server is
-kept separate so the native app can use Keychain storage. On launch, the app also
-checks that a reused server supports daily tracking from renewal, Balance and token counters.
+This mode needs only Python 3.9+ and its standard library. Native notifications and
+Keychain storage require the macOS app.
 
-## Connect and configure
+## Usage
 
-1. Create an API key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
-2. Paste it into the dashboard.
-3. The app reads your allowance, remaining credits and exact cycle dates from
-   [Ollama Balance](https://docs.ollama.com/api/balance), using the same key.
-4. **Settings** retains an optional fallback cap and UTC reset reference. These
-   apply only when Balance is unavailable, and the result is labelled estimated.
-   With no manual cap, the fallback uses the local plan's default (Pro $60,
-   Max $300, Team $1,000). It is not the authority for your actual allowance.
+1. Create a key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
+2. Paste it into the dashboard and select **Connect account**.
+3. The allowance and billing cycle are read automatically from
+   [Ollama Balance](https://docs.ollama.com/api/balance).
+4. Use **Overview** for today and monthly credits, **Activity** for period analysis,
+   and **Settings** for connection, alerts and appearance.
 
-The top-right button refreshes cloud data. Theme and language selectors live
-in Settings and default to the system preferences. Both are saved on the server.
+Reset dates use local time, with the exact UTC reference in a tooltip. Daily records
+use UTC. The refresh button requests fresh data; the shared cache normally limits
+reads to once a minute per endpoint, and `Retry-After` is respected after a rate limit.
+Ollama may publish new usage with a delay.
 
-Reset dates are shown once in local time with the timezone; their UTC reference
-is available in a tooltip. Purchased
-credits are displayed separately from included monthly credits. Disconnecting
-requires confirmation and clears locally saved account history.
+Closing the window leaves the menu bar app running. Quitting stops a server started
+by that app instance; a reused compatible native server is left running.
 
 | Shortcut | Action |
 |---|---|
 | `⌘1` | Show the window |
 | `⌘R` | Reload the dashboard |
-| `⌘⇧R` | Invalidate the cache and refresh |
+| `⌘⇧R` | Request fresh cloud data |
 | `⌘O` | Open in the browser |
 | `⌘Q` | Quit |
 
-The menu bar shows a llama and the consumed percentage, with an orange alert
-at 70% and red at 90%. Unavailable usage shows a dash. Its summary shows
-today’s spending and requests. Old model counters are no longer shown.
+### Credits, cycles and tokens
 
-## Monthly cycle
+- **Monthly credits consumed** = included allowance − remaining included balance.
+  Daily spending may also use purchased credits, so the two amounts can differ.
+- **Requests** count API calls in available daily records, not conversations or days.
+  Missing readings and token counters stay unavailable instead of becoming zero.
+- **Cached input tokens** are already included in input tokens and are not added again.
+- Activity starts at the latest renewal. A renewal during a UTC day cannot split
+  that first daily record; it may include pre-renewal usage. The official balance
+  still follows the exact renewal time.
+- If Balance is unavailable, **Fallback estimate** uses a manually configured UTC
+  reference and complete daily records. A partial first day is excluded; incomplete
+  history prevents a quota estimate. Default fallback caps are Pro $60, Max $300,
+  Team $1,000; a manual cap overrides them. These are app defaults, not authoritative
+  prices, and the local account is queried only when needed for this fallback.
+- Legacy plans show session/weekly remaining percentages without invented monthly
+  dollars or monthly alerts. Daily costs and tokens can be unavailable.
+- For teams, the credit balance is shared; this app reads personal activity.
+  The API does not yet expose the [per-model breakdown](https://docs.ollama.com/api/cloud-usage#coming-soon).
 
-The source for the quota is [`GET /api/balance`](https://docs.ollama.com/api/balance).
-It supplies `included.allowance_usd`, `included.balance_usd`, the exact period
-`from`/`until`, and `purchased.balance_usd`. Included credits used are calculated
-as allowance minus remaining balance. Purchased credits remain separate; they
-are not included in that percentage. The official balance works without a manual
-reset date or complete daily history, including on a reset day.
+Daily records are kept for 400 days. Saved complete days can fill older API gaps,
+including 31-day cycles. Replacing or disconnecting a key clears that account’s local
+history; it does not revoke the key on Ollama.
 
-Legacy plans instead return session and weekly limits. The app displays those
-remaining percentages, without inventing a monthly dollar quota or sending
-monthly threshold notifications. A zero included allowance is also shown without
-a made-up percentage. For teams, Balance is shared across members whereas the
-activity endpoint uses the default personal scope (`self`).
+### Notifications and projections
 
-[`GET /api/usage?range=30d`](https://docs.ollama.com/api/cloud-usage) supplies the
-UTC daily chart and table. Activity starts on the latest renewal date from Balance (or the configured
-cycle reference in fallback mode). Earlier daily records remain stored but are
-hidden from charts, tables, token counters and the menu bar. The default **Current
-cycle** chart can show all 31 days; 7/30-day choices stay within that cycle.
-With no known cycle, available records from the last 30 days are shown. Spending
-can draw on purchased credits and is not the same measure as included credits consumed. New usage may take time to appear on
-Ollama. If the activity request fails, an available official balance remains visible.
+Alerts are off by default. Enable them in Settings and grant macOS permission.
+Keep the app running: one notification is sent for the highest newly reached threshold
+in a cycle. Restarting or toggling alerts does not repeat an already delivered threshold.
+A new key, cycle or calculation setting starts a new context.
 
-Daily buckets cannot be split at an exact renewal time. If renewal occurs during
-a UTC day, that first daily record is shown with a contextual label and a collapsed explanation that it may include
-pre-renewal spending, requests and tokens. The official monthly balance still
-uses the exact cycle boundary; the fallback quota excludes that partial day.
+**Estimated outlook** needs 24 hours of samples from the same cycle and allowance.
+It is a projection, not a guarantee, and does not predict purchased-credit spending.
 
-If Balance is unavailable, the fallback quota sums complete UTC days in the
-manually configured cycle and divides by the cap. A partial reset day is excluded;
-an incomplete cycle withholds this estimate. Both boundaries are replayed from
-the original UTC anchor, preserving day 31 through February. Empty fallback
-settings do not prevent the official balance from working.
+## Data and security
 
-Daily readings are retained in SQLite for 400 days. Complete stored days can fill
-older API gaps, including 31-day cycles; partial leading buckets never overwrite
-complete days. Switching keys clears the daily and balance sample history.
+Native data lives in `~/Library/Application Support/OllamaBuddy/`. CLI mode uses the
+project directory, or the directory set with `OLLAMA_BUDDY_DATA`.
 
-Balance samples are recorded at most every five minutes. **Estimated outlook**
-requires at least 24 hours of samples with the same cycle start and allowance.
-Projections remain estimates and do not reconstruct purchased-credit spending.
-Fallback rate samples are kept separate from official balance samples.
+- The native key is stored in Keychain; CLI mode uses a private `0600` configuration file.
+  Native migration removes the old plaintext key only after successful transfer.
+- Credentials go only to Ollama over HTTPS. Neither the key nor local account details
+  are sent to the browser; authenticated redirects are refused.
+- HTTP binds to `127.0.0.1` only. Host/origin checks, validated JSON, escaped dynamic
+  text and a nonce-based content security policy protect browser interactions.
+- The app is not sandboxed. Programs running as your user can access the local HTTP API.
 
-### Token counters
+## Troubleshooting
 
-**Activity** shows input, output and cached input tokens for the current cycle or selected 7/30-day
-range, plus the selected day’s counters in a collapsed detail. Cached input is a subset of input tokens
-and is never added again. Missing counters are shown as unavailable, not zero.
-Old stored totals cannot reveal the split; migrations preserve them without
-inventing values. A subsequent API reading fills in counters it actually supplies.
-
-The API does not yet expose usage by model; Ollama lists it under
-[Coming soon](https://docs.ollama.com/api/cloud-usage#coming-soon). Old per-model
-archives are not displayed. Replacing a key does not revoke it on Ollama.
-
-## Notifications
-
-Enable **Notifications at 70%, 90% and 100%** in Settings in the native app.
-The feature is off by default. macOS asks for notification permission, and the
-page explains when system settings block notifications. No alert is generated
-without a calculated quota. Keep the native app running for alerts to work.
-
-The highest threshold reached is notified once per cycle. If usage jumps from
-below 70% to 95%, one 90% alert is sent. Falling below and recrossing a notified
-threshold, restarting the app or toggling alerts does not repeat it. A new cycle,
-key, cap or reset anchor starts a new alert context. Clicking the alert opens the
-dashboard. Alerts use the official balance when available, or the explicitly labelled fallback estimate.
-Notifications are unavailable for a standalone CLI server.
-
-## Security
-
-- The server binds only to `127.0.0.1`, on port `11499` by default.
-- Requests must use the actual local host and port. Foreign browser origins and
-  cross-site requests are rejected, protecting against cross-site settings changes
-  and DNS rebinding. Refresh is a POST action.
-- Settings endpoints require a JSON object, bounded request size, known fields,
-  finite non-negative amounts, a valid timestamp and supported preference values.
-- The native app stores the key in **macOS Keychain**, through its signed native
-  executable and Security framework. The key is passed through standard input,
-  never command-line arguments. No third-party key-storage dependency is used.
-- On native launch, an existing plaintext key is copied to Keychain before it is
-  removed from `config.json`. If access fails, the file is kept and migration is
-  retried rather than losing the key. macOS may ask you to authorize access again
-  after rebuilding the ad-hoc signed app.
-- Standalone CLI launches keep the private-file storage (`0600`) unless launched
-  with `OLLAMA_BUDDY_KEYCHAIN_HELPER` pointing to the new native executable.
-  CLI file storage remains plaintext. Keychain protects storage at rest; it does
-  not make this app an isolation boundary against software running as your user.
-- The key goes to `ollama.com` in the HTTPS Authorization header. It is never sent
-  back to the dashboard. Local account details are not included in browser responses.
-- Dynamic error text is HTML-escaped. Pages carry a nonce-based script policy,
-  deny framing and restrict their network requests to the local server.
-
-These protections target browser-origin attacks. Local programs can still access
-the HTTP API. The native bundle is not sandboxed or notarised.
-
-## Development and data
-
-| File | Role |
+| Symptom | Check |
 |---|---|
-| `ollama_buddy.py` | Cloud/account reads, cycle calculation, SQLite, HTTP and SSE |
-| `web/index.html` | Dashboard, settings and translations |
-| `web/mini.html` | Menu bar summary |
-| `app/main.swift` | Native lifecycle, windows, menus and navigation |
-| `app/make_icon.py` | Pillow/iconutil icon generator |
-| `build_app.sh` | Universal bundle assembly |
-| `config.example.json` | Configuration shape; fallback cap; zero follows the local plan |
-| `tests/test_backend.py` | Cycle, validation, cache, storage and HTTP regression tests |
-| `tests/test_frontend.cjs` | Browser regression tests with synthetic data; requires Playwright |
-| `tests/capture_ui.cjs` | English/French Local screenshots using synthetic data |
+| Credits update but activity does not | Refresh; daily usage may be delayed or temporarily unavailable. A valid balance remains visible. |
+| No quota estimate | Check the fallback reference, cap and history coverage; official Balance needs no manual setup. |
+| Keychain unavailable after rebuilding | Unlock Keychain and authorize the rebuilt app if macOS asks. Retry connection in the app. |
+| No notification | Keep the app running, enable alerts and allow notifications in macOS settings. |
+| Missing build tool or Python | Install the Xcode command line tools and check the active Python environment. |
 
-The native app stores `config.json` and `usage.db` in
-`~/Library/Application Support/OllamaBuddy/`. Direct launches use the project
-folder unless `OLLAMA_BUDDY_DATA` selects another directory. Secrets, databases
-and build artefacts are ignored by Git.
+## Development
 
-SQLite stores `daily_usage`, `balance_samples` and `cloud_samples`, using WAL mode. Legacy model
-rows/colours may remain in older databases but have no display. Deleting the
-base loses the saved daily history and rate samples; only what is still available
-from the API can be recovered. Startup also removes unused legacy tables.
+Python serves the API, SQLite storage and SSE stream; Swift provides the native window,
+menu bar, Keychain and notifications. The web views are plain HTML/CSS/JavaScript.
 
-The web views receive SSE pushes, with keepalives and reconnection. The dashboard
-falls back to five-second polling if EventSource is unavailable. A watcher checks
-every two seconds; shared caching limits reads to each cloud endpoint to roughly one per minute
-except explicit refreshes. A minute tick updates the cycle/countdown even if
-spending has not changed. The native menu bar separately reads the cached payload
-every 20 seconds.
+| Path | Purpose |
+|---|---|
+| `ollama_buddy.py` | Cloud reads, validation, cycles, cache, SQLite, HTTP and SSE |
+| `web/index.html`, `web/mini.html` | Dashboard and compact panel |
+| `app/main.swift`, `app/Info.plist` | Native app and macOS compatibility |
+| `build_app.sh`, `app/make_icon.py` | Universal build and icon generation |
+| `config.example.json` | Configuration reference |
+| `tests/` | Backend/browser checks and synthetic screenshot generation |
 
-Run the backend tests without dependencies or a real Ollama account:
+Backend tests use temporary storage and require no real Ollama account:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-The browser suite is run with `node tests/test_frontend.cjs` when Playwright and
-its Chromium browser are available. It uses a temporary data directory, mocked
-Ollama responses and a simulated Keychain, without touching real credentials.
-
-Regenerate the English and French Local screenshots with the same dependencies:
+For browser checks and screenshot generation, install the optional development tools:
 
 ```bash
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium
+node tests/test_frontend.cjs
 node tests/capture_ui.cjs
 ```
 
-Screenshots also use synthetic data without accessing your account or Keychain.
-The script only replaces the demonstration PNGs in `docs/`, which Git ignores.
-
-After building, the native threshold/deduplication checks can be run with:
+The screenshot script replaces the ten public English/French PNGs in `docs/readme/`.
+It uses mocked Ollama responses and Keychain; it never reads real credentials.
+`specs.md`, working screenshots in `docs/`, secrets, databases and build artefacts
+remain ignored. Rebuild after application source changes; native checks run with:
 
 ```bash
 "Ollama Buddy.app/Contents/MacOS/OllamaBuddy" --test-alerts
 ```
 
-Real Keychain access and notification permission are completed by macOS on native
-launch/opt-in. Rebuild the bundle after source edits to use the latest version.
-
-[MIT licence](LICENSE). This is an independent app, not an official Ollama client.
+An independent utility, not an official Ollama application.

@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
 
 async function main() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ollama-buddy-captures-'));
-  const output = path.join(__dirname, '..', 'docs');
+  const output = path.join(__dirname, '..', 'docs', 'readme');
   const server = spawn('python3', [path.join(__dirname, 'fixture_server.py')], {
     env: { ...process.env, OLLAMA_BUDDY_DATA: temporary, PYTHONDONTWRITEBYTECODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -54,6 +54,8 @@ async function main() {
       // This is the native fixture; no macOS permissions or Keychain requests run here.
       await page.screenshot({ path: path.join(output, `settings${suffix}.png`), fullPage: true });
       await page.locator('#theme-select').selectOption('dark');
+      await page.locator('#save-status').waitFor({ state: 'visible' });
+      await page.locator('#save-status').waitFor({ state: 'hidden' });
       await page.locator('.nav [data-view="overview"]').click();
       await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
       await page.screenshot({ path: path.join(output, `dashboard-dark${suffix}.png`), fullPage: true });
@@ -68,7 +70,7 @@ async function main() {
       await context.close();
     }
     assert.deepEqual(errors, []);
-    console.log('Generated 10 screenshots in docs/ using synthetic data (English and French).');
+    console.log('Generated 10 README screenshots in docs/readme/ using synthetic data (English and French).');
   } finally {
     if (browser) await browser.close();
     server.kill('SIGTERM');
