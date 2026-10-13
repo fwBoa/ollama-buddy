@@ -156,6 +156,34 @@ class StateFixture(unittest.TestCase):
 
 
 class StateTests(StateFixture):
+    def test_activity_starts_at_official_renewal_including_partial_day(self):
+        with patch.object(buddy,'datetime',wraps=datetime) as clock:
+            clock.now.return_value = utc(2026,10,13,10)
+            self.state.cfg.update(ollama_api_key='test-key',quota_reset_at=epoch(utc(2026,9,1)))
+            buddy.cloud_balance.return_value = {'included':{'allowance_usd':60,'balance_usd':59.7,
+                'period':{'from':'2026-10-12T12:00:00Z','until':'2026-11-12T12:00:00Z'}},
+                'purchased':{'balance_usd':0}}
+            data = usage([('2026-10-11',99),('2026-10-12',.4),('2026-10-13',.2)])
+            for day in data['buckets']: day['cached_input_tokens'] = 1
+            with patch.object(buddy,'cloud_usage',return_value=data):
+                payload = self.state.payload()
+            self.assertEqual([day['day'] for day in payload['daily_days']],['2026-10-12','2026-10-13'])
+            self.assertEqual(payload['activity_start'],epoch(utc(2026,10,12,12)))
+            self.assertEqual(payload['activity_start_source'],'balance')
+            self.assertEqual(payload['activity_partial_day'],'2026-10-12')
+            self.assertAlmostEqual(payload['quota']['current'],.3)
+            self.assertEqual(self.state.conn.execute('SELECT count(*) FROM daily_usage').fetchone()[0],3)
+            # A real renewal changes the visible window without clearing saved history.
+            clock.now.return_value = utc(2026,11,12,15)
+            self.state.invalidate_cloud()
+            buddy.cloud_balance.return_value = {'included':{'allowance_usd':60,'balance_usd':60,
+                'period':{'from':'2026-11-12T00:00:00Z','until':'2026-12-12T00:00:00Z'}},
+                'purchased':{'balance_usd':0}}
+            with patch.object(buddy,'cloud_usage',return_value=usage([('2026-11-11',5),('2026-11-12',0)])):
+                payload = self.state.payload()
+            self.assertEqual([day['day'] for day in payload['daily_days']],['2026-11-12'])
+            self.assertIsNone(payload['activity_partial_day'])
+
     def test_rate_limit_backoff_survives_refresh_but_not_account_change(self):
         self.state.cfg['ollama_api_key'] = 'test-key'
         buddy.cloud_balance.return_value = {'error':'HTTP 429','retry_after':120}
@@ -502,6 +530,9 @@ class HTTPTests(StateFixture):
         self.assertEqual(self.state.cfg["monthly_quota"], 0)
 
     def test_local_json_and_native_refresh_work(self):
+        status, _, body = self.request('GET','/health')
+        self.assertEqual(status,200)
+        self.assertTrue(json.loads(body)['cycle_activity'])
         status, _, _ = self.post({"monthly_quota": 60}, {"Origin": f"http://127.0.0.1:{self.port}"})
         self.assertEqual(status, 200)
         self.assertEqual(self.state.cfg["monthly_quota"], 60)

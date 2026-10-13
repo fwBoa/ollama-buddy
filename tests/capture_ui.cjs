@@ -48,7 +48,7 @@ async function main() {
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({ path: path.join(output, `dashboard${suffix}.png`), fullPage: true });
       await page.locator('.nav [data-view="activity"]').click();
-      await page.locator('[data-chart-range="30"]').click();
+      await page.locator('[data-chart-range="cycle"]').click();
       await page.screenshot({ path: path.join(output, `activity${suffix}.png`), fullPage: true });
       await page.locator('.nav [data-view="settings"]').click();
       // This is the native fixture; no macOS permissions or Keychain requests run here.

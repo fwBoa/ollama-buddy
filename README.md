@@ -11,12 +11,12 @@ Python server serves a dashboard in a native macOS window, with a compact summar
 in the menu bar. Running the server directly also works in a browser.
 
 - Overview with spending, requests, official credits and the four most recent days.
-- **Activity** view with an interactive 7/30 calendar-day chart and every daily
+- **Activity** view with an interactive current-cycle/7/30 calendar-day chart and every daily
   record in the available period. Missing records are distinct from zero spending.
 - Dedicated settings for connection, monthly cycle, alerts and appearance.
   Unfinished input survives live updates.
 - Official monthly allowance, remaining credits, reset date and purchased credits.
-- Input/output/cached token counters for the selected 7/30-day activity range.
+- Input/output/cached token counters for the current cycle or selected 7/30-day activity range.
 - Estimated projections once a full day of balance samples has accumulated.
 - Optional native notifications at 70%, 90% and 100% of the monthly allowance used.
 - English/French and automatic/light/dark themes in Settings, shared between both views.
@@ -37,8 +37,8 @@ Select a chart bar to inspect a day's record.
 
 ### Activity
 
-Switch between 7 and 30 calendar days and inspect every record in the available
-period, including input, output and cached token counters. Missing records are
+Activity starts at the latest renewal. Switch between the full current cycle
+and 7/30 calendar days within it, including input, output and cached token counters. Missing records are
 distinct from days with zero spending.
 
 <img src="docs/activity.png" alt="Activity view with daily chart, token counters and daily records" width="100%">
@@ -100,7 +100,7 @@ python3 ollama_buddy.py
 Closing the native window keeps the menu bar app running. `⌘Q` stops the server
 if this app started it; a compatible pre-existing native server stays running. A plain CLI server is
 kept separate so the native app can use Keychain storage. On launch, the app also
-checks that a reused server supports daily tracking, Balance and token counters.
+checks that a reused server supports daily tracking from renewal, Balance and token counters.
 
 ## Connect and configure
 
@@ -148,10 +148,18 @@ a made-up percentage. For teams, Balance is shared across members whereas the
 activity endpoint uses the default personal scope (`self`).
 
 [`GET /api/usage?range=30d`](https://docs.ollama.com/api/cloud-usage) supplies the
-UTC daily chart and table. Activity shows available daily spending across the last
-30 UTC days, including spending that may draw on purchased credits; it is not the
-same measure as included credits consumed. New usage may take time to appear on
+UTC daily chart and table. Activity starts on the latest renewal date from Balance (or the configured
+cycle reference in fallback mode). Earlier daily records remain stored but are
+hidden from charts, tables, token counters and the menu bar. The default **Current
+cycle** chart can show all 31 days; 7/30-day choices stay within that cycle.
+With no known cycle, available records from the last 30 days are shown. Spending
+can draw on purchased credits and is not the same measure as included credits consumed. New usage may take time to appear on
 Ollama. If the activity request fails, an available official balance remains visible.
+
+Daily buckets cannot be split at an exact renewal time. If renewal occurs during
+a UTC day, that first daily record is shown with a note that it may include
+pre-renewal spending, requests and tokens. The official monthly balance still
+uses the exact cycle boundary; the fallback quota excludes that partial day.
 
 If Balance is unavailable, the fallback quota sums complete UTC days in the
 manually configured cycle and divides by the cap. A partial reset day is excluded;
@@ -170,7 +178,7 @@ Fallback rate samples are kept separate from official balance samples.
 
 ### Token counters
 
-**Activity** shows input, output and cached input tokens for the selected 7/30-day
+**Activity** shows input, output and cached input tokens for the current cycle or selected 7/30-day
 range, plus the selected day's counters. Cached input is a subset of input tokens
 and is never added again. Missing counters are shown as unavailable, not zero.
 Old stored totals cannot reveal the split; migrations preserve them without

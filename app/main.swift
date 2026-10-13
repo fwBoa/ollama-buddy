@@ -628,6 +628,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                     && json?["native"] as? Bool == true
                     && json?["daily_usage"] as? Bool == true
                     && json?["balance_tokens"] as? Bool == true
+                    && json?["cycle_activity"] as? Bool == true
             } else {
                 ok = false
             }

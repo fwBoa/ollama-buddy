@@ -49,6 +49,10 @@ async function main() {
     assert.equal(await dashboard.locator('[data-model]').count(), 0);
     assert.equal(await mini.locator('#body').innerText().then(text => text.includes('<img')), false);
     const payload = await (await context.request.get(fixture.url + '/api/usage')).json();
+    assert.equal(payload.daily_days[0].day,fixture.anchor.slice(0,10));
+    assert.equal(await dashboard.locator('[data-chart-range="cycle"]').getAttribute('aria-pressed'),'true');
+    assert.equal(await dashboard.locator('.chart-day').count(),payload.daily_days.length);
+    assert.match(await dashboard.locator('#sub').innerText(),/Since the configured cycle start/);
     assert.equal(JSON.stringify(payload).includes('fixture-secret'), false);
     assert.equal(JSON.stringify(payload).includes('never-expose@example.test'), false);
     console.log('PASS historical models removed, CSP and secret minimisation');
@@ -75,7 +79,9 @@ async function main() {
     console.log('PASS token counters, cache subset, selected range and unavailable values');
     await dashboard.locator('.nav [data-view="overview"]').click();
     const official = {...payload,quota:{...payload.quota,measurement:'balance',source:'api',monthly:60,current:12.34,remaining:47.66,purchased:7.5,ratio:12.34/60,resets_source:'balance',error:null}};
+    official.activity_start_source = 'balance';
     await dashboard.evaluate(data=>applyData(data),official);
+    assert.match(await dashboard.locator('#sub').innerText(),/Since renewal/);
     assert.match(await dashboard.locator('.quota').innerText(),/Monthly credits/);
     assert.match(await dashboard.locator('.quota').innerText(),/Purchased credits[\s\S]*7.50/);
     assert.match(await dashboard.locator('#hero').innerText(),/12.34/);
@@ -93,6 +99,21 @@ async function main() {
     await dashboard.evaluate(data=>applyData(data),payload);
     await mini.evaluate(data=>render(data),payload);
     console.log('PASS official credits in both views, purchased balance, independent outage and legacy plans');
+    await dashboard.locator('.nav [data-view="activity"]').click();
+    const cycleStart = Date.parse(fixture.today+'T00:00:00Z')-30*86400000;
+    const cycleDays = Array.from({length:31},(_,i)=>({day:new Date(cycleStart+i*86400000).toISOString().slice(0,10),usd:1,requests:1,input_tokens:10,output_tokens:2,cached_input_tokens:3}));
+    await dashboard.evaluate(({data,cycleStart,cycleDays})=>applyData({...data,activity_start:cycleStart,activity_start_source:'balance',daily_days:cycleDays}),{data:official,cycleStart,cycleDays});
+    await dashboard.locator('[data-chart-range="cycle"]').click();
+    assert.equal(await dashboard.locator('.chart-day').count(),31);
+    assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'),'310');
+    await dashboard.evaluate(()=>applyData({...lastData,activity_start:lastData.activity_start+12*3600000,activity_partial_day:lastData.daily_days[0].day}));
+    assert.match(await dashboard.locator('#renewal-note').innerText(),/may include usage before renewal/);
+    await dashboard.locator('[data-chart-range="30"]').click();
+    assert.equal(await dashboard.locator('.chart-day').count(),30);
+    assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'),'300');
+    await dashboard.evaluate(data=>applyData(data),payload);
+    await dashboard.locator('.nav [data-view="overview"]').click();
+    console.log('PASS renewal window, full 31-day cycle, matching token period and partial-day note');
     await dashboard.locator('[data-chart-range="7"]').click();
     for (const width of [360, 680, 880, 1120]) {
       await dashboard.setViewportSize({ width, height: 880 });

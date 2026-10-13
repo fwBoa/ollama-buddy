@@ -837,6 +837,9 @@ def empty_usage() -> dict:
         "unit": "jours",
         "days": [],
         "daily_days": [],
+        "activity_start": None,
+        "activity_start_source": None,
+        "activity_partial_day": None,
         "days_total": 0,
         "usd": 0.0,
         "requests": 0,
@@ -854,15 +857,18 @@ def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict,
                       balance: dict | None = None) -> dict:
     """La depense reste lisible sans plafond ou cycle complet."""
     days = cloud_days(cloud) or []
-    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
+    _, start, start_source = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
     first = cycle_first_day(start)
     cycle = cloud_cycle_usage(cloud, start) is not None
-    cutoff = first if cycle else (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+    cutoff = first or (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     today = datetime.now(timezone.utc).date().isoformat()
-    daily_cutoff = (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
+    renewal_day = datetime.fromtimestamp(start / 1000, timezone.utc).date().isoformat() if start else None
+    daily_cutoff = renewal_day or (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     daily_days = [day for day in days if daily_cutoff <= day["day"] <= today]
     days = [day for day in days if cutoff <= day["day"] <= today]
     return {"unit": "jours", "days": days, "daily_days": daily_days, "days_total": len(days),
+            "activity_start": start, "activity_start_source": start_source,
+            "activity_partial_day": renewal_day if renewal_day and renewal_day != first else None,
             "usd": sum(day["usd"] for day in days),
             "requests": sum(day["requests"] for day in days),
             "peak": max((day["usd"] for day in days), default=0),
@@ -1150,7 +1156,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         if url.path == "/health":
-            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app(), "daily_usage": True, "balance_tokens": True})
+            self._json({"ok": True, "app": "ollama-buddy", "keychain": keychain_available(), "native": native_app(), "daily_usage": True, "balance_tokens": True, "cycle_activity": True})
             return
 
         if url.path == "/api/stream":

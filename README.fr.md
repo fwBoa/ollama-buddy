@@ -12,13 +12,13 @@ avec un résumé dans la barre de menus. Le serveur peut aussi fonctionner seul,
 dans un navigateur.
 
 - Vue d’ensemble avec dépense, requêtes, quota et quatre derniers jours.
-- Vue **Activité** avec graphique interactif sur 7 ou 30 jours calendaires et
+- Vue **Activité** avec graphique interactif sur le cycle en cours ou 7/30 jours calendaires et
   tableau de tous les relevés de la période disponible. Les jours manquants
   sont distingués des jours à dépense nulle.
 - Paramètres dédiés : connexion, cycle mensuel, alertes et apparence. Les saisies
   en cours sont conservées pendant les mises à jour en direct.
 - Plafond, crédits mensuels restants, date de réinitialisation et crédits supplémentaires officiels.
-- Tokens d’entrée, de sortie et en cache sur les 7/30 jours sélectionnés dans Activité.
+- Tokens d’entrée, de sortie et en cache sur le cycle ou les 7/30 jours sélectionnés dans Activité.
 - Projections estimatives après une journée complète de mesures du solde.
 - Notifications natives optionnelles à 70 %, 90 % et 100 % du quota mensuel consommé.
 - Français/anglais et thèmes automatique/clair/sombre dans les paramètres.
@@ -40,8 +40,8 @@ Sélectionne une barre du graphique pour consulter le relevé d’un jour.
 
 ### Activité
 
-Passe entre 7 et 30 jours calendaires et consulte tous les relevés de la période
-disponible, avec les compteurs de tokens. Un jour manquant se distingue d’un jour à dépense nulle.
+L’activité démarre au dernier renouvellement. Passe entre le cycle en cours
+et 7/30 jours de ce cycle, avec les compteurs de tokens. Un jour manquant se distingue d’un jour à dépense nulle.
 
 <img src="docs/activity.fr.png" alt="Vue Activité en français : graphique quotidien, compteurs de tokens et relevés disponibles" width="100%">
 
@@ -102,7 +102,7 @@ python3 ollama_buddy.py
 Fermer la fenêtre laisse l’app dans la barre de menus. `⌘Q` arrête le serveur si
 c’est cette app qui l’a démarré ; un serveur natif compatible préexistant reste
 actif. Au lancement, l’app vérifie que le serveur réutilisé prend en charge le
-suivi quotidien, Balance et les tokens. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
+suivi quotidien depuis le renouvellement, Balance et les tokens. Le serveur CLI est séparé pour que l’app native utilise le Trousseau.
 
 ## Connexion et réglages
 
@@ -151,10 +151,20 @@ artificiel. Pour une équipe, Balance est partagé entre les membres, tandis que
 l’activité utilise le périmètre personnel par défaut (`self`).
 
 [`GET /api/usage?range=30d`](https://docs.ollama.com/api/cloud-usage) alimente les
-relevés quotidiens UTC. Activité montre la dépense disponible des 30 derniers
-jours UTC, qui peut utiliser des crédits supplémentaires : ce n’est pas la même
-mesure que les crédits mensuels consommés. Ollama peut publier l’usage avec un
+relevés quotidiens UTC. Activité démarre à la date du dernier renouvellement fournie par Balance
+(ou à la référence du cycle configuré en secours). Les relevés antérieurs restent
+enregistrés mais sont masqués dans les graphiques, tableaux, compteurs de tokens
+et la barre de menus. Le choix **Cycle en cours** affiche tout le cycle, y compris
+31 jours ; les choix 7/30 jours restent à l’intérieur du cycle. Sans cycle connu,
+les relevés disponibles des 30 derniers jours sont affichés. Cette dépense peut
+utiliser des crédits supplémentaires : elle diffère des crédits mensuels consommés. Ollama peut publier l’usage avec un
 délai. Si la lecture de l’activité échoue, le solde officiel disponible reste visible.
+
+Les relevés quotidiens ne peuvent pas être coupés à l’heure exacte du renouvellement.
+Si celui-ci tombe en cours de journée UTC, le premier relevé est accompagné d’une
+indication : il peut inclure des dépenses, requêtes et tokens antérieurs au
+renouvellement. Le solde mensuel officiel utilise toujours la borne exacte ;
+l’estimation de secours exclut cette journée partielle.
 
 Lorsque Balance est indisponible, l’estimation de secours additionne les jours
 UTC complets du cycle configuré, puis divise par le plafond. Le premier jour
@@ -176,7 +186,7 @@ sont séparées des mesures officielles.
 ### Compteurs de tokens
 
 **Activité** affiche les tokens d’entrée, de sortie et d’entrée en cache des
-7/30 jours sélectionnés, ainsi que ceux du jour sélectionné. Le cache est inclus
+cycle en cours ou des 7/30 jours sélectionnés, ainsi que ceux du jour sélectionné. Le cache est inclus
 dans les tokens d’entrée et n’est jamais ajouté une seconde fois. Les compteurs
 absents sont indisponibles, pas nuls. Les anciens totaux sont conservés sans
 inventer leur répartition ; une nouvelle lecture remplit les compteurs réellement
