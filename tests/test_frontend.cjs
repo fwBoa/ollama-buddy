@@ -50,13 +50,18 @@ async function main() {
     assert.equal(await mini.locator('#body').innerText().then(text => text.includes('<img')), false);
     const payload = await (await context.request.get(fixture.url + '/api/usage')).json();
     assert.equal(payload.daily_days[0].day,fixture.anchor.slice(0,10));
-    assert.equal(await dashboard.locator('[data-chart-range="cycle"]').getAttribute('aria-pressed'),'true');
+    assert.equal(await dashboard.locator('.metrics .metric').count(),2);
+    assert.equal(await dashboard.locator('.ledger').count(),0);
+    assert.equal(await dashboard.locator('#chart-detail').count(),0);
+    assert.equal(await dashboard.locator('[data-chart-range]').count(),0);
+    assert.match(await dashboard.locator('#request-total').innerText(),/1/);
     assert.equal(await dashboard.locator('.chart-day').count(),payload.daily_days.length);
-    assert.match(await dashboard.locator('#sub').innerText(),/Since the configured cycle start/);
+    assert.match(await dashboard.locator('#sub').innerText(),/Configured cycle started/);
     assert.equal(JSON.stringify(payload).includes('fixture-secret'), false);
     assert.equal(JSON.stringify(payload).includes('never-expose@example.test'), false);
     console.log('PASS historical models removed, CSP and secret minimisation');
     await dashboard.setViewportSize({ width: 1120, height: 880 });
+    await dashboard.locator('.nav [data-view="activity"]').click();
     await dashboard.locator('[data-chart-range="30"]').click();
     assert.equal(await dashboard.locator('.chart-day').count(), payload.daily_days.length);
     const firstDay = payload.daily_days[0];
@@ -81,10 +86,26 @@ async function main() {
     const official = {...payload,quota:{...payload.quota,measurement:'balance',source:'api',monthly:60,current:12.34,remaining:47.66,purchased:7.5,ratio:12.34/60,resets_source:'balance',error:null}};
     official.activity_start_source = 'balance';
     await dashboard.evaluate(data=>applyData(data),official);
-    assert.match(await dashboard.locator('#sub').innerText(),/Since renewal/);
+    assert.match(await dashboard.locator('#sub').innerText(),/Cycle started/);
     assert.match(await dashboard.locator('.quota').innerText(),/Monthly credits/);
     assert.match(await dashboard.locator('.quota').innerText(),/Purchased credits[\s\S]*7.50/);
-    assert.match(await dashboard.locator('#hero').innerText(),/12.34/);
+    assert.match(await dashboard.locator('.quota-foot').innerText(),/12.34/);
+    assert.match(await dashboard.locator('#hero').innerText(),/0.18/);
+    assert.equal(await dashboard.locator('.quota .reset-date').count(),1);
+    assert.match(await dashboard.locator('.quota .reset-date').getAttribute('title'),/UTC/);
+    assert.equal((await dashboard.locator('#app').innerText()).match(/12.34/g).length,1);
+    await dashboard.evaluate(data=>applyData({...data,quota:{...data.quota,purchased:0,current:.00015,ratio:.00015/60}}),official);
+    assert.equal((await dashboard.locator('.quota').innerText()).includes('Purchased credits'),false);
+    assert.match(await dashboard.locator('.quota .pct').innerText(),/< 0.1%/);
+    assert.match(await dashboard.locator('.quota-foot').innerText(),/< \$0.01/);
+    await mini.evaluate(data=>render({...data,quota:{...data.quota,purchased:0,ratio:.00015/60}}),official);
+    assert.match(await mini.locator('.quota-number').innerText(),/< 0.1%/);
+    assert.equal((await mini.locator('#body').innerText()).includes('Purchased credits'),false);
+    assert.equal(await mini.locator('.models').count(),0);
+    await dashboard.evaluate(data=>applyData({...data,daily_days:data.daily_days.filter(day=>day.day !== new Date().toISOString().slice(0,10))}),official);
+    assert.equal(await dashboard.locator('#hero').innerText(),'…');
+    assert.equal(await dashboard.locator('#request-total').innerText(),'…');
+    await dashboard.evaluate(data=>applyData(data),official);
     await mini.evaluate(data=>render(data),official);
     assert.match(await mini.locator('#body').innerText(),/Monthly credits/);
     await dashboard.evaluate(data=>applyData({...data,usage_available:false,usage_error:'HTTP 503'}),official);
@@ -107,14 +128,25 @@ async function main() {
     assert.equal(await dashboard.locator('.chart-day').count(),31);
     assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'),'310');
     await dashboard.evaluate(()=>applyData({...lastData,activity_start:lastData.activity_start+12*3600000,activity_partial_day:lastData.daily_days[0].day}));
+    assert.equal(await dashboard.locator('#renewal-note').isVisible(),false);
+    await dashboard.locator('.source-note > summary').click();
     assert.match(await dashboard.locator('#renewal-note').innerText(),/may include usage before renewal/);
+    await dashboard.locator('.source-note > summary').click();
     await dashboard.locator('[data-chart-range="30"]').click();
     assert.equal(await dashboard.locator('.chart-day').count(),30);
     assert.equal(await dashboard.locator('[data-token="input_tokens"]').getAttribute('title'),'300');
     await dashboard.evaluate(data=>applyData(data),payload);
     await dashboard.locator('.nav [data-view="overview"]').click();
     console.log('PASS renewal window, full 31-day cycle, matching token period and partial-day note');
+    await dashboard.locator('.nav [data-view="activity"]').click();
     await dashboard.locator('[data-chart-range="7"]').click();
+    assert.equal(await dashboard.locator('.ledger tbody tr').count(),7);
+    assert.equal(await dashboard.locator('#request-total').getAttribute('title'),String(payload.daily_days.slice(-7).reduce((sum,day)=>sum+day.requests,0)));
+    await dashboard.locator('.nav [data-view="overview"]').click();
+    await dashboard.locator(`[data-select-day="${firstDay.day}"]`).click();
+    assert.equal(await dashboard.locator('.nav [data-view="activity"]').getAttribute('aria-current'),'page');
+    assert.match(await dashboard.locator('#chart-detail').innerText(),new RegExp(String(Number(firstDay.day.slice(-2)))));
+    await dashboard.locator('.nav [data-view="overview"]').click();
     for (const width of [360, 680, 880, 1120]) {
       await dashboard.setViewportSize({ width, height: 880 });
       assert.equal(await dashboard.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}`);
@@ -123,6 +155,8 @@ async function main() {
     // Keyboard activation, independent of pointer interactions.
     await dashboard.locator('.nav [data-view="settings"]').focus();
     await dashboard.keyboard.press('Enter');
+    assert.equal(await dashboard.locator('.fallback-settings').getAttribute('open'),null);
+    await dashboard.locator('.fallback-settings > summary').click();
     await dashboard.locator('#monthly').waitFor({ state: 'visible' });
     await dashboard.locator('.nav [data-view="overview"]').click();
     if (process.env.OLLAMA_BUDDY_QA) {
@@ -141,6 +175,7 @@ async function main() {
     await dashboard.evaluate(day => applyData({ ...lastData, days: lastData.days.filter(d => d.day !== day), daily_days: lastData.daily_days.filter(d => d.day !== day),
       quota: { ...lastData.quota, source: 'unavailable', error: 'incomplete history', ratio: null } }), gapDay);
     assert.match(await dashboard.locator('.quota').innerText(), /History incomplete/);
+    await dashboard.locator('.nav [data-view="activity"]').click();
     await dashboard.locator(`[data-select-day="${gapDay}"]`).click();
     assert.match(await dashboard.locator('#chart-detail').innerText(), /No record for this day/);
     assert.equal(await dashboard.locator('.chart-day.missing').count(), 1);
@@ -179,11 +214,11 @@ async function main() {
       daily_days: [{day: new Date().toISOString().slice(0,10),usd:.25,requests:7}],
       quota: {...data.quota,source:'indisponible',error:'partial reset day',ratio:null,current:null} }), payload);
     assert.match(await dashboard.locator('#hero').innerText(), /0.25/);
-    assert.match(await dashboard.locator('#chart-detail').innerText(), /7 requests/);
+    assert.match(await dashboard.locator('#request-total').innerText(), /7/);
     assert.match(await dashboard.locator('.quota').innerText(), /Reset day/);
     await dashboard.evaluate(() => applyData({...lastData,daily_days:[{...lastData.daily_days[0],usd:.5,requests:8}]}));
     assert.match(await dashboard.locator('#hero').innerText(), /0.50/);
-    assert.match(await dashboard.locator('#chart-detail').innerText(), /8 requests/);
+    assert.match(await dashboard.locator('#request-total').innerText(), /8/);
     await dashboard.evaluate(data => applyData(data),payload);
     console.log('PASS daily spending updates during the partial reset day');
 
@@ -253,9 +288,9 @@ async function main() {
     await dashboard.locator('.nav [data-view="overview"]').click();
     assert.match(await dashboard.locator('#app').innerText(), /Aucun cycle/);
     assert.equal(await dashboard.locator('.quota .meter').count(), 0);
-    assert.match(await dashboard.locator('#app').innerText(), /Dépense disponible/);
-    assert.equal(await dashboard.locator('.model.day').count(), 4);
-    await mini.waitForFunction(() => document.getElementById('body').textContent.includes('Dépense disponible'));
+    assert.match(await dashboard.locator('#app').innerText(), /Aujourd’hui/);
+    assert.equal(await dashboard.locator('.model.day').count(), 0);
+    await mini.waitForFunction(() => document.getElementById('body').textContent.includes('Aujourd’hui'));
     console.log('PASS UTC date roundtrip, clearing the cycle and spending without quota');
 
     await context.request.post(fixture.url + '/api/quota', { data: { quota_reset_at: expected } });

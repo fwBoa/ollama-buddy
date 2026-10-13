@@ -65,10 +65,7 @@
   .nav button[aria-current="page"] { background:var(--surface); color:var(--text); box-shadow:0 1px 2px #18251c08; }
   .nav button:hover { color:var(--text); background:var(--soft); }
   .icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.65; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
-  .rail-footer { margin-top:auto; padding:16px 10px 0; }
   .account-label { display:block; font-size:12px; font-weight:600; }
-  .plan,.rail-footer p { font-size:11px; color:var(--muted); }
-  .rail-footer p { margin-top:12px; }
   .workspace { min-width:0; padding:34px 36px 24px; max-width:1450px; width:100%; margin:0 auto; }
   .in-app .workspace { padding-top:48px; }
   .topbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:30px; }
@@ -87,6 +84,9 @@
   .overview-grid { display:grid; grid-template-columns:minmax(0,1fr) 268px; gap:24px; align-items:start; }
   .activity-panel { min-width:0; }
   .metrics { display:grid; grid-template-columns:1.45fr 1fr 1fr; gap:18px; padding:20px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .metrics.two { grid-template-columns:1fr 1fr; }
+  .fallback-settings { margin-top:18px; }
+  .fallback-settings summary,.selected-tokens summary { cursor:pointer; color:var(--muted); }
   .metric .k { font-size:12px; color:var(--muted); display:block; margin-bottom:8px; }
   .metric .v { font-size:28px; font-weight:550; letter-spacing:-.035em; font-variant-numeric:tabular-nums; line-height:1.2; white-space:nowrap; }
   .metric:first-child .v { color:var(--accent); }
@@ -130,7 +130,6 @@
   .projection { margin:18px 0 0; padding-top:14px; border-top:1px solid var(--line); }
   .alert,.bad { color:var(--critical); }
   .source-note { margin-top:24px; padding-top:16px; border-top:1px solid var(--line); max-width:75ch; }
-  .recent-section { margin-top:14px; }
   .ledger { width:100%; border-collapse:collapse; font-size:12px; }
   .ledger th { color:var(--muted); font-weight:500; font-size:11px; padding:0 0 10px; text-align:right; border-bottom:1px solid var(--line); }
   .ledger th:first-child { text-align:left; }
@@ -175,7 +174,7 @@
     .shell { display:block; } .sidebar { position:relative; height:auto; padding:20px 20px 12px; border-right:0; border-bottom:1px solid var(--line); }
     .in-app .sidebar { padding-top:45px; } .brand { padding:0; } .brand small { display:none; } .brand .logo { width:20px; height:28px; }
     .nav { flex-direction:row; margin-top:20px; gap:6px; } .nav button { justify-content:center; padding:9px 7px; font-size:12px; } .nav .icon { width:15px; height:15px; }
-    .rail-footer { display:none; } .workspace,.in-app .workspace { padding:24px 20px; } .topbar { margin-bottom:22px; gap:10px; } h1 { font-size:23px; } .toolbar { gap:8px; } .live { font-size:10px; }
+    .workspace,.in-app .workspace { padding:24px 20px; } .topbar { margin-bottom:22px; gap:10px; } h1 { font-size:23px; } .toolbar { gap:8px; } .live { font-size:10px; }
     .metrics { gap:10px; } .metric .v { font-size:22px; } .metric .k { font-size:10px; } .chart-bars { gap:3px; } .chart { height:164px; }
     .settings-row label { min-width:100%; } .connect { padding-top:20px; } .quota { padding:20px; } .footer { flex-wrap:wrap; } .ledger .row-bar { display:none; }
   }
@@ -192,7 +191,6 @@
       <button type="button" data-view="activity"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M9 15v-4m5 4V7m5 8v-6"/></svg><span data-i18n="Activity">Activity</span></button>
       <button type="button" data-view="settings"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--rail)"/><circle cx="16" cy="17" r="3" fill="var(--rail)"/></svg><span data-i18n="Settings">Settings</span></button>
     </nav>
-    <div class="rail-footer"><span class="account-label">Ollama Cloud</span><span class="plan" id="plan" hidden></span><p data-i18n="Your account, all your tools.">Your account, all your tools.</p></div>
   </aside>
   <div class="workspace">
     <header class="topbar"><div><p class="eyebrow">Ollama Cloud</p><h1 id="view-title">Overview</h1></div><div class="toolbar">
@@ -202,7 +200,7 @@
     <main id="main" tabindex="-1"><p class="sub" id="sub">Ollama Cloud usage</p><p class="warn-line" id="action-error" role="alert" hidden></p><p class="success" id="save-status" role="status" hidden></p>
       <div id="app"><p class="state" id="boot">Reading…</p><div class="skeleton"></div><div class="skeleton wide"></div></div>
     </main>
-    <footer class="footer"><span data-i18n="Account-wide spending · USD · UTC">Account-wide spending · USD · UTC</span><span data-i18n="Independent companion for Ollama">Independent companion for Ollama</span></footer>
+    <footer class="footer"><span data-i18n="Daily records · USD · UTC">Daily records · USD · UTC</span><span data-i18n="Independent companion for Ollama">Independent companion for Ollama</span></footer>
   </div>
 </div>
 
@@ -220,6 +218,25 @@
    d'afficher un trou. Un texte neuf non traduit reste lisible.
    ===================================================================== */
 const FR = {
+  'Requests today': 'Requêtes aujourd’hui',
+  'Requests recorded': 'Requêtes relevées',
+  'Period spending': 'Dépense de la période',
+  'Cycle trend': 'Évolution du cycle',
+  'Daily records': 'Détail quotidien',
+  'Tokens in this period': 'Tokens de la période',
+  'Renewal day': 'Jour du renouvellement',
+  'Day tokens': 'Tokens du jour',
+  'Understand the data': 'Comprendre les données',
+  'Cycle started on {date}': 'Cycle commencé le {date}',
+  'Configured cycle started on {date}': 'Cycle configuré depuis le {date}',
+  'Open a day in Activity.': 'Ouvrir un jour dans Activité.',
+  'Daily records use UTC days.': 'Les relevés suivent les journées UTC.',
+  'Requests recorded are the sum of calls in the available daily records for the selected period.': 'Les requêtes relevées correspondent aux appels comptés dans les relevés quotidiens disponibles de la période sélectionnée.',
+  'For teams, the credit balance is shared while activity is personal.': 'Pour les équipes, le solde est partagé tandis que l’activité est personnelle.',
+  'Automatic cycle': 'Cycle automatique',
+  'The monthly cap and renewal date come from Ollama.': 'Le plafond mensuel et la date de renouvellement viennent d’Ollama.',
+  'Configure a fallback only if the official balance is unavailable.': 'Configure une estimation de secours uniquement si le solde officiel est indisponible.',
+  'Usage limits': 'Limites d’usage',
   'Current cycle': 'Cycle en cours',
   'Since renewal on {date} (UTC).': 'Depuis le renouvellement du {date} (UTC).',
   'Since the configured cycle start on {date} (UTC).': 'Depuis le début du cycle configuré le {date} (UTC).',
@@ -265,7 +282,7 @@ const FR = {
   "days": "jours",
   "Activity": "Activité",
   "Your account, all your tools.": "Ton compte, tous tes outils.",
-  "Account-wide spending · USD · UTC": "Dépense du compte · USD · UTC",
+  "Daily records · USD · UTC": "Relevés quotidiens · USD · UTC",
   "Independent companion for Ollama": "Un compagnon indépendant pour Ollama",
   "Spending": "Dépense",
   "Requests": "Requêtes",
@@ -489,10 +506,10 @@ function severity(ratio) {
   return 'var(--accent)';
 }
 const exact = n => new Intl.NumberFormat(locale()).format(n);
-const pct = x => (lang === 'fr'
+const pct = x => x > 0 && x < .001 ? (lang === 'fr' ? '< 0,1 %' : '< 0.1%') : (lang === 'fr'
   ? (x * 100).toFixed(1).replace('.', ',') + ' %'
   : (x * 100).toFixed(1) + '%');
-const usd = n => (lang === 'fr'
+const usd = n => n > 0 && n < .01 ? (lang === 'fr' ? '< 0,01 $' : '< $0.01') : (lang === 'fr'
   ? n.toFixed(2).replace('.', ',') + ' $'
   : '$' + n.toFixed(2));
 
@@ -510,18 +527,6 @@ function whenText(days) {
    porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
    meme remise a zero selon qu'on compte les jours pleins ou ceux du
    calendrier, et c'est la date qui tranche. */
-function resetLabel(quota) {
-  if (!quota.resets_at || quota.days_left === null || quota.days_left === undefined) return '';
-  const quand = new Date(quota.resets_at)
-    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' });
-  const jours = Math.floor(quota.days_left);
-  return fill(T('Reset on {date} (UTC)'), { date: quand })
-    + (jours === 0 ? ''
-      : jours === 1 ? T(' · reset tomorrow')
-      : fill(T(' · reset in {n} days'), { n: jours }));
-}
-
-
 /* =====================================================================
    /api/balance porte le solde ; /api/usage porte les journees et tokens.
 
@@ -595,6 +600,14 @@ function localResetHint(q) {
   return fill(T('Next reset here: {date}'), {date});
 }
 
+function localDate(timestamp) {
+  return new Date(timestamp).toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'});
+}
+
+function utcDate(timestamp) {
+  return new Date(timestamp).toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'})+' UTC';
+}
+
 function renderSettings(data) {
   const q = data.quota || {};
   return `<div class="settings-page">
@@ -609,8 +622,8 @@ function renderSettings(data) {
       ${q.key_storage_error ? `<p class="warn-line">${T('Unlock macOS Keychain or enter the key again to finish migration.')}</p>` : ''}
     </section>`}
     <section class="settings-section"><h2>${T('Monthly cycle')}</h2>
-      <p class="caption">${T('Ollama provides your cap, remaining credits and cycle dates automatically.')} ${q.measurement === 'balance' && !q.legacy_limits ? fill(T('{current} of {monthly}'), {current:usd(q.current),monthly:usd(q.monthly)})+' · '+resetLabel(q) : ''}</p>
-      <h3 style="margin-top:20px">${T('Fallback estimate')}</h3><p class="hint">${T('These settings apply only when the official balance is unavailable.')}</p>
+      <p class="caption">${T(q.measurement === 'balance' ? q.legacy_limits ? 'Your plan uses session and weekly limits, rather than a monthly dollar allowance.' : 'The monthly cap and renewal date come from Ollama.' : 'Configure a fallback only if the official balance is unavailable.')}</p>
+      <details class="fallback-settings"><summary>${T('Fallback estimate')}</summary><p class="hint">${T('These settings apply only when the official balance is unavailable.')}</p>
       <div class="settings-row"><label for="monthly">${T('Cap in USD')}
         <input id="monthly" type="number" min="0" step="any" inputmode="decimal" value="${q.monthly_set > 0 ? q.monthly_set : ''}" placeholder="${q.monthly > 0 ? q.monthly : T('Automatic')}" aria-describedby="cap-hint">
       </label><button class="btn" id="save-monthly" type="button">${T('Save cap')}</button></div>
@@ -618,7 +631,7 @@ function renderSettings(data) {
       <div class="settings-row"><label for="reset-at">${T('Monthly reset reference (UTC)')}
         <input id="reset-at" type="datetime-local" value="${q.resets_set ? new Date(q.resets_set).toISOString().slice(0,16) : ''}" aria-describedby="reset-hint">
       </label></div><p class="hint" id="reset-hint">${T('Use a known reset date or your subscription anniversary in UTC. This day repeats monthly. Leave empty to disable the cycle estimate.')} ${T('Reset time is entered in UTC, not local time.')} ${T('Automatically saved')}</p><p class="hint" id="reset-hint-local">${localResetHint(q)}</p>
-    </section>
+    </details></section>
     <section class="settings-section"><h2>${T('Alerts')}</h2><div class="settings-row"><label class="check-label" for="notifications">
       <input id="notifications" type="checkbox"${data.notifications ? ' checked' : ''}${data.notifications_supported ? '' : ' disabled'} aria-describedby="notifications-hint">${T('Notifications at 70%, 90% and 100%')}
     </label></div><p class="hint" id="notifications-hint" role="status">${notificationHint()}</p></section>
@@ -634,16 +647,15 @@ function renderQuota(q = {}) {
   let body;
   if (ready) {
     const status = q.ratio >= 1 ? 'Cap reached' : q.ratio >= .7 ? 'Approaching cap' : 'Within cap';
-    const reset = q.resets_at ? new Date(q.resets_at).toLocaleDateString(locale(), { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone:'UTC' }) : '…';
+    const reset = q.resets_at ? localDate(q.resets_at) : '…';
     body = `<div class="quota-head"><span class="pct">${pct(q.ratio)}</span><span class="quota-tag" style="color:${severity(q.ratio)}">${T(status)}</span></div>
       <div class="meter" role="img" style="--fill:${severity(q.ratio)}" aria-label="${escapeHTML(fill(T('{pct} of the monthly quota consumed'), {pct:pct(q.ratio)}))}"><span style="transform:scaleX(${Math.max(0,Math.min(q.ratio,1)).toFixed(4)})"></span></div>
       <p class="quota-foot">${fill(T('{current} of {monthly}'), {current:usd(q.current || 0), monthly:usd(q.monthly)})}</p>
-      <dl class="quota-facts"><div><dt>${T('Remaining')}</dt><dd>${usd(q.remaining ?? Math.max(0,q.monthly-(q.current || 0)))}</dd></div><div><dt>${T(official ? 'Next reset' : 'Configured reset')}</dt><dd>${reset} · UTC</dd></div></dl>
-      <p class="hint">${resetLabel(q)}<br>${localResetHint(q)}</p>
+      <dl class="quota-facts"><div><dt>${T('Remaining')}</dt><dd>${usd(q.remaining ?? Math.max(0,q.monthly-(q.current || 0)))}</dd></div><div><dt>${T(official ? 'Next reset' : 'Configured reset')}</dt><dd class="reset-date" title="${escapeHTML(utcDate(q.resets_at))}">${reset}</dd></div></dl>
       ${q.rate_per_day ? `<details class="projection"><summary>${T('Estimated outlook')}</summary><p>${fill(T('At this rate: <b>+{amount} / day</b>'),{amount:usd(q.rate_per_day)})}${q.projected_at_reset ? '<br>'+fill(T('projected at reset: {amount}'),{amount:usd(q.projected_at_reset)}) : ''}${q.ratio < 1 && q.exhausted_in_days != null && q.days_left != null && q.exhausted_in_days < q.days_left ? `<br><span class="alert">${fill(T('cap reached {when}, before the reset'),{when:whenText(q.exhausted_in_days)})}</span>` : ''}</p></details>` : ''}`;
   } else if (official) {
-    body = q.legacy_limits ? `<h3 style="margin-top:20px">${T('Legacy plan')}</h3><p class="hint">${T('Your plan uses session and weekly limits, rather than a monthly dollar allowance.')}</p><dl class="quota-facts">${['session','weekly'].map(name=>`<div><dt>${T(name === 'session' ? 'Session' : 'Weekly')} · ${T('Remaining')}</dt><dd>${pct(q.legacy_limits[name].remaining_percent/100)}</dd></div>`).join('')}</dl>`
-      : `<h3 style="margin-top:20px">${T('No included credits')}</h3><p class="hint">${resetLabel(q)}</p>`;
+    body = q.legacy_limits ? `<h3 style="margin-top:20px">${T('Legacy plan')}</h3><p class="hint">${T('Your plan uses session and weekly limits, rather than a monthly dollar allowance.')}</p><dl class="quota-facts">${['session','weekly'].map(name=>`<div><dt>${T(name === 'session' ? 'Session' : 'Weekly')} · ${T('Remaining')}</dt><dd>${pct(q.legacy_limits[name].remaining_percent/100)}<br><span title="${escapeHTML(utcDate(q.legacy_limits[name].resets_at))}">${localDate(q.legacy_limits[name].resets_at)}</span></dd></div>`).join('')}</dl>`
+      : `<h3 style="margin-top:20px">${T('No included credits')}</h3>${q.resets_at ? `<p class="hint" title="${escapeHTML(utcDate(q.resets_at))}">${T('Next reset')} · ${localDate(q.resets_at)}</p>` : ''}`;
   } else {
     const issue = q.error === 'partial reset day' ? ['Reset day','Daily spending is available. The quota estimate starts with the first complete UTC day because Ollama cannot split usage at the reset time.']
       : q.error === 'incomplete history' ? ['History incomplete','Some days are missing. Available spending is shown, but a monthly quota cannot be estimated.']
@@ -652,9 +664,16 @@ function renderQuota(q = {}) {
       : ['No cycle configured','Set a reset reference to estimate your monthly quota. Daily spending remains available.'];
     body = `<h3 style="margin-top:20px">${T(issue[0])}</h3><p class="hint">${T(issue[1])}</p>`;
   }
-  return `<section class="quota" aria-labelledby="quota-h"><h2 id="quota-h">${T(official ? 'Monthly credits' : 'Estimated monthly quota')}</h2>${body}
-    ${official ? `<dl class="quota-facts"><div><dt>${T('Purchased credits')}</dt><dd>${usd(q.purchased || 0)}</dd></div></dl><p class="caption">${T('Official balance')}</p>` : q.balance_error ? `<p class="hint">${T('Official balance unavailable. The quota below is an estimate.')}</p>` : ''}
-    <button class="text-button" type="button" data-view="settings">${T('Manage cycle')} ↗</button></section>`;
+  return `<section class="quota" aria-labelledby="quota-h"><h2 id="quota-h">${T(q.legacy_limits ? 'Usage limits' : official ? 'Monthly credits' : 'Estimated monthly quota')}</h2>${body}
+    ${official && q.purchased > 0 ? `<dl class="quota-facts"><div><dt>${T('Purchased credits')}</dt><dd>${usd(q.purchased)}</dd></div></dl>` : !official && q.balance_error ? `<p class="hint">${T('Official balance unavailable. The quota below is an estimate.')}</p>` : ''}
+    ${official ? '' : `<button class="text-button" type="button" data-view="settings">${T('Manage cycle')} ↗</button>`}</section>`;
+}
+
+function periodDays(days, cycleStart, preview = false) {
+  if (!days.length) return [];
+  const range = preview ? 'cycle' : chartRange === 'cycle' && !cycleStart ? 30 : chartRange;
+  const end = Date.parse(days[days.length-1].day+'T00:00:00Z');
+  return days.filter(day=>range === 'cycle' || Date.parse(day.day+'T00:00:00Z') > end-range*86400000);
 }
 
 function renderTokens(days, cycleStart = null) {
@@ -664,11 +683,11 @@ function renderTokens(days, cycleStart = null) {
   const records = days.filter(day=>range === 'cycle' || Date.parse(day.day+'T00:00:00Z') > end-range*86400000);
   const counters = [['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']];
   const missing = counters.some(([key])=>records.some(day=>day[key] == null));
-  return `<section class="tokens" aria-labelledby="tokens-h"><div class="section-head"><h2 id="tokens-h">${T('Tokens · available records')}</h2><span class="caption">${T(range === 'cycle' ? 'Current cycle' : range+' days')} · UTC</span></div><div class="metrics">${counters.map(([key,label])=>{
+  return `<section class="tokens" aria-labelledby="tokens-h"><div class="section-head"><h2 id="tokens-h">${T('Tokens in this period')}</h2></div><div class="metrics">${counters.map(([key,label])=>{
     const known = records.every(day=>day[key] != null);
     const total = known ? records.reduce((sum,day)=>sum+day[key],0) : null;
     return `<div class="metric"><span class="k">${T(label)}</span><span class="v" data-token="${key}"${known ? ` title="${exact(total)}"` : ''}>${known ? fmt(total) : '…'}</span></div>`;
-  }).join('')}</div><p class="caption">${T('Cached tokens are included in input tokens. They are not added again.')}${missing ? ' '+T('Some token counters are unavailable for these records. Missing values are not zero.') : ''}</p></section>`;
+  }).join('')}</div>${missing ? `<p class="caption">${T('Some token counters are unavailable for these records. Missing values are not zero.')}</p>` : ''}</section>`;
 }
 
 function renderLedger(days, peak) {
@@ -676,9 +695,9 @@ function renderLedger(days, peak) {
   return `<table class="ledger"><caption class="visually-hidden">${T('Daily consumption')}</caption><thead><tr><th scope="col">${T('Date (UTC)')}</th><th scope="col">${T('Requests')}</th><th scope="col">${T('Amount')}</th></tr></thead><tbody>${[...days].reverse().map(j => `<tr class="model day" data-day="${escapeHTML(j.day)}"><td>${dayLabel(j.day)}</td><td>${exact(j.requests)}</td><td><span class="row-bar" aria-hidden="true"><i style="width:${peak ? Math.min(j.usd/peak,1)*100 : 0}%"></i></span>${usd(j.usd)}</td></tr>`).join('')}</tbody></table>`;
 }
 
-function renderChart(days, cycleStart = null) {
+function renderChart(days, cycleStart = null, preview = false, partialDay = null) {
   const end = days.length ? Date.parse(days[days.length-1].day+'T00:00:00Z') : 0;
-  const range = chartRange === 'cycle' && !cycleStart ? 30 : chartRange;
+  const range = preview ? 'cycle' : chartRange === 'cycle' && !cycleStart ? 30 : chartRange;
   const beginning = cycleStart ? Date.parse(new Date(cycleStart).toISOString().slice(0,10)+'T00:00:00Z') : days.length ? Date.parse(days[0].day+'T00:00:00Z') : 0;
   const start = days.length ? range === 'cycle' ? beginning : Math.max(beginning,end-(range-1)*86400000) : 0;
   const byDay = new Map(days.map(day=>[day.day,day]));
@@ -690,11 +709,12 @@ function renderChart(days, cycleStart = null) {
   const peak = Math.max(0,...shown.map(d=>d.usd));
   const selected = shown.find(d=>d.day === selectedDay) || shown[shown.length-1];
   selectedDay = selected?.day || null;
-  return `<div class="section-head"><h2>${T('Daily activity')}</h2><div class="segmented" role="group" aria-label="${T('Daily activity')}">${(cycleStart ? ['cycle',7,30] : [7,30]).map(n=>`<button type="button" data-chart-range="${n}"${shown.length ? '' : ' disabled'} aria-pressed="${range===n}">${T(n === 'cycle' ? 'Current cycle' : n+' days')}</button>`).join('')}</div></div>
+  const ticks = [...new Set([shown[0]?.day,shown[Math.floor((shown.length-1)/2)]?.day,shown[shown.length-1]?.day])].filter(Boolean);
+  return `<div class="section-head"><h2>${T(preview ? 'Cycle trend' : 'Daily activity')}</h2>${preview ? `<button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button>` : `<div class="segmented" role="group" aria-label="${T('Daily activity')}">${(cycleStart ? ['cycle',7,30] : [7,30]).map(n=>`<button type="button" data-chart-range="${n}"${shown.length ? '' : ' disabled'} aria-pressed="${range===n}">${T(n === 'cycle' ? 'Current cycle' : n+' days')}</button>`).join('')}</div>`}</div>
     ${!shown.length ? `<div class="empty-chart">${T('No daily records yet.')}<br>${T('Once Ollama publishes usage, it will appear here.')}</div>` : `
     <div class="chart"><span class="chart-scale">${usd(peak)}</span><div class="chart-grid" aria-hidden="true"><span></span><span></span><span></span></div><div class="chart-bars">${shown.map(j=>`<button class="chart-day${j.usd===null ? ' missing' : j.usd===0 ? ' zero' : ''}" type="button" data-select-day="${escapeHTML(j.day)}" aria-pressed="${selectedDay===j.day}" aria-label="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)+', '+exact(j.requests)+' '+T('requests')))}" title="${escapeHTML(dayLabel(j.day)+': '+(j.usd === null ? T('No record for this day') : usd(j.usd)))}"><span style="--height:${peak ? (j.usd/peak*90).toFixed(2) : 0}%"></span></button>`).join('')}</div></div>
-    <div class="chart-axis"><span>${shortDate(shown[0].day)}</span><span>${shortDate(shown[Math.floor((shown.length-1)/2)].day)}</span><span>${shortDate(shown[shown.length-1].day)} · UTC</span></div>`}
-    ${selected ? `<div class="chart-detail" id="chart-detail" role="status"><div><strong>${dayLabel(selected.day)}</strong><p class="caption">${selected.usd === null ? T('No record for this day') : exact(selected.requests)+' '+T(selected.requests === 1 ? 'request' : 'requests')}</p></div><span class="amount">${selected.usd === null ? '…' : usd(selected.usd)}</span></div>${selected.usd !== null ? `<p class="caption">${[['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']].map(([key,label])=>T(label)+': '+(selected[key] == null ? '…' : exact(selected[key]))).join(' · ')}</p>` : ''}<p class="caption">${T('Select a day to inspect its spending.')}</p>` : ''}`;
+    <div class="chart-axis">${ticks.map((day,i)=>`<span>${shortDate(day)}${i === ticks.length-1 ? ' · UTC' : ''}</span>`).join('')}</div>`}
+    ${selected && !preview ? `<div class="chart-detail" id="chart-detail" role="status"><div><strong>${dayLabel(selected.day)}</strong><p class="caption">${selected.usd === null ? T('No record for this day') : exact(selected.requests)+' '+T(selected.requests === 1 ? 'request' : 'requests')}${selected.day === partialDay ? ' · '+T('Renewal day') : ''}</p></div><span class="amount">${selected.usd === null ? '…' : usd(selected.usd)}</span></div>${selected.usd !== null ? `<details class="selected-tokens"><summary>${T('Day tokens')}</summary><p class="caption">${[['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']].map(([key,label])=>T(label)+': '+(selected[key] == null ? '…' : exact(selected[key]))).join(' · ')}</p></details>` : ''}` : ''}`;
 }
 
 function renderContent(data) {
@@ -707,8 +727,11 @@ function renderContent(data) {
     else el.removeAttribute('aria-current');
   });
   sub.hidden = currentView === 'settings' || !data.usage_available;
-  if (data.activity_start) sub.textContent = fill(T(data.activity_start_source === 'balance' ? 'Since renewal on {date} (UTC).' : 'Since the configured cycle start on {date} (UTC).'),{date:new Date(data.activity_start).toLocaleString(locale(),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'})});
-  else if (days.length) sub.textContent = fill(T('Spending shown from {from} to {to} (UTC).'),{from:shortDate(days[0].day),to:shortDate(days[days.length-1].day)});
+  sub.removeAttribute('title');
+  if (data.activity_start) {
+    sub.textContent = fill(T(data.activity_start_source === 'balance' ? 'Cycle started on {date}' : 'Configured cycle started on {date}'),{date:new Date(data.activity_start).toLocaleDateString(locale(),{day:'numeric',month:'short'})});
+    sub.title = utcDate(data.activity_start);
+  } else if (days.length) sub.textContent = fill(T('Spending shown from {from} to {to} (UTC).'),{from:shortDate(days[0].day),to:shortDate(days[days.length-1].day)});
   else sub.textContent = T('Ollama Cloud usage');
   if (currentView === 'settings') { app.innerHTML = renderSettings(data); return; }
   if (!data.usage_available) {
@@ -717,24 +740,26 @@ function renderContent(data) {
       : renderConnection({...data.quota,key_error:data.usage_error || data.quota?.key_error});
     return;
   }
-  const cycle = data.period === 'cycle';
-  const resetDay = data.quota?.error === 'partial reset day';
-  const today = days.find(day => day.day === new Date().toISOString().slice(0,10));
-  const official = data.quota?.measurement === 'balance' && !data.quota?.legacy_limits;
-  const spending = official ? currentView === 'overview' ? data.quota.current : days.reduce((sum,day)=>sum+day.usd,0) : resetDay ? today?.usd : (data.usd || 0);
-  const requests = official ? days.reduce((sum,day)=>sum+day.requests,0) : resetDay ? today?.requests : (data.requests || 0);
-  const peak = Math.max(0,...days.map(day=>day.usd));
-  const metrics = `<div class="metrics"><div class="metric"><span class="k">${official && currentView === 'overview' ? T('Included credits used') : resetDay ? T('Today (UTC)') : cycle && !official ? T('Usage this cycle') : T('Available spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T(official ? 'Requests · available days' : 'Requests')}</span><span class="v">${requests == null ? '…' : fmt(requests)}</span></div><div class="metric"><span class="k">${T('Daily peak')}</span><span class="v">${usd(peak)}</span></div></div>`;
-  const source = `<details class="source-note"><summary>${T('How this is calculated')}</summary><p>${T(official ? 'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.' : 'Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')}</p></details>`;
-  const boundary = data.activity_partial_day && days.some(day=>day.day === data.activity_partial_day)
-    ? `<p class="caption" id="renewal-note" style="margin-bottom:18px">${fill(T('The record for {date} covers the whole UTC day and may include usage before renewal.'),{date:shortDate(data.activity_partial_day)})}${official ? ' '+T('The monthly credit balance uses the exact renewal time.') : ''}</p>` : '';
-  app.innerHTML = `${data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : ''}
-    ${boundary}${currentView === 'activity' ? `${metrics}${renderChart(days,data.activity_start)}${renderTokens(days,data.activity_start)}${days.length ? `<div class="section-head"><h2>${T('All available days')}</h2><span class="caption">${days.length} ${T('days')}</span></div>${renderLedger(days,peak)}` : ''}${source}` : `
-    <div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days,data.activity_start)}${days.length ? `<section class="recent-section"><div class="section-head"><h2>${T('Recent days')}</h2><button class="text-button" type="button" data-view="activity">${T('View all activity')} ↗</button></div>${renderLedger(days.slice(-4),peak)}</section>` : ''}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`}`;
+  const overview = currentView === 'overview';
+  const records = periodDays(days,data.activity_start);
+  const today = days.find(day=>day.day === new Date().toISOString().slice(0,10));
+  const spending = overview ? today?.usd : records.length ? records.reduce((sum,day)=>sum+day.usd,0) : null;
+  const requests = overview ? today?.requests : records.length ? records.reduce((sum,day)=>sum+day.requests,0) : null;
+  const peak = Math.max(0,...records.map(day=>day.usd));
+  const metrics = `<div class="metrics two"><div class="metric"><span class="k">${T(overview ? 'Today (UTC)' : 'Period spending')}</span><span class="v" id="hero">${spending == null ? '…' : usd(spending)}</span></div><div class="metric"><span class="k">${T(overview ? 'Requests today' : 'Requests recorded')}</span><span class="v" id="request-total"${requests == null ? '' : ` title="${exact(requests)}"`}>${requests == null ? '…' : fmt(requests)}</span></div></div>`;
+  const official = data.quota?.measurement === 'balance';
+  const boundary = data.activity_partial_day ? `<p id="renewal-note">${fill(T('The record for {date} covers the whole UTC day and may include usage before renewal.'),{date:shortDate(data.activity_partial_day)})}${official ? ' '+T('The monthly credit balance uses the exact renewal time.') : ''}</p>` : '';
+  const source = `<details class="source-note"><summary>${T('Understand the data')}</summary><p>${T(data.quota?.legacy_limits ? 'Your plan uses session and weekly limits, rather than a monthly dollar allowance.' : official ? 'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.' : 'Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')}</p><p>${T('Daily records use UTC days.')} ${T('Requests recorded are the sum of calls in the available daily records for the selected period.')}</p><p>${T('Cached tokens are included in input tokens. They are not added again.')}</p>${boundary}<p>${T('For teams, the credit balance is shared while activity is personal.')}</p></details>`;
+  const error = data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : '';
+  app.innerHTML = overview
+    ? `${error}<div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days,data.activity_start,true,data.activity_partial_day)}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`
+    : `${error}${metrics}${renderChart(days,data.activity_start,false,data.activity_partial_day)}${renderTokens(records,data.activity_start)}${records.length ? `<div class="section-head"><h2>${T('Daily records')}</h2></div>${renderLedger(records,peak)}` : ''}${source}`;
 }
 
 // A push must preserve unfinished settings, even after focus left a field.
 const drafts = new Map();
+const detailStates = new Map();
+let renderedView = 'overview';
 function render(data) {
   const app = document.getElementById('app');
   const active = document.activeElement;
@@ -742,15 +767,13 @@ function render(data) {
   const focusedDay = active?.dataset?.selectDay;
   const focusedRange = active?.dataset?.chartRange;
   const selection = active?.type === 'password' ? [active.selectionStart,active.selectionEnd] : null;
-  const opened = [...app.querySelectorAll('details[open]')].map(el=>el.className);
+  for (const el of app.querySelectorAll('details')) detailStates.set(renderedView+':'+el.className,el.open);
   renderContent(data);
+  for (const el of app.querySelectorAll('details')) el.open = detailStates.get(currentView+':'+el.className) || false;
+  renderedView = currentView;
   for (const [id,value] of drafts) {
     const el = document.getElementById(id);
     if (el) el.value = value;
-  }
-  for (const name of opened) {
-    const el = [...app.querySelectorAll('details')].find(el=>el.className===name);
-    if (el) el.open = true;
   }
   const focused = focusedId ? document.getElementById(focusedId)
     : focusedDay ? document.querySelector(`[data-select-day="${focusedDay}"]`)
@@ -781,6 +804,7 @@ document.addEventListener('click',e=>{
   }
   if (button.dataset.selectDay) {
     selectedDay = button.dataset.selectDay;
+    if (currentView === 'overview') { currentView = 'activity'; chartRange = lastData?.activity_start ? 'cycle' : 30; }
     if (lastData) render(lastData);
     document.querySelector(`[data-select-day="${selectedDay}"]`)?.focus({preventScroll:true});
   }
@@ -899,13 +923,6 @@ function applyData(data) {
   lastData = data;
   if (data.theme) applyTheme(data.theme);
   if (data.lang) applyLang(data.lang);
-
-  const planEl = document.getElementById('plan');
-  planEl.hidden = !data.account?.plan;
-  if (data.account?.plan) {
-    planEl.textContent = 'Ollama ' + data.account.plan;
-    planEl.hidden = false;
-  }
 
   if (data.error && !data.days) {
     document.getElementById('app').innerHTML =

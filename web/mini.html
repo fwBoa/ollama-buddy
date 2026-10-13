@@ -72,7 +72,10 @@
    pas de bouton de langue : le reglage se fait dans le tableau de bord, et il
    suit ici comme le theme. */
 const FR = {
+  'Requests today': 'Requêtes aujourd’hui',
+  'Next reset': 'Prochaine réinitialisation',
   'Monthly credits': 'Crédits mensuels',
+  'Usage limits': 'Limites d’usage',
   'Included credits used': 'Crédits mensuels consommés',
   'Purchased credits': 'Crédits supplémentaires',
   'Legacy plan': 'Ancienne offre',
@@ -142,8 +145,8 @@ function resolveLang(pref) {
 }
 
 const exact = n => new Intl.NumberFormat(locale()).format(n);
-const usd = n => (lang === 'fr' ? n.toFixed(2).replace('.', ',') + ' $' : '$' + n.toFixed(2));
-const pct = x => (lang === 'fr'
+const usd = n => n > 0 && n < .01 ? (lang === 'fr' ? '< 0,01 $' : '< $0.01') : (lang === 'fr' ? n.toFixed(2).replace('.', ',') + ' $' : '$' + n.toFixed(2));
+const pct = x => x > 0 && x < .001 ? (lang === 'fr' ? '< 0,1 %' : '< 0.1%') : (lang === 'fr'
   ? (x * 100).toFixed(1).replace('.', ',') + ' %'
   : (x * 100).toFixed(1) + '%');
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
@@ -167,13 +170,10 @@ const dayLabel = iso => new Date(iso + 'T00:00:00Z')
    calendrier, et c'est la date qui tranche. */
 function resetLabel(q) {
   if (!q.resets_at || q.days_left === null || q.days_left === undefined) return '';
-  const quand = new Date(q.resets_at)
-    .toLocaleDateString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle:'h23', timeZone: 'UTC' });
-  const jours = Math.floor(q.days_left);
-  return fill(T('Reset on {date} (UTC)'), { date: quand })
-    + (jours === 0 ? ''
-      : jours === 1 ? T(' · reset tomorrow')
-      : fill(T(' · reset in {n} days'), { n: jours }));
+  const date = new Date(q.resets_at);
+  const local = date.toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'});
+  const utc = date.toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'})+' UTC';
+  return `<span title="${escapeHTML(utc)}">${T('Next reset')} · ${local}</span>`;
 }
 
 function render(d) {
@@ -188,7 +188,7 @@ function render(d) {
     <p class="label">${T(official ? 'Monthly credits' : 'Estimated monthly quota')}</p>
     <div class="row"><span class="quota-number">${pct(q.ratio)}</span><span class="sub">${T('Remaining')} ${usd(q.remaining ?? Math.max(0,q.monthly-(q.current || 0)))}</span></div>
     <div class="meter" role="img" style="--fill:${severity(q.ratio)}" aria-label="${fill(T('{pct} of the monthly quota'),{pct:pct(q.ratio)})}"><span style="transform:scaleX(${Math.max(0,Math.min(q.ratio,1)).toFixed(4)})"></span></div>
-    <p class="sub">${resetLabel(q)}</p>` : official ? `<p class="label">${T('Monthly credits')}</p><p class="empty">${T(q.legacy_limits ? 'Legacy plan' : 'No included credits')}</p>${q.legacy_limits ? ['session','weekly'].map(name=>`<p class="sub">${T(name === 'session' ? 'Session' : 'Weekly')} · ${T('Remaining')} ${pct(q.legacy_limits[name].remaining_percent/100)}</p>`).join('') : `<p class="sub">${resetLabel(q)}</p>`}` : `
+    <p class="sub">${resetLabel(q)}</p>` : official ? `<p class="label">${T(q.legacy_limits ? 'Usage limits' : 'Monthly credits')}</p><p class="empty">${T(q.legacy_limits ? 'Legacy plan' : 'No included credits')}</p>${q.legacy_limits ? ['session','weekly'].map(name=>`<p class="sub">${T(name === 'session' ? 'Session' : 'Weekly')} · ${T('Remaining')} ${pct(q.legacy_limits[name].remaining_percent/100)}</p>`).join('') : `<p class="sub">${resetLabel(q)}</p>`}` : `
     <p class="label">${T('Estimated monthly quota')}</p><p class="empty">${q.key_set
       ? q.error === 'partial reset day' ? T('Reset day') : q.error === 'incomplete history' ? T('History incomplete') : q.key_error || q.key_storage_error ? T('Quota unavailable') : !q.monthly ? T('Cap not configured') : T('No cycle configured')
       : T('Connect your account')}</p><p class="sub">${q.key_set
@@ -196,9 +196,8 @@ function render(d) {
           : !q.key_error && (q.cycle_known === false || !q.monthly) ? T('Open Settings to enter the reset date and monthly cap.') : T('Cannot read — check your API key in the dashboard.')
         : T('No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.')}</p>`;
   document.getElementById('body').innerHTML = `${quotaBlock}
-    ${official ? `<p class="sub">${T('Official balance')} · ${T('Purchased credits')} ${usd(q.purchased || 0)}</p>` : ''}
-    ${d.usage_available ? `<div class="spending"><div><p class="label">${official && !q.legacy_limits ? T('Included credits used') : q.error === 'partial reset day' ? T('Today (UTC)') : d.period === 'cycle' ? T('This cycle') : T('Available spending')}</p><span class="big">${q.error === 'partial reset day' && !today ? '…' : usd(official && !q.legacy_limits ? q.current : q.error === 'partial reset day' ? today.usd : (d.usd || 0))}</span></div><div><p class="label">${T(q.error === 'partial reset day' ? 'Requests' : 'Today (UTC)')}</p><span class="big">${today ? q.error === 'partial reset day' ? exact(today.requests) : usd(today.usd) : '…'}</span></div></div>
-      <div class="models">${days.slice(-3).reverse().map(day=>`<div class="m"><span class="n">${dayLabel(day.day)}</span><span class="v">${usd(day.usd)}</span></div>`).join('')}</div>` : ''}
+    ${official && q.purchased > 0 ? `<p class="sub">${T('Purchased credits')} ${usd(q.purchased)}</p>` : ''}
+    ${d.usage_available ? `<div class="spending"><div><p class="label">${T('Today (UTC)')}</p><span class="big">${today ? usd(today.usd) : '…'}</span></div><div><p class="label">${T('Requests today')}</p><span class="big">${today ? exact(today.requests) : '…'}</span></div></div>` : ''}
     <div class="actions"><button type="button" id="open">${T('Open the dashboard')} ↗</button></div>`;
   document.getElementById('open').addEventListener('click',()=>{ location.href='ollama-buddy://open'; });
   hasRendered = true;

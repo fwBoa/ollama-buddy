@@ -110,8 +110,9 @@ enum Lang {
 
     /// Le pourcentage colle a son symbole en anglais, detache en francais.
     static func percent(_ value: Double) -> String {
-        let n = Int((value * 100).rounded())
-        return current == "fr" ? "\(n) %" : "\(n)%"
+        if value > 0 && value < 0.001 { return current == "fr" ? "< 0,1 %" : "< 0.1%" }
+        let n = String(format: "%.1f", value * 100)
+        return current == "fr" ? "\(n.replacingOccurrences(of: ".", with: ",")) %" : "\(n)%"
     }
 }
 private let panelWidth: CGFloat = 300
@@ -862,6 +863,11 @@ if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--keychain" 
     exit(runKeychain(CommandLine.arguments[2], account: CommandLine.arguments[3]))
 }
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--test-alerts" {
+    Lang.current = "en"
+    precondition(Lang.percent(0) == "0.0%" && Lang.percent(0.0001) == "< 0.1%")
+    precondition(Lang.percent(0.12) == "12.0%")
+    Lang.current = "fr"
+    precondition(Lang.percent(0.0001) == "< 0,1 %" && Lang.percent(0.12) == "12,0 %")
     precondition(alertLevel(0.69) == 0 && alertLevel(0.7) == 70)
     precondition(alertLevel(0.9) == 90 && alertLevel(1.1) == 100)
     precondition(alertLevel(0.85, previous: 70) == 0)

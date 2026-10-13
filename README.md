@@ -10,7 +10,7 @@ Ollama Buddy reads your account's daily cloud spending with your own API key. A
 Python server serves a dashboard in a native macOS window, with a compact summary
 in the menu bar. Running the server directly also works in a browser.
 
-- Overview with spending, requests, official credits and the four most recent days.
+- Overview with today’s spending and requests, monthly credits and a cycle preview.
 - **Activity** view with an interactive current-cycle/7/30 calendar-day chart and every daily
   record in the available period. Missing records are distinct from zero spending.
 - Dedicated settings for connection, monthly cycle, alerts and appearance.
@@ -27,8 +27,8 @@ in the menu bar. Running the server directly also works in a browser.
 
 Redesign screenshots use synthetic data and the same server and pages as the app.
 
-**Overview**: cycle spending, requests, official credits and recent days.
-Select a chart bar to inspect a day's record.
+**Overview**: today’s spending and requests, plus monthly credits. The cycle
+preview opens a selected day in Activity; it does not duplicate its table or tokens.
 
 <img src="docs/dashboard.png" alt="Overview with an interactive daily chart and official monthly credits" width="100%">
 
@@ -56,8 +56,8 @@ optional fallback settings use a UTC reset reference with its local equivalent.
 
 ### Menu bar
 
-Check the official credits, cycle spending and recent days, then open the full
-dashboard from the panel.
+Check remaining credits, the next local renewal and today’s spending and requests,
+then open the full dashboard. Zero purchased credits are hidden.
 
 <img src="docs/menu-bar.png" alt="Menu bar panel showing official credits and daily spending" width="300">
 
@@ -116,7 +116,8 @@ checks that a reused server supports daily tracking from renewal, Balance and to
 The top-right button refreshes cloud data. Theme and language selectors live
 in Settings and default to the system preferences. Both are saved on the server.
 
-Reset dates show the official UTC time and its local equivalent. Purchased
+Reset dates are shown once in local time with the timezone; their UTC reference
+is available in a tooltip. Purchased
 credits are displayed separately from included monthly credits. Disconnecting
 requires confirmation and clears locally saved account history.
 
@@ -129,8 +130,8 @@ requires confirmation and clears locally saved account history.
 | `⌘Q` | Quit |
 
 The menu bar shows a llama and the consumed percentage, with an orange alert
-at 70% and red at 90%. Unavailable usage shows a dash. Its summary shows the
-last three days. Old model counters are no longer shown.
+at 70% and red at 90%. Unavailable usage shows a dash. Its summary shows
+today’s spending and requests. Old model counters are no longer shown.
 
 ## Monthly cycle
 
@@ -157,7 +158,7 @@ can draw on purchased credits and is not the same measure as included credits co
 Ollama. If the activity request fails, an available official balance remains visible.
 
 Daily buckets cannot be split at an exact renewal time. If renewal occurs during
-a UTC day, that first daily record is shown with a note that it may include
+a UTC day, that first daily record is shown with a contextual label and a collapsed explanation that it may include
 pre-renewal spending, requests and tokens. The official monthly balance still
 uses the exact cycle boundary; the fallback quota excludes that partial day.
 
@@ -179,7 +180,7 @@ Fallback rate samples are kept separate from official balance samples.
 ### Token counters
 
 **Activity** shows input, output and cached input tokens for the current cycle or selected 7/30-day
-range, plus the selected day's counters. Cached input is a subset of input tokens
+range, plus the selected day’s counters in a collapsed detail. Cached input is a subset of input tokens
 and is never added again. Missing counters are shown as unavailable, not zero.
 Old stored totals cannot reveal the split; migrations preserve them without
 inventing values. A subsequent API reading fills in counters it actually supplies.
@@ -228,6 +229,13 @@ Notifications are unavailable for a standalone CLI server.
 
 These protections target browser-origin attacks. Local programs can still access
 the HTTP API. The native bundle is not sandboxed or notarised.
+
+## Product specification
+
+[specs.md](specs.md) defines each feature, view, data source, expected state and
+acceptance criteria. Overview is the quick summary; Activity owns exploration,
+period totals, tokens and daily records. Detailed calculations and fallback
+settings are collapsed by default.
 
 ## Development and data
 

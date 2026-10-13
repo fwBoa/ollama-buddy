@@ -11,7 +11,7 @@ API. Un serveur Python fournit un tableau de bord dans une fenêtre macOS native
 avec un résumé dans la barre de menus. Le serveur peut aussi fonctionner seul,
 dans un navigateur.
 
-- Vue d’ensemble avec dépense, requêtes, quota et quatre derniers jours.
+- Vue d’ensemble : dépense et requêtes du jour, crédits mensuels et aperçu du cycle.
 - Vue **Activité** avec graphique interactif sur le cycle en cours ou 7/30 jours calendaires et
   tableau de tous les relevés de la période disponible. Les jours manquants
   sont distingués des jours à dépense nulle.
@@ -30,8 +30,8 @@ dans un navigateur.
 Captures de la refonte sur des données fictives, en français. Elles sont générées
 avec le même serveur et les mêmes pages que l’app.
 
-**Vue d’ensemble** : dépense du cycle, requêtes, crédits officiels et derniers jours.
-Sélectionne une barre du graphique pour consulter le relevé d’un jour.
+**Vue d’ensemble** : usage du jour et crédits mensuels. Une barre de l’aperçu
+ouvre son jour dans Activité, qui regroupe l’analyse, les tokens et le tableau.
 
 <img src="docs/dashboard.fr.png" alt="Vue d’ensemble en français : graphique quotidien interactif et crédits mensuels officiels" width="100%">
 
@@ -58,8 +58,8 @@ les réglages de secours facultatifs utilisent une référence UTC avec son équ
 
 ### Barre de menus
 
-Consulte les crédits officiels, la dépense du cycle et les derniers jours, puis ouvre le
-tableau de bord depuis le panneau.
+Consulte les crédits restants, le renouvellement local et l’usage du jour, puis
+ouvre le tableau de bord. Les crédits supplémentaires à zéro sont masqués.
 
 <img src="docs/menu-bar.fr.png" alt="Panneau de la barre de menus en français avec le quota et les dépenses" width="300">
 
@@ -119,8 +119,8 @@ Le bouton en haut à droite actualise les données. Les listes de thème et de
 langue vivent dans les paramètres et suivent le système par défaut.
 Les deux préférences sont enregistrées sur le serveur.
 
-La date de réinitialisation affiche l’heure UTC officielle et son équivalent
-local. Les crédits supplémentaires sont séparés des crédits mensuels inclus.
+La date de réinitialisation apparaît une fois en heure locale, avec le fuseau ;
+la référence UTC est disponible dans une infobulle. Les crédits supplémentaires sont séparés des crédits mensuels inclus.
 Déconnecter exige une confirmation et efface l’historique local du compte.
 
 | Raccourci | Action |
@@ -132,8 +132,8 @@ Déconnecter exige une confirmation et efface l’historique local du compte.
 | `⌘Q` | Quitter |
 
 La barre de menus affiche un lama et le pourcentage consommé : alerte orange à 70 %,
-rouge à 90 %. Une mesure indisponible affiche un tiret. Le résumé montre les trois
-derniers jours. Les anciens compteurs par modèle ne sont plus affichés.
+rouge à 90 %. Une mesure indisponible affiche un tiret. Le résumé montre les
+dépenses et requêtes du jour. Les anciens compteurs par modèle ne sont plus affichés.
 
 ## Cycle mensuel
 
@@ -161,8 +161,7 @@ utiliser des crédits supplémentaires : elle diffère des crédits mensuels con
 délai. Si la lecture de l’activité échoue, le solde officiel disponible reste visible.
 
 Les relevés quotidiens ne peuvent pas être coupés à l’heure exacte du renouvellement.
-Si celui-ci tombe en cours de journée UTC, le premier relevé est accompagné d’une
-indication : il peut inclure des dépenses, requêtes et tokens antérieurs au
+Si celui-ci tombe en cours de journée UTC, le premier relevé est signalé avec une explication repliable : il peut inclure des dépenses, requêtes et tokens antérieurs au
 renouvellement. Le solde mensuel officiel utilise toujours la borne exacte ;
 l’estimation de secours exclut cette journée partielle.
 
@@ -185,8 +184,8 @@ sont séparées des mesures officielles.
 
 ### Compteurs de tokens
 
-**Activité** affiche les tokens d’entrée, de sortie et d’entrée en cache des
-cycle en cours ou des 7/30 jours sélectionnés, ainsi que ceux du jour sélectionné. Le cache est inclus
+**Activité** affiche les tokens d’entrée, de sortie et d’entrée en cache du
+cycle en cours ou des 7/30 jours sélectionnés, ainsi que ceux du jour sélectionné dans un détail repliable. Le cache est inclus
 dans les tokens d’entrée et n’est jamais ajouté une seconde fois. Les compteurs
 absents sont indisponibles, pas nuls. Les anciens totaux sont conservés sans
 inventer leur répartition ; une nouvelle lecture remplit les compteurs réellement
@@ -239,6 +238,13 @@ Elles ne sont pas disponibles avec le serveur CLI seul.
 Ces protections visent les attaques provenant de sites web. Les programmes locaux
 peuvent toujours accéder à l’API HTTP. Le bundle natif n’est ni sandboxé ni notarisé.
 
+## Spécifications produit
+
+[specs.md](specs.md) définit chaque fonctionnalité, vue, source, état attendu et
+critère de validation. Vue d’ensemble reste un résumé ; Activité regroupe les
+filtres, totaux, tokens et relevés. Les calculs détaillés et réglages de secours
+sont repliés par défaut.
+
 ## Développement et données
 
 | Fichier | Rôle |
@@ -269,7 +275,7 @@ Les vues web reçoivent des événements SSE, avec maintien de connexion et reco
 Le tableau de bord interroge toutes les cinq secondes si EventSource est absent.
 Une veille passe toutes les deux secondes ; le cache partagé limite les appels Cloud
 à environ un par minute et par endpoint, sauf actualisation explicite. Un passage à chaque minute
-met à jour le cycle et le compte à rebours même sans nouvelle dépense. La barre de
+met à jour le cycle et la date de renouvellement même sans nouvelle dépense. La barre de
 menus native relit séparément le résultat en cache toutes les vingt secondes.
 
 Les tests du serveur n’exigent aucune dépendance ni compte Ollama réel :
