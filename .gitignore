@@ -17,6 +17,10 @@ usage.db-wal
 Ollama Buddy.app/
 *.icns
 
+# Captures generees et specifications de travail conservees en local.
+/docs/*.png
+/specs.md
+
 # ---------------------------------------------------------------------------
 # Divers
 # ---------------------------------------------------------------------------

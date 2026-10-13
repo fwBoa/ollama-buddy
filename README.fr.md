@@ -27,43 +27,13 @@ dans un navigateur.
 
 ## Interface
 
-Captures de la refonte sur des données fictives, en français. Elles sont générées
-avec le même serveur et les mêmes pages que l’app.
-
-**Vue d’ensemble** : usage du jour et crédits mensuels. Une barre de l’aperçu
-ouvre son jour dans Activité, qui regroupe l’analyse, les tokens et le tableau.
-
-<img src="docs/dashboard.fr.png" alt="Vue d’ensemble en français : graphique quotidien interactif et crédits mensuels officiels" width="100%">
-
-<details>
-<summary>Voir l’activité, les paramètres, le thème sombre et la barre de menus</summary>
-
-### Activité
-
-L’activité démarre au dernier renouvellement. Passe entre le cycle en cours
-et 7/30 jours de ce cycle, avec les compteurs de tokens. Un jour manquant se distingue d’un jour à dépense nulle.
-
-<img src="docs/activity.fr.png" alt="Vue Activité en français : graphique quotidien, compteurs de tokens et relevés disponibles" width="100%">
-
-### Paramètres
-
-Configure la connexion, les alertes et l’apparence. Le cycle vient d’Ollama ;
-les réglages de secours facultatifs utilisent une référence UTC avec son équivalent local.
-
-<img src="docs/settings.fr.png" alt="Paramètres en français : connexion, plafond, référence UTC, alertes, thème et langue" width="100%">
-
-### Thème sombre
-
-<img src="docs/dashboard-dark.fr.png" alt="Vue d’ensemble en français avec le thème sombre" width="100%">
-
-### Barre de menus
-
-Consulte les crédits restants, le renouvellement local et l’usage du jour, puis
-ouvre le tableau de bord. Les crédits supplémentaires à zéro sont masqués.
-
-<img src="docs/menu-bar.fr.png" alt="Panneau de la barre de menus en français avec le quota et les dépenses" width="300">
-
-</details>
+- **Vue d’ensemble** : dépenses et requêtes du jour, crédits mensuels et aperçu
+  du cycle. Sélectionner une barre ouvre son jour dans Activité.
+- **Activité** : dépenses, requêtes, tokens et relevés du cycle en cours ou des
+  7/30 jours sélectionnés. Les jours manquants se distinguent des dépenses nulles.
+- **Paramètres** : connexion, cycle de secours facultatif, alertes, thème et langue.
+- **Barre de menus** : crédits restants, prochain renouvellement local et usage
+  du jour, avec accès au tableau de bord.
 
 ## Installation
 
@@ -238,13 +208,6 @@ Elles ne sont pas disponibles avec le serveur CLI seul.
 Ces protections visent les attaques provenant de sites web. Les programmes locaux
 peuvent toujours accéder à l’API HTTP. Le bundle natif n’est ni sandboxé ni notarisé.
 
-## Spécifications produit
-
-[specs.md](specs.md) définit chaque fonctionnalité, vue, source, état attendu et
-critère de validation. Vue d’ensemble reste un résumé ; Activité regroupe les
-filtres, totaux, tokens et relevés. Les calculs détaillés et réglages de secours
-sont repliés par défaut.
-
 ## Développement et données
 
 | Fichier | Rôle |
@@ -258,7 +221,7 @@ sont repliés par défaut.
 | `config.example.json` | Configuration de secours ; plafond nul pour suivre l’offre locale |
 | `tests/test_backend.py` | Tests du cycle, validation, cache, stockage et HTTP |
 | `tests/test_frontend.cjs` | Tests navigateur sur données fictives ; nécessite Playwright |
-| `tests/capture_ui.cjs` | Captures des README en français et anglais sur données fictives |
+| `tests/capture_ui.cjs` | Captures locales en français et anglais sur données fictives |
 
 L’app native conserve `config.json` et `usage.db` dans
 `~/Library/Application Support/OllamaBuddy/`. Un lancement direct utilise le dossier
@@ -297,7 +260,7 @@ node tests/capture_ui.cjs
 
 Les captures utilisent aussi des données fictives et n’accèdent ni à ton compte
 ni à son Trousseau. Le script remplace uniquement les PNG de démonstration dans
-`docs/`.
+`docs/`, ignorés par Git.
 
 Après construction, les seuils et leur déduplication sont vérifiables avec :
 

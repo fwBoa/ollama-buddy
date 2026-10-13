@@ -25,43 +25,13 @@ in the menu bar. Running the server directly also works in a browser.
 
 ## Interface
 
-Redesign screenshots use synthetic data and the same server and pages as the app.
-
-**Overview**: today’s spending and requests, plus monthly credits. The cycle
-preview opens a selected day in Activity; it does not duplicate its table or tokens.
-
-<img src="docs/dashboard.png" alt="Overview with an interactive daily chart and official monthly credits" width="100%">
-
-<details>
-<summary>Explore activity, settings, dark mode and the menu bar</summary>
-
-### Activity
-
-Activity starts at the latest renewal. Switch between the full current cycle
-and 7/30 calendar days within it, including input, output and cached token counters. Missing records are
-distinct from days with zero spending.
-
-<img src="docs/activity.png" alt="Activity view with daily chart, token counters and daily records" width="100%">
-
-### Settings
-
-Configure connection, alerts and appearance. The cycle comes from Ollama;
-optional fallback settings use a UTC reset reference with its local equivalent.
-
-<img src="docs/settings.png" alt="Settings for connection, cap, UTC reset reference, alerts, theme and language" width="100%">
-
-### Dark mode
-
-<img src="docs/dashboard-dark.png" alt="Overview in the dark theme" width="100%">
-
-### Menu bar
-
-Check remaining credits, the next local renewal and today’s spending and requests,
-then open the full dashboard. Zero purchased credits are hidden.
-
-<img src="docs/menu-bar.png" alt="Menu bar panel showing official credits and daily spending" width="300">
-
-</details>
+- **Overview**: today’s spending and requests, monthly credits and a cycle preview.
+  Selecting a bar opens that day in Activity.
+- **Activity**: spending, requests, tokens and daily records for the current cycle
+  or the selected 7/30-day period. Missing records differ from zero spending.
+- **Settings**: connection, optional fallback cycle, alerts, theme and language.
+- **Menu bar**: remaining credits, next local renewal and today’s usage, with
+  access to the full dashboard.
 
 ## Install
 
@@ -230,13 +200,6 @@ Notifications are unavailable for a standalone CLI server.
 These protections target browser-origin attacks. Local programs can still access
 the HTTP API. The native bundle is not sandboxed or notarised.
 
-## Product specification
-
-[specs.md](specs.md) defines each feature, view, data source, expected state and
-acceptance criteria. Overview is the quick summary; Activity owns exploration,
-period totals, tokens and daily records. Detailed calculations and fallback
-settings are collapsed by default.
-
 ## Development and data
 
 | File | Role |
@@ -250,7 +213,7 @@ settings are collapsed by default.
 | `config.example.json` | Configuration shape; fallback cap; zero follows the local plan |
 | `tests/test_backend.py` | Cycle, validation, cache, storage and HTTP regression tests |
 | `tests/test_frontend.cjs` | Browser regression tests with synthetic data; requires Playwright |
-| `tests/capture_ui.cjs` | English/French README screenshots using synthetic data |
+| `tests/capture_ui.cjs` | English/French Local screenshots using synthetic data |
 
 The native app stores `config.json` and `usage.db` in
 `~/Library/Application Support/OllamaBuddy/`. Direct launches use the project
@@ -279,14 +242,14 @@ The browser suite is run with `node tests/test_frontend.cjs` when Playwright and
 its Chromium browser are available. It uses a temporary data directory, mocked
 Ollama responses and a simulated Keychain, without touching real credentials.
 
-Regenerate the English and French README screenshots with the same dependencies:
+Regenerate the English and French Local screenshots with the same dependencies:
 
 ```bash
 node tests/capture_ui.cjs
 ```
 
 Screenshots also use synthetic data without accessing your account or Keychain.
-The script only replaces the demonstration PNGs in `docs/`.
+The script only replaces the demonstration PNGs in `docs/`, which Git ignores.
 
 After building, the native threshold/deduplication checks can be run with:
 
