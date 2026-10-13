@@ -502,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// Lit le quota pour la barre de menus. Le serveur met la reponse en
     /// cache, cet appel toutes les 20 s ne coute donc rien.
     private func refreshStatus() {
-        guard let url = URL(string: "http://127.0.0.1:\(port)/api/usage?range=today") else { return }
+        guard let url = URL(string: "http://127.0.0.1:\(port)/api/usage") else { return }
         var request = URLRequest(url: url)
         request.timeoutInterval = 3
         URLSession.shared.dataTask(with: request) { payload, _, _ in
@@ -601,7 +601,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private func showWindow() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if webView.url == nil { loadDashboard(showError: false) }
+        if webView.url == nil { loadDashboard() }
     }
 
     // MARK: - Démarrage du serveur
@@ -609,7 +609,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     private func start() {
         probe(port: port) { alive in
             if alive {
-                self.loadDashboard(showError: false)
+                self.loadDashboard()
             } else {
                 self.launchServer(at: self.port)
             }
@@ -691,7 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         probe(port: port) { alive in
             if alive {
-                self.loadDashboard(showError: false)
+                self.loadDashboard()
             } else {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     self.waitForServer(attempts: attempts - 1)
@@ -700,7 +700,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
     }
 
-    private func loadDashboard(showError: Bool) {
+    private func loadDashboard() {
         guard let url = URL(string: "http://127.0.0.1:\(port)/") else { return }
         webView.load(URLRequest(url: url))
         // On precharge l'apercu : au premier clic, la page doit deja etre

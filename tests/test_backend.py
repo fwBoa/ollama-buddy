@@ -42,7 +42,7 @@ def balance(monthly=60, remaining=47.66):
 
 class CycleTests(unittest.TestCase):
     def window(self, anchor, now):
-        return buddy.reset_window(None, {"quota_reset_at": epoch(anchor)}, now)
+        return buddy.reset_window({"quota_reset_at": epoch(anchor)}, now)
 
     def test_subscription_31_keeps_both_bounds(self):
         end, start, source = self.window(utc(2026, 1, 31, 12), utc(2026, 2, 5))
@@ -60,7 +60,7 @@ class CycleTests(unittest.TestCase):
         self.assertEqual((start, end), (epoch(utc(2026, 10, 12, 10)), epoch(utc(2026, 11, 12, 10))))
 
     def test_missing_cycle(self):
-        self.assertEqual(buddy.reset_window(None, {}, utc(2026, 10, 12)), (0, None, None))
+        self.assertEqual(buddy.reset_window({}, utc(2026, 10, 12)), (0, None, None))
 
     def test_partial_day_and_cap(self):
         data = usage([("2026-09-11", 20), ("2026-09-12", 12), ("2026-09-13", 3)])
@@ -270,18 +270,18 @@ class StateTests(StateFixture):
         data = usage([(today, .2)])
         data["buckets"][0].update(input_tokens=100, cached_input_tokens=40, output_tokens=20)
         buddy.record_days(self.state.conn, data)
-        history = buddy.history_cloud(self.state.conn, self.state.cfg, data)
+        history = buddy.history_cloud(self.state.conn, self.state.cfg)
         day = buddy.cloud_days(history)[-1]
         self.assertEqual((day["input_tokens"], day["cached_input_tokens"], day["output_tokens"], day["tokens"]),
                          (100, 40, 20, 120))
         restarted = buddy.State(dict(self.state.cfg))
         try:
-            self.assertEqual(buddy.cloud_days(buddy.history_cloud(restarted.conn, restarted.cfg, data))[-1], day)
+            self.assertEqual(buddy.cloud_days(buddy.history_cloud(restarted.conn, restarted.cfg))[-1], day)
         finally:
             restarted.conn.close()
         del data["buckets"][0]["cached_input_tokens"]
         buddy.record_days(self.state.conn, data)
-        day = buddy.cloud_days(buddy.history_cloud(self.state.conn, self.state.cfg, data))[-1]
+        day = buddy.cloud_days(buddy.history_cloud(self.state.conn, self.state.cfg))[-1]
         self.assertIsNone(day["cached_input_tokens"])
         data["buckets"][0]["cached_input_tokens"] = 101
         self.assertIsNone(buddy.cloud_days(data))
@@ -332,19 +332,53 @@ class StateTests(StateFixture):
             self.assertEqual(cloud.call_count, 1)
         self.assertEqual(buddy.ollama_account.call_count, 1)
         self.assertNotIn("cloud", payloads[0])
-        self.assertEqual(payloads[0]["account"], {"plan": "pro"})
+        self.assertNotIn("account", payloads[0])
         self.assertNotIn("test-key", json.dumps(payloads))
 
     def test_changed_cap_and_key_discard_incompatible_samples(self):
         self.state.conn.executemany("INSERT INTO cloud_samples VALUES (?,?,?,?)",
                                     [(1, "", 1, .5), (1, "model", 1, .5)])
+        self.state.conn.execute("CREATE TABLE model_color (model TEXT PRIMARY KEY, slot INTEGER NOT NULL)")
         self.state.conn.execute("INSERT INTO model_color VALUES ('model', 0)")
         self.state.conn.commit()
         self.state.update_config({"monthly_quota": 300})
         self.assertEqual(self.state.conn.execute("SELECT model FROM cloud_samples").fetchall(), [("model",)])
         self.state.update_config({"ollama_api_key": "new-account"})
         self.assertEqual(self.state.conn.execute("SELECT * FROM cloud_samples").fetchall(), [])
-        self.assertEqual(self.state.conn.execute("SELECT * FROM model_color").fetchall(), [])
+        self.assertEqual(self.state.conn.execute("SELECT name FROM sqlite_master WHERE name='model_color'").fetchall(), [])
+
+    def test_local_account_is_only_read_for_an_unconfigured_fallback(self):
+        self.state.payload()
+        self.assertEqual(buddy.ollama_account.call_count, 0)
+        self.state.update_config({"ollama_api_key": "test-key"})
+        with patch.object(buddy, "cloud_balance", return_value=balance()), \
+                patch.object(buddy, "cloud_usage", return_value=usage([])):
+            payload = self.state.payload()
+        self.assertEqual(payload["quota"]["measurement"], "balance")
+        self.assertEqual(buddy.ollama_account.call_count, 0)
+        abandoned = {"account", "error", "days", "unit", "usd", "requests", "peak",
+                     "days_total", "models", "models_total", "models_at", "period", "generated_at"}
+        self.assertFalse(abandoned & payload.keys())
+        self.assertFalse(abandoned & buddy.empty_usage().keys())
+        self.state.update_config({"monthly_quota": 100})
+        self.state.invalidate_cloud()
+        with patch.object(buddy, "cloud_usage", return_value=usage([])):
+            self.assertEqual(self.state.payload()["quota"]["monthly"], 100)
+            self.assertEqual(buddy.ollama_account.call_count, 0)
+            self.state.update_config({"monthly_quota": 0})
+            self.assertEqual(self.state.payload()["quota"]["monthly"], 60)
+            self.assertEqual(buddy.ollama_account.call_count, 1)
+
+    def test_archived_models_do_not_block_fallback_sampling(self):
+        now = datetime.now(timezone.utc)
+        ts = epoch(now)
+        self.state.conn.execute("INSERT INTO cloud_samples VALUES (?,?,?,?)", (ts, "old-model", 1, .5))
+        self.state.conn.commit()
+        data = usage([(now.date().isoformat(), 1)])
+        start = epoch(now.replace(hour=0, minute=0, second=0, microsecond=0))
+        self.assertTrue(buddy.record_cloud_sample(self.state.conn, data, start, 60))
+        self.assertFalse(buddy.record_cloud_sample(self.state.conn, data, start, 60))
+        self.assertEqual(self.state.conn.execute("SELECT COUNT(*) FROM cloud_samples").fetchone()[0], 2)
 
     def test_spending_without_reset_or_cap_and_persistent_31_day_cycle(self):
         now = utc(2026, 10, 31, 12)
@@ -356,21 +390,21 @@ class StateTests(StateFixture):
                 payload = self.state.payload()
             self.assertTrue(payload["usage_available"])
             self.assertIsNone(payload["quota"]["ratio"])
-            self.assertEqual(payload["period"], "recent")
+            self.assertIsNone(payload["activity_start"])
             self.state.update_config({"quota_reset_at": epoch(utc(2026, 10, 1))})
             self.state.invalidate_cloud()
             second = usage([((utc(2026, 10, 2) + timedelta(days=n)).date().isoformat(), 1) for n in range(30)])
             with patch.object(buddy, "cloud_usage", return_value=second):
                 payload = self.state.payload()
-            self.assertEqual(payload["usd"], 31)
-            self.assertEqual(payload["days_total"], 31)
+            self.assertEqual(sum(day["usd"] for day in payload["daily_days"]), 31)
+            self.assertEqual(len(payload["daily_days"]), 31)
             self.assertEqual(payload["quota"]["current"], 31)
-            self.assertEqual(payload["period"], "cycle")
+            self.assertEqual(payload["activity_start"], epoch(utc(2026,10,1)))
             self.state.account_data = {"plan": "unknown"}
             missing_cap = self.state.payload()
             self.assertTrue(missing_cap["usage_available"])
             self.assertIsNone(missing_cap["quota"]["ratio"])
-            self.assertEqual(missing_cap["usd"], 31)
+            self.assertEqual(sum(day["usd"] for day in missing_cap["daily_days"]), 31)
             self.state.update_config({"monthly_quota": 100})
             self.assertEqual(self.state.payload()["quota"]["ratio"], .31)
             # Le fichier SQLite survit au redemarrage, contrairement au cache HTTP.
@@ -389,7 +423,6 @@ class StateTests(StateFixture):
             self.state.cfg.update(ollama_api_key="test-key", quota_reset_at=epoch(utc(2026, 10, 12, 12)))
             with patch.object(buddy, "cloud_usage", return_value=usage([("2026-10-12", .2)])):
                 first = self.state.payload()
-            self.assertEqual(first["days"], [])
             self.assertEqual(first["daily_days"][-1]["usd"], .2)
             self.assertEqual(first["quota"]["error"], "partial reset day")
             self.assertIsNone(first["quota"]["ratio"])

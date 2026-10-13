@@ -230,7 +230,7 @@ Elles ne sont pas disponibles avec le serveur CLI seul.
   CLI reste en clair. Le Trousseau protège le stockage au repos ; il n’isole pas
   cette app des logiciels qui tournent sous ton propre utilisateur.
 - La clé est envoyée à `ollama.com` dans l’en-tête HTTPS Authorization. Elle n’est
-  jamais renvoyée au tableau de bord. Seule l’offre du compte est exposée, pas son email.
+  jamais renvoyée au tableau de bord. Les informations du compte local ne sont pas exposées au navigateur.
 - Les erreurs insérées dans le HTML sont échappées. Les pages
   portent une politique de scripts avec nonce, interdisent l’intégration dans une
   frame et limitent leurs requêtes réseau au serveur local.

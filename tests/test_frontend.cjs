@@ -172,7 +172,7 @@ async function main() {
     }
     console.log('PASS chart selection, full activity, keyboard navigation and responsive layout');
     const gapDay = payload.daily_days[payload.daily_days.length - 3].day;
-    await dashboard.evaluate(day => applyData({ ...lastData, days: lastData.days.filter(d => d.day !== day), daily_days: lastData.daily_days.filter(d => d.day !== day),
+    await dashboard.evaluate(day => applyData({ ...lastData, daily_days: lastData.daily_days.filter(d => d.day !== day),
       quota: { ...lastData.quota, source: 'unavailable', error: 'incomplete history', ratio: null } }), gapDay);
     assert.match(await dashboard.locator('.quota').innerText(), /History incomplete/);
     await dashboard.locator('.nav [data-view="activity"]').click();
@@ -180,7 +180,7 @@ async function main() {
     assert.match(await dashboard.locator('#chart-detail').innerText(), /No record for this day/);
     assert.equal(await dashboard.locator('.chart-day.missing').count(), 1);
     await dashboard.evaluate(data => applyData(data), payload);
-    await dashboard.evaluate(() => applyData({ ...lastData, days: [], daily_days: [], usd: 0, requests: 0, peak: 0 }));
+    await dashboard.evaluate(() => applyData({ ...lastData, daily_days: [] }));
     assert.match(await dashboard.locator('#app').innerText(), /No daily records yet/);
     await dashboard.locator('.nav [data-view="activity"]').click();
     assert.equal((await dashboard.locator('#app').innerText()).match(/No daily records yet/g).length, 1);
@@ -205,12 +205,12 @@ async function main() {
     assert.match(await dashboard.locator('.quota').innerText(), /Cap reached/);
     await dashboard.evaluate(data => applyData(data), payload);
     // A stream update also keeps keyboard focus on the inspected bar.
-    await dashboard.locator(`[data-select-day="${payload.days.at(-1).day}"]`).focus();
-    await dashboard.evaluate(() => applyData({ ...lastData, requests: lastData.requests + 1 }));
-    assert.equal(await dashboard.evaluate(() => document.activeElement.dataset.selectDay), payload.days.at(-1).day);
+    await dashboard.locator(`[data-select-day="${payload.daily_days.at(-1).day}"]`).focus();
+    await dashboard.evaluate(() => applyData({ ...lastData, daily_days: lastData.daily_days.map((day,i)=>i === lastData.daily_days.length-1 ? {...day,requests:day.requests+1} : day) }));
+    assert.equal(await dashboard.evaluate(() => document.activeElement.dataset.selectDay), payload.daily_days.at(-1).day);
     await dashboard.evaluate(data => applyData(data), payload);
     console.log('PASS missing records, empty history, onboarding, escaped errors and exceeded quota');
-    await dashboard.evaluate(data => applyData({ ...data, days: [], usd: 0, requests: 0,
+    await dashboard.evaluate(data => applyData({ ...data,
       daily_days: [{day: new Date().toISOString().slice(0,10),usd:.25,requests:7}],
       quota: {...data.quota,source:'indisponible',error:'partial reset day',ratio:null,current:null} }), payload);
     assert.match(await dashboard.locator('#hero').innerText(), /0.25/);
@@ -235,7 +235,7 @@ async function main() {
     await dashboard.locator('#monthly').fill('81.5');
     await dashboard.locator('#monthly').press('Tab');
     await dashboard.locator('.nav [data-view="overview"]').click();
-    await dashboard.evaluate(() => applyData({ ...lastData, requests: lastData.requests + 1 }));
+    await dashboard.evaluate(() => applyData({ ...lastData, daily_days: lastData.daily_days.map((day,i)=>i === lastData.daily_days.length-1 ? {...day,requests:day.requests+1} : day) }));
     await dashboard.locator('.nav [data-view="settings"]').click();
     assert.equal(await dashboard.locator('#monthly').inputValue(), '81.5');
     await dashboard.locator('#monthly').fill('');

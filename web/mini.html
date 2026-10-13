@@ -7,26 +7,25 @@
 <style>
   :root {
     color-scheme: light;
-    --page:#f7f8f5; --surface:#fdfdfa; --rail:#edefe8; --text:#202a24;
+    --surface:#fdfdfa; --rail:#edefe8; --text:#202a24;
     --muted:#5e6b62; --line:#dce2d9; --soft:#e8eee6; --accent:#2c6349;
-    --accent-soft:#e4eee4; --on-accent:#fafcf8; --good:#2c6349;
+    --accent-soft:#e4eee4; --good:#2c6349;
     --serious:#975122; --critical:#b73f3f; --warning:#975122;
-    --ease:cubic-bezier(.22,1,.36,1);
   }
   @media(prefers-color-scheme:dark) {
     :root:not([data-theme="light"]) {
       color-scheme:dark;
-      --page:#171e1a; --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
+      --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
       --muted:#a6b3a7; --line:#364039; --soft:#2a352d; --accent:#a7cfaf;
-      --accent-soft:#2a3d30; --on-accent:#18251c; --good:#a7cfaf;
+      --accent-soft:#2a3d30; --good:#a7cfaf;
       --serious:#edb478; --critical:#ff9e9a; --warning:#edb478;
     }
   }
   :root[data-theme="dark"] {
     color-scheme:dark;
-    --page:#171e1a; --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
+    --surface:#1d2620; --rail:#131a16; --text:#ecf0e8;
     --muted:#a6b3a7; --line:#364039; --soft:#2a352d; --accent:#a7cfaf;
-    --accent-soft:#2a3d30; --on-accent:#18251c; --good:#a7cfaf;
+    --accent-soft:#2a3d30; --good:#a7cfaf;
     --serious:#edb478; --critical:#ff9e9a; --warning:#edb478;
   }
 
@@ -47,9 +46,6 @@
   .meter span { display:block; width:100%; height:100%; transform-origin:left; background:var(--fill); }
   .spending { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:16px 0; margin-top:16px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
   .big { display:block; margin-top:5px; font-size:20px; font-weight:550; letter-spacing:-.025em; font-variant-numeric:tabular-nums; }
-  .models { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
-  .m { display:flex; justify-content:space-between; gap:10px; font-size:11px; }
-  .n { color:var(--muted); } .v { font-variant-numeric:tabular-nums; }
   .actions { margin-top:18px; }
   button { width:100%; border:1px solid var(--line); background:var(--rail); color:var(--text); padding:9px 10px; border-radius:6px; font-size:12px; font-weight:550; }
   button:hover { background:var(--soft); } button:active { background:var(--accent-soft); }
@@ -76,14 +72,11 @@ const FR = {
   'Next reset': 'Prochaine réinitialisation',
   'Monthly credits': 'Crédits mensuels',
   'Usage limits': 'Limites d’usage',
-  'Included credits used': 'Crédits mensuels consommés',
   'Purchased credits': 'Crédits supplémentaires',
   'Legacy plan': 'Ancienne offre',
   'No included credits': 'Aucun crédit mensuel inclus',
-  'Official balance': 'Solde officiel',
   'Session': 'Session',
   'Weekly': 'Semaine',
-  'Requests': 'Requêtes',
   'Reset day': 'Jour de réinitialisation',
   'Daily spending remains available. The quota estimate excludes the partial reset day.': 'La dépense quotidienne reste disponible. L’estimation du quota exclut la journée partielle de réinitialisation.',
 
@@ -98,30 +91,13 @@ const FR = {
 
   'Ollama Buddy — summary': 'Ollama Buddy — aperçu',
   'Reading…': 'Lecture…',
-  'Reset on {date} (UTC)': 'Réinitialisation le {date} (UTC)',
-  ' · reset tomorrow': ' · demain',
-  ' · reset in {n} days': ' ·\u00A0dans {n} jours',
-  'Monthly quota': 'Quota mensuel estimé',
   'Estimated monthly quota': 'Quota mensuel estimé',
-  'Available spending': 'Dépense disponible',
-  'Models · read on {date}': 'Modèles · relevé du {date}',
   '{pct} of the monthly quota': '{pct} du quota mensuel',
-  ': {current} of {monthly}': ' : {current} sur {monthly}',
-  '{current} of {monthly}': '{current} sur {monthly}',
   'Cannot read — check your API key in the dashboard.': 'Lecture impossible — vérifie ta clé API dans le tableau de bord.',
   'Open Settings to enter the reset date and monthly cap.': 'Ouvre les paramètres pour renseigner la date de réinitialisation et le plafond mensuel.',
   'Incomplete cycle history — open the dashboard for details.': 'Historique du cycle incomplet — ouvre le tableau de bord pour les détails.',
   'No figures: the quota is read from ollama.com. Open the dashboard to paste your API key.':
     'Aucun chiffre : le quota se lit sur ollama.com. Ouvre le tableau de bord pour coller ta clé API.',
-  '{amount} / day': '{amount} / jour',
-  ' — cap exceeded': ' — plafond dépassé',
-  ' — cap reached today': " — plafond atteint aujourd'hui",
-  ' — cap reached tomorrow': ' — plafond atteint demain',
-  ' — cap reached in {n} days': ' — plafond atteint dans\u00A0{n} jours',
-  'This cycle': 'Le cycle',
-  'Last days': 'Derniers jours',
-  'Other ({n})': 'Autres ({n})',
-  'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Open the dashboard': 'Ouvrir le tableau de bord',
   'Live': 'En direct',
   'Reconnecting': 'Reconnexion',
@@ -131,11 +107,9 @@ let lang = 'en';
 let lastSig = '';
 let hasRendered = false;
 
-const squeeze = s => s.replace(/\s+/g, ' ').trim();
-const FR_BY_KEY = new Map(Object.entries(FR).map(([k, v]) => [squeeze(k), v]));
 const fill = (text, values) =>
   text.replace(/\{(\w+)\}/g, (m, k) => (k in values ? values[k] : m));
-const T = s => (lang === 'fr' ? (FR_BY_KEY.get(squeeze(s)) ?? s) : s);
+const T = s => (lang === 'fr' ? (FR[s] ?? s) : s);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const locale = () => (lang === 'fr' ? 'fr-FR' : 'en-US');
 
@@ -150,26 +124,8 @@ const pct = x => x > 0 && x < .001 ? (lang === 'fr' ? '< 0,1 %' : '< 0.1%') : (l
   ? (x * 100).toFixed(1).replace('.', ',') + ' %'
   : (x * 100).toFixed(1) + '%');
 const severity = r => r >= 0.9 ? 'var(--critical)' : r >= 0.7 ? 'var(--serious)' : 'var(--accent)';
-/* Les jours arrivent en ISO, coupes en UTC ; le libelle appartient au client. */
-const compact = n => {
-  const fr = lang === 'fr';
-  const num = (v, d) => (fr ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
-  const unit = u => (fr ? ' ' : '') + u;
-  if (n >= 1e6) return num(n / 1e6, 2) + unit('M');
-  if (n >= 1e3) return num(n / 1e3, 1) + unit('k');
-  return String(n);
-};
-const modelLabel = m => (m.other ? fill(T('Other ({n})'), { n: m.other_count ?? '?' }) : m.model);
-
-const dayLabel = iso => new Date(iso + 'T00:00:00Z')
-  .toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-/* Combien de jours pleins il reste, comme ollama.com les compte. Le libelle
-   porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
-   meme remise a zero selon qu'on compte les jours pleins ou ceux du
-   calendrier, et c'est la date qui tranche. */
 function resetLabel(q) {
-  if (!q.resets_at || q.days_left === null || q.days_left === undefined) return '';
+  if (!q.resets_at) return '';
   const date = new Date(q.resets_at);
   const local = date.toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'});
   const utc = date.toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'})+' UTC';
@@ -182,7 +138,7 @@ function render(d) {
   if (d.lang) applyLang(d.lang);
   const ready = q.source === 'api' && typeof q.ratio === 'number';
   const official = q.measurement === 'balance';
-  const days = d.daily_days || d.days || [];
+  const days = d.daily_days || [];
   const today = days.find(day=>day.day === new Date().toISOString().slice(0,10));
   const quotaBlock = ready ? `
     <p class="label">${T(official ? 'Monthly credits' : 'Estimated monthly quota')}</p>
@@ -249,14 +205,14 @@ applyLang('auto');
 window.addEventListener('load', reportSize);
 
 function connect() {
-  const stream = new EventSource('/api/stream?range=today');
+  const stream = new EventSource('/api/stream');
   stream.onopen = () => setLive(true);
   stream.onerror = () => setLive(false);
   stream.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
     const sig = JSON.stringify({
-      usd: d.usd, requests: d.requests, days: d.days, daily_days: d.daily_days, usage_available: d.usage_available,
-      period: d.period, theme: d.theme, lang: d.lang,
+      daily_days: d.daily_days, usage_available: d.usage_available,
+      theme: d.theme, lang: d.lang,
       quota: { ...d.quota, days_left: Math.floor(d.quota?.days_left ?? -1) },
     });
     if (sig === lastSig) return;

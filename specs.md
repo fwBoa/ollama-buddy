@@ -1,6 +1,6 @@
 # Ollama Buddy — spécifications produit et comportements
 
-Version : 1.0 — 13 octobre 2026.
+Version : 1.1 — 13 octobre 2026.
 
 Ce document définit les comportements attendus de la version livrée. Le README
 explique l’installation ; les spécifications fixent les règles du produit, les
@@ -47,6 +47,11 @@ ne remplace pas la facturation Ollama.
 | Cache | `cached_input_tokens` | Sous-ensemble des tokens d’entrée |
 | Sortie | `output_tokens` | Tokens générés |
 | Offre locale de secours | API locale Ollama `/api/me` | Indication pour le plafond de secours, pas preuve de l’offre de la clé API |
+
+Le compte local n’est interrogé que si une clé est connectée, que Balance est
+indisponible et qu’aucun plafond de secours n’est saisi. Ses informations ne sont
+pas envoyées aux vues. Le serveur transmet une seule série `daily_days` ; les vues
+calculent leurs totaux sur la période sélectionnée, sans série quotidienne dupliquée.
 
 Formules : `consommé = plafond − disponible` ; `part consommée = consommé / plafond`
 si le plafond est strictement positif ; `tokens traités = entrée + sortie`.
@@ -344,6 +349,11 @@ exécutés sous le même utilisateur ; le bundle n’est pas sandboxé.
 
 - Pas d’historique global par modèle : l’API l’annonce à venir, la clé seule ne
   fournit pas l’historique visible sur le site. Aucun scraping de session ajouté.
+- Les anciens rendus, traductions et champs de réponse par modèle sont retirés.
+  Aucune table de couleurs par modèle n’est créée. Les colonnes de stockage utiles
+  à la compatibilité des bases restent en place ; les archives existantes ne sont
+  ni affichées ni utilisées pour les projections. Le changement de clé efface
+  toujours l’historique de l’ancien compte, archives comprises.
 - Pas de proxy d’inférence, comparaison de modèles, chat ou prompts enregistrés.
 - Pas de fusion des vues : leurs usages sont distincts, même si elles partagent
   les données et le composant de graphique.

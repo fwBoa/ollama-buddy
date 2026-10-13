@@ -223,7 +223,7 @@ Notifications are unavailable for a standalone CLI server.
   CLI file storage remains plaintext. Keychain protects storage at rest; it does
   not make this app an isolation boundary against software running as your user.
 - The key goes to `ollama.com` in the HTTPS Authorization header. It is never sent
-  back to the dashboard. The account payload exposes only the plan, not the email.
+  back to the dashboard. Local account details are not included in browser responses.
 - Dynamic error text is HTML-escaped. Pages carry a nonce-based script policy,
   deny framing and restrict their network requests to the local server.
 

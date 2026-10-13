@@ -334,15 +334,8 @@ def balance_values(data: dict | None) -> dict | None:
 # --------------------------------------------------------------------------
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS model_color (
-    model TEXT PRIMARY KEY,
-    slot  INTEGER NOT NULL
-);
-
--- Echantillons de ollama.com/api/usage. Les compteurs de l'API sont des
--- cumuls du cycle en cours : c'est leur difference entre deux echantillons qui
--- donne l'activite d'un intervalle. `model` reste vide : l'API ne publie plus
--- le detail par modele depuis le 07/10/2026.
+-- Estimation de secours : part du plafond consommee. Les colonnes model et
+-- requests restent pour lire les bases existantes ; model est toujours vide.
 CREATE TABLE IF NOT EXISTS cloud_samples (
     ts       INTEGER NOT NULL,
     model    TEXT    NOT NULL,
@@ -377,17 +370,11 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
 
-    # Migration AVANT le schema : une base ancienne peut avoir des tables
-    # que ce code ne cree plus, ou une colonne manquante.
-    # pas de colonne client, et l'index correspondant echouerait.
     tables = {row[0] for row in
               conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-    # Les transcripts Claude Code ne sont plus lus, et le quota ne se saisit
-    # plus a la main : le montant colle des semaines plus tot etait affiche
-    # comme le quota du jour. Ces tables n'ont plus de lecteur. Les remises a
-    # zero observees partent aussi : l'observer regardait une chute de la part
-    # du plafond, et plus rien ne retombe.
+    # Migration des anciennes importations de transcripts, saisies de quota
+    # et observations de reset : ces tables n'ont plus de lecteur.
     for table in ("quota_readings", "events", "files", "quota_resets"):
         if table in tables:
             conn.execute(f"DROP TABLE {table}")
@@ -486,15 +473,15 @@ def record_days(conn: sqlite3.Connection, cloud: dict) -> None:
     conn.commit()
 
 
-def history_cloud(conn: sqlite3.Connection, cfg: dict, cloud: dict,
+def history_cloud(conn: sqlite3.Connection, cfg: dict,
                   balance: dict | None = None) -> dict:
-    rows = conn.execute("""SELECT day, usd, requests, tokens, input_tokens,
+    rows = conn.execute("""SELECT day, usd, requests, input_tokens,
         cached_input_tokens, output_tokens FROM daily_usage ORDER BY day""").fetchall()
     buckets = [{"from": day + "T00:00:00Z", "usage_usd": usd, "request_count": requests,
                 **{key: value for key, value in zip(
                     ("input_tokens", "cached_input_tokens", "output_tokens"), counters) if value is not None}}
-               for day, usd, requests, tokens, *counters in rows]
-    _, start, _ = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
+               for day, usd, requests, *counters in rows]
+    _, start, _ = reset_window(cfg, datetime.now(timezone.utc), balance)
     first = cycle_first_day(start)
     complete = False
     if first:
@@ -553,8 +540,7 @@ def cycle_first_day(cycle_start: int | None) -> str | None:
     Les jours que publie l'API sont coupes a minuit UTC ; le cycle, lui,
     commence a une heure quelconque. On part donc du premier jour entier, et
     jamais de la journee charniere : elle appartient pour partie au cycle
-    precedent, et la compter fausse tout. Verifie contre le site le
-    07/10/2026, qui annoncait 59,81 $.
+    precedent, et la compter fausse tout.
     """
     if not cycle_start:
         return None
@@ -568,17 +554,8 @@ def cycle_first_day(cycle_start: int | None) -> str | None:
 def cloud_cycle_usage(cloud: dict | None, cycle_start: int | None) -> float | None:
     """Dollars consommes depuis le debut du cycle, ou None si on ne sait pas.
 
-    L'API ne donne plus la part du quota, mais la consommation de chaque jour :
-    le cycle est donc la somme des jours depuis son debut.
-
-    On part du premier jour entier du cycle, jamais de la journee charniere :
-    les jours sont coupes a minuit UTC, la remise a zero tombe a une heure
-    quelconque. Verifie contre le site le 07/10/2026 — il annoncait 59,81 $.
-    Les jours entiers depuis le 12/09 donnent 59,80 $. La journee charniere
-    comptee au prorata donnait 60,45 $, et comptee entiere 67,37 $.
-
-    Sans debut de cycle, il n'y a pas de somme a faire : deviner reviendrait a
-    publier un chiffre faux.
+    Estimation de secours sur les jours entiers, sans prorata du jour partiel.
+    Sans debut de cycle ou historique complet, aucun montant n'est estime.
     """
     jours = cloud_days(cloud)
     premier = cycle_first_day(cycle_start)
@@ -610,7 +587,7 @@ def next_occurrence(anchor: datetime, now: datetime) -> int:
     return int(candidate.timestamp() * 1000)
 
 
-def reset_window(conn: sqlite3.Connection, cfg: dict,
+def reset_window(cfg: dict,
                  now: datetime, balance: dict | None = None) -> tuple[int, int | None, str | None]:
     """Cycle en cours : (prochaine remise a zero, debut du cycle, origine).
 
@@ -648,7 +625,7 @@ def record_cloud_sample(conn: sqlite3.Connection, cloud: dict | None, cycle_star
         return False
 
     ts = int(time.time() * 1000)
-    dernier = conn.execute("SELECT MAX(ts) FROM cloud_samples").fetchone()[0]
+    dernier = conn.execute("SELECT MAX(ts) FROM cloud_samples WHERE model = ''").fetchone()[0]
     if dernier and ts - dernier < CLOUD_SAMPLE_SECONDS * 1000:
         return False
 
@@ -705,7 +682,7 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
     """Solde officiel en priorite, estimation des jours complets en secours."""
     values = balance_values(balance)
     if values:
-        quota = quota_unavailable(conn, cfg, cloud, account)
+        quota = quota_unavailable(cfg, cloud, account)
         quota.update(measurement="balance", key_error=None, error=None,
                      balance_error=None, purchased=values["purchased"],
                      monthly=0, cycle_known=False, resets_at=0, days_left=None,
@@ -732,12 +709,12 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
     monthly = monthly_cap(cfg, account)
     now = datetime.now(timezone.utc)
     now_ms = int(time.time() * 1000)
-    resets_at, cycle_start, reset_source = reset_window(conn, cfg, now)
+    resets_at, cycle_start, reset_source = reset_window(cfg, now)
     consume = cloud_cycle_usage(cloud, cycle_start)
 
     if (consume is None or monthly <= 0 or
                 cycle_first_day(cycle_start) > now.date().isoformat()):
-        quota = quota_unavailable(conn, cfg, cloud, account)
+        quota = quota_unavailable(cfg, cloud, account)
         quota["balance_error"] = (balance or {}).get("error")
         return quota
 
@@ -781,19 +758,17 @@ def build_quota(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
     }
 
 
-def quota_unavailable(conn: sqlite3.Connection, cfg: dict, cloud: dict | None = None,
+def quota_unavailable(cfg: dict, cloud: dict | None = None,
                       account: dict | None = None) -> dict:
     """Etat neutre : aucun chiffre de quota n'a pu etre etabli.
 
-    Meme jeu de cles que la branche API, mesures a None. Elles sont nommees
-    explicitement : mini.html teste `days_left === null`, une cle absente
-    donnerait « reset dans NaN j ».
+    Meme jeu de cles que la branche API, mesures a None.
 
     La date de reinitialisation, elle, reste renseignee : elle vient des
     reglages, pas de la mesure. C'est un fait, et il ne depend pas de la
     lecture du jour.
     """
-    resets_at, cycle_start, reset_source = reset_window(conn, cfg, datetime.now(timezone.utc))
+    resets_at, cycle_start, reset_source = reset_window(cfg, datetime.now(timezone.utc))
     now_ms = int(time.time() * 1000)
     days = cloud_days(cloud)
     return {
@@ -834,55 +809,36 @@ def empty_usage() -> dict:
     qu'une partie des clients laisserait croire a une mesure globale.
     """
     return {
-        "unit": "jours",
-        "days": [],
         "daily_days": [],
         "activity_start": None,
         "activity_start_source": None,
         "activity_partial_day": None,
-        "days_total": 0,
-        "usd": 0.0,
-        "requests": 0,
-        "peak": 0.0,
-        "models": [],
-        "models_total": 0,
-        "models_at": None,
-        "generated_at": int(time.time() * 1000),
         "usage_available": False,
-        "period": "recent",
     }
 
 
-def build_cloud_usage(conn: sqlite3.Connection, cfg: dict, cloud: dict,
+def build_cloud_usage(cfg: dict, cloud: dict,
                       balance: dict | None = None) -> dict:
     """La depense reste lisible sans plafond ou cycle complet."""
     days = cloud_days(cloud) or []
-    _, start, start_source = reset_window(conn, cfg, datetime.now(timezone.utc), balance)
+    _, start, start_source = reset_window(cfg, datetime.now(timezone.utc), balance)
     first = cycle_first_day(start)
-    cycle = cloud_cycle_usage(cloud, start) is not None
-    cutoff = first or (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     today = datetime.now(timezone.utc).date().isoformat()
     renewal_day = datetime.fromtimestamp(start / 1000, timezone.utc).date().isoformat() if start else None
     daily_cutoff = renewal_day or (datetime.now(timezone.utc).date() - timedelta(days=29)).isoformat()
     daily_days = [day for day in days if daily_cutoff <= day["day"] <= today]
-    days = [day for day in days if cutoff <= day["day"] <= today]
-    return {"unit": "jours", "days": days, "daily_days": daily_days, "days_total": len(days),
+    return {"daily_days": daily_days,
             "activity_start": start, "activity_start_source": start_source,
             "activity_partial_day": renewal_day if renewal_day and renewal_day != first else None,
-            "usd": sum(day["usd"] for day in days),
-            "requests": sum(day["requests"] for day in days),
-            "peak": max((day["usd"] for day in days), default=0),
-            "usage_available": True, "period": "cycle" if cycle else "recent",
-            "generated_at": int(time.time() * 1000)}
+            "usage_available": True}
 
 
 class State:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        # Reentrant : payload() appelle usage(), qui reprend le meme verrou.
+        # Reentrant : payload() appelle les lecteurs caches sous le meme verrou.
         self.lock = threading.RLock()
         self.conn = connect()
-        self.last_error: str | None = None
         self.subscribers: list[queue.Queue] = []
         self.revision = 0
         self.cloud_data: dict | None = None
@@ -894,6 +850,10 @@ class State:
 
     def account(self) -> dict | None:
         with self.lock:
+            # Le plan local ne sert qu'au plafond de secours non configure.
+            if (not self.cfg.get("ollama_api_key") or self.cfg.get("monthly_quota") or
+                    balance_values(self.balance_data) is not None):
+                return None
             if not self.account_ts or time.time() - self.account_ts >= CLOUD_TTL_SECONDS:
                 self.account_data = ollama_account()
                 self.account_ts = time.time()
@@ -969,13 +929,10 @@ class State:
             self.cloud_data, self.cloud_ts = data, time.time()
             if "error" not in data:
                 try:
-                    # L'echantillon est une part du plafond : il lui faut le
-                    # debut du cycle et le plafond, tous deux pris maintenant.
-                    _, cycle_start, _ = reset_window(self.conn, self.cfg,
-                                                     datetime.now(timezone.utc))
                     record_days(self.conn, data)
-                    history = history_cloud(self.conn, self.cfg, data)
                     if balance_values(self.balance_data) is None:
+                        _, cycle_start, _ = reset_window(self.cfg, datetime.now(timezone.utc))
+                        history = history_cloud(self.conn, self.cfg)
                         record_cloud_sample(self.conn, history, cycle_start,
                                             monthly_cap(self.cfg, account))
                 except sqlite3.Error as exc:   # un echantillon rate n'est pas fatal
@@ -988,15 +945,13 @@ class State:
         Sans cle il n'y a rien a montrer : on renvoie alors la forme vide,
         meme cle, mesures a None.
         """
-        # Le compte est lu une fois : l'offre sert au plafond — donc a
-        # l'echantillon — et part aussi telle quelle dans le payload.
         with self.lock:
-            account = self.account()
             balance = self.balance()
+            account = self.account()
             cloud = self.cloud(account)
             live = cloud_days(cloud) is not None and cloud_totals(cloud) is not None
-            history = history_cloud(self.conn, self.cfg, cloud, balance) if live else cloud
-            data = build_cloud_usage(self.conn, self.cfg, history, balance) if live else empty_usage()
+            history = history_cloud(self.conn, self.cfg, balance) if live else cloud
+            data = build_cloud_usage(self.cfg, history, balance) if live else empty_usage()
             data["usage_error"] = (cloud or {}).get("error")
             data["quota"] = build_quota(self.conn, self.cfg, history, account, balance)
             protected = keychain_available() and not self.cfg.get("_key_storage_error")
@@ -1005,10 +960,6 @@ class State:
             data["notifications"] = self.cfg.get("notifications", False)
             data["notifications_supported"] = native_app()
             data["alerts_generation"] = self.cfg.get("alerts_generation", 0)
-            # L'interface n'utilise que le plan : pas d'email ni de reponse
-            # distante brute dans le navigateur.
-            data["account"] = {"plan": account.get("plan")} if account else None
-            data["error"] = self.last_error
             data["theme"] = self.cfg.get("theme") or "auto"
             data["lang"] = self.cfg.get("lang") or "auto"
         return data
@@ -1042,8 +993,8 @@ class State:
                 # servir a calculer le rythme du nouveau reglage.
                 self.conn.execute("DELETE FROM cloud_samples WHERE model = ''")
                 if cfg["ollama_api_key"] != self.cfg["ollama_api_key"]:
-                    self.conn.execute("DELETE FROM cloud_samples WHERE model <> ''")
-                    self.conn.execute("DELETE FROM model_color")
+                    self.conn.execute("DELETE FROM cloud_samples")
+                    self.conn.execute("DROP TABLE IF EXISTS model_color")
                     self.conn.execute("DELETE FROM daily_usage")
                     self.conn.execute("DELETE FROM balance_samples")
                     self.invalidate_cloud(force=True)
@@ -1181,7 +1132,7 @@ class Handler(BaseHTTPRequestHandler):
         """
         self.state.invalidate_cloud()
         self.state.broadcast()
-        self._json({"ok": True, "error": self.state.last_error})
+        self._json({"ok": True})
 
     def stream(self) -> None:
         """Flux SSE : le serveur pousse l'usage des qu'il change."""

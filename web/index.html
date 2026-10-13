@@ -65,7 +65,6 @@
   .nav button[aria-current="page"] { background:var(--surface); color:var(--text); box-shadow:0 1px 2px #18251c08; }
   .nav button:hover { color:var(--text); background:var(--soft); }
   .icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.65; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
-  .account-label { display:block; font-size:12px; font-weight:600; }
   .workspace { min-width:0; padding:34px 36px 24px; max-width:1450px; width:100%; margin:0 auto; }
   .in-app .workspace { padding-top:48px; }
   .topbar { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:30px; }
@@ -128,7 +127,7 @@
   details summary { cursor:pointer; font-size:12px; color:var(--muted); }
   details p { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.65; }
   .projection { margin:18px 0 0; padding-top:14px; border-top:1px solid var(--line); }
-  .alert,.bad { color:var(--critical); }
+  .alert { color:var(--critical); }
   .source-note { margin-top:24px; padding-top:16px; border-top:1px solid var(--line); max-width:75ch; }
   .ledger { width:100%; border-collapse:collapse; font-size:12px; }
   .ledger th { color:var(--muted); font-weight:500; font-size:11px; padding:0 0 10px; text-align:right; border-bottom:1px solid var(--line); }
@@ -229,38 +228,29 @@ const FR = {
   'Understand the data': 'Comprendre les données',
   'Cycle started on {date}': 'Cycle commencé le {date}',
   'Configured cycle started on {date}': 'Cycle configuré depuis le {date}',
-  'Open a day in Activity.': 'Ouvrir un jour dans Activité.',
   'Daily records use UTC days.': 'Les relevés suivent les journées UTC.',
   'Requests recorded are the sum of calls in the available daily records for the selected period.': 'Les requêtes relevées correspondent aux appels comptés dans les relevés quotidiens disponibles de la période sélectionnée.',
   'For teams, the credit balance is shared while activity is personal.': 'Pour les équipes, le solde est partagé tandis que l’activité est personnelle.',
-  'Automatic cycle': 'Cycle automatique',
   'The monthly cap and renewal date come from Ollama.': 'Le plafond mensuel et la date de renouvellement viennent d’Ollama.',
   'Configure a fallback only if the official balance is unavailable.': 'Configure une estimation de secours uniquement si le solde officiel est indisponible.',
   'Usage limits': 'Limites d’usage',
   'Current cycle': 'Cycle en cours',
-  'Since renewal on {date} (UTC).': 'Depuis le renouvellement du {date} (UTC).',
-  'Since the configured cycle start on {date} (UTC).': 'Depuis le début du cycle configuré le {date} (UTC).',
   'The record for {date} covers the whole UTC day and may include usage before renewal.': 'Le relevé du {date} couvre toute la journée UTC et peut inclure de l’usage avant le renouvellement.',
   'The monthly credit balance uses the exact renewal time.': 'Le solde mensuel utilise l’heure exacte du renouvellement.',
   'Monthly credits': 'Crédits mensuels',
-  'Official balance': 'Solde officiel',
   'Purchased credits': 'Crédits supplémentaires',
   'Next reset': 'Prochaine réinitialisation',
-  'Included credits used': 'Crédits mensuels consommés',
   'No included credits': 'Aucun crédit mensuel inclus',
   'Legacy plan': 'Ancienne offre',
   'Session': 'Session',
   'Weekly': 'Semaine',
   'Your plan uses session and weekly limits, rather than a monthly dollar allowance.': 'Ton offre utilise des limites par session et par semaine, plutôt qu’un plafond mensuel en dollars.',
   'Fallback estimate': 'Estimation de secours',
-  'Ollama provides your cap, remaining credits and cycle dates automatically.': 'Ollama fournit automatiquement le plafond, les crédits restants et les dates du cycle.',
   'These settings apply only when the official balance is unavailable.': 'Ces réglages s’appliquent uniquement lorsque le solde officiel est indisponible.',
   'Official balance unavailable. The quota below is an estimate.': 'Solde officiel indisponible. Le quota ci-dessous est une estimation.',
   'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.': 'Les crédits mensuels viennent du solde officiel Ollama. Les crédits supplémentaires sont séparés. Les graphiques montrent la dépense quotidienne, qui peut utiliser les deux types de crédits.',
   'Daily spending unavailable': 'Dépense quotidienne indisponible',
   'The balance remains available. Refresh to try loading daily activity again.': 'Le solde reste disponible. Actualise pour réessayer de charger l’activité quotidienne.',
-  'Tokens · available records': 'Tokens · relevés disponibles',
-  'Requests · available days': 'Requêtes · jours disponibles',
   'Input tokens': 'Tokens d’entrée',
   'Output tokens': 'Tokens de sortie',
   'Cached input tokens': 'Tokens d’entrée en cache',
@@ -279,29 +269,21 @@ const FR = {
   "Cancel": "Annuler",
   "Confirm disconnect": "Confirmer la déconnexion",
 
-  "days": "jours",
   "Activity": "Activité",
-  "Your account, all your tools.": "Ton compte, tous tes outils.",
   "Daily records · USD · UTC": "Relevés quotidiens · USD · UTC",
   "Independent companion for Ollama": "Un compagnon indépendant pour Ollama",
-  "Spending": "Dépense",
   "Requests": "Requêtes",
-  "Daily peak": "Pic quotidien",
   "Daily activity": "Activité quotidienne",
   "7 days": "7 jours",
   "30 days": "30 jours",
-  "Recent days": "Derniers jours",
   "View all activity": "Voir toute l’activité",
   "Date (UTC)": "Date (UTC)",
   "Amount": "Montant",
-  "Estimated": "Estimation",
   "Cap reached": "Plafond atteint",
   "Approaching cap": "Plafond proche",
   "Within cap": "Sous le plafond",
   "Remaining": "Disponible",
-  "Reset": "Réinitialisation",
   "Manage cycle": "Configurer le cycle",
-  "How this is calculated": "Comprendre le calcul",
   "Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.": "La dépense du cycle est estimée à partir des jours UTC complets. Le premier jour partiel est exclu. Ce solde n’est pas publié par Ollama.",
   "No cycle configured": "Aucun cycle configuré",
   "Set a reset reference to estimate your monthly quota. Daily spending remains available.": "Renseigne une date de référence pour estimer ton quota mensuel. La dépense quotidienne reste disponible.",
@@ -320,24 +302,16 @@ const FR = {
   "Connected": "Connecté",
   "Appearance": "Apparence",
   "Monthly cycle": "Cycle mensuel",
-  "Ollama does not provide a reset date. Use a confirmed billing or subscription date.": "Ollama ne fournit pas de date de réinitialisation. Utilise une date de facturation ou de souscription confirmée.",
   "Cap in USD": "Plafond en USD",
   "Save cap": "Enregistrer le plafond",
   "Saved": "Enregistré",
-  "Preferences saved": "Préférences enregistrées",
   "Disconnect": "Déconnecter",
   "Replace key": "Remplacer la clé",
   "Alerts": "Alertes",
   "Automatically saved": "Enregistrement automatique",
   "No daily records yet.": "Aucun relevé quotidien pour le moment.",
   "Once Ollama publishes usage, it will appear here.": "Les relevés apparaîtront ici dès qu’Ollama publiera de la consommation.",
-  "All available days": "Tous les jours disponibles",
-  "Spend across the available period": "Dépense sur la période disponible",
-  "Selected day": "Jour sélectionné",
-  "No key connected": "Aucune clé connectée",
-  "Complete the connection to start tracking.": "Termine la connexion pour commencer le suivi.",
   "Today (UTC)": "Aujourd’hui (UTC)",
-  "Select a day to inspect its spending.": "Sélectionne un jour pour consulter sa dépense.",
   "Enter a positive amount, or leave empty to follow your plan.": "Saisis un montant positif, ou laisse vide pour suivre ton offre.",
 
   'Ollama Buddy — Ollama Cloud usage': 'Ollama Buddy — consommation Ollama Cloud',
@@ -345,22 +319,10 @@ const FR = {
   'Connecting…': 'Connexion…',
   'Refresh usage': 'Rafraîchir la consommation',
   "Ask ollama.com for usage again without waiting for the cache to expire": "Redemander l'usage à ollama.com sans attendre la fin du cache",
-  'Change theme': 'Changer de thème',
-  'Theme: automatic': 'Thème : automatique',
-  'Theme: light': 'Thème : clair',
-  'Theme: dark': 'Thème : sombre',
-  'Change language': 'Changer de langue',
-  'Language: automatic': 'Langue : automatique',
-  'Language: English': 'Langue : anglais',
-  'Language: French': 'Langue : français',
   'Ollama Cloud usage': 'Consommation Ollama Cloud',
   'Reading…': 'Lecture…',
 
-  'Monthly quota': 'Quota mensuel estimé',
   'Estimated monthly quota': 'Quota mensuel estimé',
-  'Available spending': 'Dépense disponible',
-  'Requests in this period': 'Requêtes sur cette période',
-  'No spending in the available period.': 'Aucune dépense sur la période disponible.',
   'Spending shown from {from} to {to} (UTC).': 'Dépense affichée du {from} au {to} (UTC).',
   'Estimated outlook': 'Projection estimative',
   'Theme': 'Thème',
@@ -376,81 +338,29 @@ const FR = {
   'The key is saved locally in a private file and sent only to ollama.com.': 'La clé est enregistrée dans un fichier local privé et envoyée uniquement à ollama.com.',
   'Unlock macOS Keychain or enter the key again to finish migration.': 'Déverrouille le Trousseau macOS ou saisis de nouveau la clé pour terminer la migration.',
   'Monthly reset reference (UTC)': 'Réinitialisation de référence (UTC)',
-  'Models are unavailable for this account.': 'Aucun relevé par modèle disponible pour ce compte.',
-  'The API history does not cover the full cycle. A quota cannot be calculated from a partial history.': "L’historique de l’API ne couvre pas tout le cycle. Un historique partiel ne permet pas de calculer le quota.",
   'Request failed: {error}': 'Échec de la demande : {error}',
   'requests': 'requêtes',
   'request': 'requête',
   'today': "aujourd'hui",
   'tomorrow': 'demain',
   'in {n} days': 'dans {n} jours',
-  'Reset on {date} (UTC)': 'Réinitialisation le {date} (UTC)',
-  ' · reset tomorrow': ' · demain',
-  ' · reset in {n} days': ' ·\u00A0dans {n} jours',
   'At this rate: <b>+{amount} / day</b>': 'À ce rythme : <b>+{amount} / jour</b>',
-  'cap exceeded': 'plafond dépassé',
   'cap reached {when}, before the reset': 'plafond atteint {when}, avant la réinitialisation',
-  'cap reached {when}': 'plafond atteint {when}',
-  'Connect your account to read daily spending for <b>all</b> your tools. Set the monthly cap and reset date to estimate your quota.':
-    "Relie ton compte pour lire la dépense quotidienne de <b>tous</b> tes outils. Renseigne le plafond et la date de réinitialisation pour estimer ton quota.",
-  '<b class="bad">Key rejected</b> — Ollama turned it down. Create another one at {link}.':
-    '<b class="bad">Clé refusée</b> — Ollama l\'a rejetée. Crée-en une autre sur {link}.',
-  '<b class="bad">Cannot read</b> ({error}) — ollama.com did not answer as expected. Another attempt on the next refresh.':
-    "<b class=\"bad\">Lecture impossible</b> ({error}) — ollama.com n'a pas répondu comme prévu. Nouvelle tentative à la prochaine actualisation.",
-  '<b class="bad">Unexpected response</b> from ollama.com. Usage could not be read.':
-    "<b class=\"bad\">Réponse inattendue</b> d'ollama.com. L'usage n'a pas pu être lu.",
   'ollama.com API key': 'Clé API ollama.com',
   'paste another key': 'coller une autre clé',
   'paste your API key': 'coller ta clé API',
-  'Save': 'Enregistrer',
-  'Create one at {link}. It is stored locally and sent only to ollama.com to <em>read</em> your usage.':
-    "Crée-la sur {link}. Elle est stockée localement et envoyée uniquement à ollama.com pour <em>lire</em> ton usage.",
-  '<b class="bad">No cap to set the spend against.</b> The app does not know your plan, so it cannot tell what share of it you have used. Enter one in <b>Monthly cap</b> below.':
-    "<b class=\"bad\">Aucun plafond auquel rapporter la dépense.</b> L'app ne connaît pas ton offre, donc elle ne peut pas dire quelle part tu en as consommée. Renseigne <b>Plafond mensuel</b> ci-dessous.",
-  '<b class="bad">No cycle to add up.</b> ollama.com no longer publishes the quota, so the app adds up your daily usage since the cycle began — and it needs to know when that was. Set <b>Next reset</b> below.':
-    "<b class=\"bad\">Aucun cycle à additionner.</b> ollama.com ne publie plus le quota ; l'app additionne donc ta consommation jour par jour depuis le début du cycle — et il lui faut savoir quand il a commencé. Renseigne <b>Prochaine réinitialisation</b> ci-dessous.",
   'Settings': 'Paramètres',
-  'Monthly cap': 'Plafond mensuel',
   'Next reset': 'Prochaine réinitialisation',
   'Language': 'Langue',
   'Automatic': 'Automatique',
-  'Change': 'Changer',
-  'Remove': 'Retirer',
-  'Replacing the key changes the account read by this app and clears its saved usage. It does not revoke the old key on ollama.com. Removing it leaves only the sign-in card: the whole quota comes from ollama.com, so with no key there is no figure left.':
-    "Remplacer la clé change le compte lu par cette app et efface ses relevés enregistrés. Cela ne révoque pas l’ancienne clé sur ollama.com. La retirer ne laisse que la carte de connexion : tout le quota vient d'ollama.com, donc sans clé il ne reste aucun chiffre.",
-  'no cap set': 'plafond non renseigné',
   '{pct} of the monthly quota consumed': '{pct} du quota mensuel consommé',
   '{current} of {monthly}': '{current} sur {monthly}',
-  ' — {current} of {monthly}': ' — {current} sur {monthly}',
   'projected at reset: {amount}': 'projeté au reset : {amount}',
-  "<b>ollama.com</b> publishes each day's usage, in dollars. The cycle is those days added up from its beginning, and the percentage is that sum against the plan's cap.":
-    "<b>ollama.com</b> publie la consommation de chaque jour, en dollars. Le cycle est la somme de ces jours depuis son début, et le pourcentage est cette somme rapportée au plafond du plan.",
-  'Reset date: the UTC date and time set in Settings, repeated on the subscription day each month. Usage excludes the partial first UTC day.':
-    "Date de réinitialisation : date et heure UTC saisies dans les réglages, rejouées chaque mois au quantième de souscription. L’usage exclut le premier jour UTC partiel.",
-  'Reset date unknown — ollama.com does not publish it, and the app has no other way to learn it: your daily usage is all the API still gives.':
-    "Date de réinitialisation inconnue — ollama.com ne la publie pas, et l'app n'a plus aucun moyen de la déduire : la consommation quotidienne est tout ce que l'API donne encore.",
   'Monthly cap — leave empty to follow your Ollama plan.':
     "Plafond mensuel — laisse vide pour suivre ton offre Ollama.",
-  'Next reset — leave empty and the app will have no cycle to add up.':
-    "Prochaine réinitialisation — laisse vide et l'app n'aura aucun cycle à additionner.",
-
-  'No usage in this cycle.': 'Aucune consommation sur ce cycle.',
   'Overview': "Vue d'ensemble",
-  'Breakdown by model': 'Répartition par modèle',
   'Daily consumption': 'Consommation par jour',
-  'Other ({n})': 'Autres ({n})',
-  '{model}: {pct} of the total': '{model} : {pct} du total',
-  'Read on {date}. ollama.com no longer publishes this breakdown: these counts stop there.':
-    "Relevé le {date}. ollama.com ne publie plus cette répartition : ces compteurs s'arrêtent là.",
-  '{day}: {amount}': '{day} : {amount}',
-  'Usage this cycle': 'Consommation du cycle',
-  'Requests this cycle': 'Requêtes du cycle',
-  'Busiest day': 'Jour le plus chargé',
-  '{amount} of usage this cycle': '{amount} de consommation sur le cycle',
-  '<b>{amount}</b> of usage this cycle': '<b>{amount}</b> de consommation sur le cycle',
-  ' ({from} to {to})': ' ({from} au {to})',
   'Read error: {error}': 'Erreur de lecture : {error}',
-  'Error: {error}': 'Erreur : {error}',
   'Live': 'En direct',
   'Reconnecting…': 'Reconnexion…',
   'Could not read usage: {error}': "Impossible de lire l'usage : {error}",
@@ -464,14 +374,7 @@ let langPref = 'auto';   // le reglage stocke : "auto", "en" ou "fr"
 const fill = (text, values) =>
   text.replace(/\{(\w+)\}/g, (m, k) => (k in values ? values[k] : m));
 
-/* Le source est indentee : une phrase ecrite sur plusieurs lignes porte les
-   espaces de son indentation. En HTML ces suites se reduisent a un seul espace
-   a l'affichage — la recherche normalise donc les deux cotes, sinon aucune
-   cle multiligne ne serait trouvee. */
-const squeeze = s => s.replace(/\s+/g, ' ').trim();
-const FR_BY_KEY = new Map(Object.entries(FR).map(([k, v]) => [squeeze(k), v]));
-
-const T = s => (lang === 'fr' ? (FR_BY_KEY.get(squeeze(s)) ?? s) : s);
+const T = s => (lang === 'fr' ? (FR[s] ?? s) : s);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const locale = () => (lang === 'fr' ? 'fr-FR' : 'en-US');
 
@@ -495,8 +398,6 @@ function compact(n) {
   return { v: String(n), u: '' };
 }
 const fmt = n => { const c = compact(n); return c.v + c.u; };
-
-/* Les appels et tokens ont des compteurs distincts. */
 
 /* Seuils de gravité du quota : la barre change de couleur avant le plafond,
    jamais l'inverse — un rouge atteint trop tôt ne veut plus rien dire. */
@@ -523,10 +424,6 @@ function whenText(days) {
 }
 
 
-/* Combien de jours pleins il reste, comme ollama.com les compte. Le libelle
-   porte aussi la date : « dans 5 jours » et « dans 6 jours » decrivent la
-   meme remise a zero selon qu'on compte les jours pleins ou ceux du
-   calendrier, et c'est la date qui tranche. */
 /* =====================================================================
    /api/balance porte le solde ; /api/usage porte les journees et tokens.
 
@@ -596,8 +493,7 @@ function disconnectConfirmation() {
 
 function localResetHint(q) {
   if (!q.resets_at) return '';
-  const date = new Date(q.resets_at).toLocaleString(locale(), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'});
-  return fill(T('Next reset here: {date}'), {date});
+  return fill(T('Next reset here: {date}'), {date:localDate(q.resets_at)});
 }
 
 function localDate(timestamp) {
@@ -676,11 +572,8 @@ function periodDays(days, cycleStart, preview = false) {
   return days.filter(day=>range === 'cycle' || Date.parse(day.day+'T00:00:00Z') > end-range*86400000);
 }
 
-function renderTokens(days, cycleStart = null) {
-  if (!days.length) return '';
-  const end = Date.parse(days[days.length-1].day+'T00:00:00Z');
-  const range = chartRange === 'cycle' && !cycleStart ? 30 : chartRange;
-  const records = days.filter(day=>range === 'cycle' || Date.parse(day.day+'T00:00:00Z') > end-range*86400000);
+function renderTokens(records) {
+  if (!records.length) return '';
   const counters = [['input_tokens','Input tokens'],['output_tokens','Output tokens'],['cached_input_tokens','Cached input tokens']];
   const missing = counters.some(([key])=>records.some(day=>day[key] == null));
   return `<section class="tokens" aria-labelledby="tokens-h"><div class="section-head"><h2 id="tokens-h">${T('Tokens in this period')}</h2></div><div class="metrics">${counters.map(([key,label])=>{
@@ -691,8 +584,7 @@ function renderTokens(days, cycleStart = null) {
 }
 
 function renderLedger(days, peak) {
-  if (!days.length) return `<p class="state">${T('No daily records yet.')} ${T('Once Ollama publishes usage, it will appear here.')}</p>`;
-  return `<table class="ledger"><caption class="visually-hidden">${T('Daily consumption')}</caption><thead><tr><th scope="col">${T('Date (UTC)')}</th><th scope="col">${T('Requests')}</th><th scope="col">${T('Amount')}</th></tr></thead><tbody>${[...days].reverse().map(j => `<tr class="model day" data-day="${escapeHTML(j.day)}"><td>${dayLabel(j.day)}</td><td>${exact(j.requests)}</td><td><span class="row-bar" aria-hidden="true"><i style="width:${peak ? Math.min(j.usd/peak,1)*100 : 0}%"></i></span>${usd(j.usd)}</td></tr>`).join('')}</tbody></table>`;
+  return `<table class="ledger"><caption class="visually-hidden">${T('Daily consumption')}</caption><thead><tr><th scope="col">${T('Date (UTC)')}</th><th scope="col">${T('Requests')}</th><th scope="col">${T('Amount')}</th></tr></thead><tbody>${[...days].reverse().map(j => `<tr><td>${dayLabel(j.day)}</td><td>${exact(j.requests)}</td><td><span class="row-bar" aria-hidden="true"><i style="width:${peak ? Math.min(j.usd/peak,1)*100 : 0}%"></i></span>${usd(j.usd)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function renderChart(days, cycleStart = null, preview = false, partialDay = null) {
@@ -719,7 +611,7 @@ function renderChart(days, cycleStart = null, preview = false, partialDay = null
 
 function renderContent(data) {
   const app = document.getElementById('app');
-  const days = data.daily_days || data.days || [];
+  const days = data.daily_days || [];
   const sub = document.getElementById('sub');
   document.getElementById('view-title').textContent = T(VIEW_TITLES[currentView]);
   document.querySelectorAll('.nav [data-view]').forEach(el=>{
@@ -750,10 +642,9 @@ function renderContent(data) {
   const official = data.quota?.measurement === 'balance';
   const boundary = data.activity_partial_day ? `<p id="renewal-note">${fill(T('The record for {date} covers the whole UTC day and may include usage before renewal.'),{date:shortDate(data.activity_partial_day)})}${official ? ' '+T('The monthly credit balance uses the exact renewal time.') : ''}</p>` : '';
   const source = `<details class="source-note"><summary>${T('Understand the data')}</summary><p>${T(data.quota?.legacy_limits ? 'Your plan uses session and weekly limits, rather than a monthly dollar allowance.' : official ? 'Monthly credits come from Ollama’s official balance. Purchased credits are separate. Charts show daily spending, which can include both types of credits.' : 'Cycle spending is estimated from complete UTC days. The first partial day is excluded. This is not a balance published by Ollama.')}</p><p>${T('Daily records use UTC days.')} ${T('Requests recorded are the sum of calls in the available daily records for the selected period.')}</p><p>${T('Cached tokens are included in input tokens. They are not added again.')}</p>${boundary}<p>${T('For teams, the credit balance is shared while activity is personal.')}</p></details>`;
-  const error = data.error ? `<p class="warn-line" role="alert">${fill(T('Read error: {error}'),{error:escapeHTML(data.error)})}</p>` : '';
   app.innerHTML = overview
-    ? `${error}<div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days,data.activity_start,true,data.activity_partial_day)}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`
-    : `${error}${metrics}${renderChart(days,data.activity_start,false,data.activity_partial_day)}${renderTokens(records,data.activity_start)}${records.length ? `<div class="section-head"><h2>${T('Daily records')}</h2></div>${renderLedger(records,peak)}` : ''}${source}`;
+    ? `<div class="overview-grid"><section class="activity-panel" aria-label="${T('Overview')}">${metrics}${renderChart(days,data.activity_start,true,data.activity_partial_day)}</section><aside>${renderQuota(data.quota)}</aside></div>${source}`
+    : `${metrics}${renderChart(days,data.activity_start,false,data.activity_partial_day)}${renderTokens(records)}${records.length ? `<div class="section-head"><h2>${T('Daily records')}</h2></div>${renderLedger(records,peak)}` : ''}${source}`;
 }
 
 // A push must preserve unfinished settings, even after focus left a field.
@@ -910,12 +801,11 @@ function applyData(data) {
   /* Rien de neuf ? On ne redessine pas : sinon les animations d'entree
      rejoueraient a chaque battement du flux. */
   const signature = JSON.stringify({
-    usd: data.usd, requests: data.requests, peak: data.peak,
-    days: data.days, daily_days: data.daily_days, usage_available: data.usage_available, usage_error:data.usage_error, period: data.period,
+    daily_days: data.daily_days, usage_available: data.usage_available, usage_error:data.usage_error,
     activity_start: data.activity_start, activity_start_source:data.activity_start_source, activity_partial_day:data.activity_partial_day,
     notifications: data.notifications, notifications_supported: data.notifications_supported,
     quota: { ...data.quota, days_left: Math.floor(data.quota?.days_left ?? -1) },
-    theme: data.theme, lang: data.lang, account: data.account, error: data.error,
+    theme: data.theme, lang: data.lang,
   });
   if (signature === lastSignature) return;
   lastSignature = signature;
@@ -924,11 +814,6 @@ function applyData(data) {
   if (data.theme) applyTheme(data.theme);
   if (data.lang) applyLang(data.lang);
 
-  if (data.error && !data.days) {
-    document.getElementById('app').innerHTML =
-      `<p class="state" role="alert">${fill(T('Error: {error}'), { error: escapeHTML(data.error) })}</p>`;
-    return;
-  }
   render(data);
 }
 
