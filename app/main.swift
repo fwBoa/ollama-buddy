@@ -669,7 +669,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         server = process
         launchedServer = true
         webView.loadHTMLString(loadingPage(), baseURL: nil)
-        waitForServer(attempts: 80)
+        // Le helper Trousseau peut attendre jusqu'a 30 secondes. Le lanceur
+        // doit laisser le serveur afficher son etat de connexion ensuite.
+        waitForServer(attempts: 200)
     }
 
     private func waitForServer(attempts: Int) {
